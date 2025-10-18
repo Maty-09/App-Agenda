@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Panel de Administración</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<!-- prueba -->
+<body class="bg-gray-100 p-8">
+  <div class="max-w-6xl mx-auto bg-white p-6 rounded shadow">
+    <h1 class="text-3xl font-bold mb-6">Agendamientos</h1>
+    <form method="get" action="/admin/panel" class="mb-4 flex gap-4">
+      <div>
+        <select name="tipo_servicio" class="border px-2 py-1 rounded">
+          <option value="">Todos</option>
+          <option value="especializado" {% if tipo=='especializado' %}selected{% endif %}>Especializado</option>
+          <option value="domicilio_taller" {% if tipo=='domicilio_taller' %}selected{% endif %}>Domicilio / Taller</option>
+        </select>
+      </div>
+
+      <div>
+        <input type="date" name="fecha" id="fecha" class="border px-3 py-2 rounded" value="{{ fecha }}">
+      </div>
+      
+      <div class="pt-6"  flex gap-2>
+        <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded">Filtrar</button>
+        <a href="/admin/panel" class="bg-gray-300 text-black px-4 py-2 rounded">Limpiar</a>
+      </div>
+    </form>
+    <table class="table-auto w-full text-sm border">
+      <thead>
+        <tr class="bg-gray-200">
+          <th class="p-2 border">ID</th>
+          <th class="p-2 border">Nombre</th>
+          <th class="p-2 border">Patente</th>
+          <th class="p-2 border">Tipo</th>
+          <th class="p-2 border">Inicio</th>
+          <th class="p-2 border">Termino</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in agendamientos %}
+        <tr class="border-b hover:bg-gray-100">
+          <td class="p-2 border">{{ item.id }}</td>
+          <td class="p-2 border">{{ item.nombre }} {{ item.apellido }}</td>
+          <td class="p-2 border">{{ item.patente }}</td>
+          <td class="p-2 border">{{ item.tipo_servicio }}</td>
+          <td class="p-2 border">{{ item.fecha_inicio.strftime("%Y-%m-%d %H:%M") }}</td>
+          <td class="p-2 border">{{ item.fecha_termino.strftime("%Y-%m-%d %H:%M") }}</td>
+        </tr>
+        <td class="p-3 border">
+          <form action="/admin/eliminar/{{ item.id }}" method="post"
+            onsubmit="return confirm('¿Eliminar agendamiento?');">
+            <button class="text-red-600 hover:underline" type="submit">Eliminar</button>
+          </form>
+        </td>
+        {% endfor %}
+      </tbody>
+
+
+    </table>
+  </div>
+</body>
+
+</html>

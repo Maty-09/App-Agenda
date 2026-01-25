@@ -8,7 +8,7 @@ from app.utils.email_utils import enviar_correo_confirmacion, enviar_correo_canc
 from app.utils.generar_utm import generar_utm 
 from app import models
 from sqlalchemy import func
-#import pytz
+import pytz
 
 # pruebas
 def get_db():

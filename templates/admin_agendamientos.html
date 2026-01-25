@@ -5,62 +5,302 @@
   <meta charset="UTF-8">
   <title>Panel de Administración</title>
   <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<!-- prueba -->
-<body class="bg-gray-100 p-8">
-  <div class="max-w-6xl mx-auto bg-white p-6 rounded shadow">
-    <h1 class="text-3xl font-bold mb-6">Agendamientos</h1>
-    <form method="get" action="/admin/panel" class="mb-4 flex gap-4">
-      <div>
-        <select name="tipo_servicio" class="border px-2 py-1 rounded">
-          <option value="">Todos</option>
-          <option value="especializado" {% if tipo=='especializado' %}selected{% endif %}>Especializado</option>
-          <option value="domicilio_taller" {% if tipo=='domicilio_taller' %}selected{% endif %}>Domicilio / Taller</option>
-        </select>
-      </div>
 
-      <div>
-        <input type="date" name="fecha" id="fecha" class="border px-3 py-2 rounded" value="{{ fecha }}">
-      </div>
+  <!-- FullCalendar -->
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+
+  <!-- Tippy tooltips -->
+  <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/themes/light.css" />
+  <script src="https://unpkg.com/@popperjs/core@2"></script>
+  <script src="https://unpkg.com/tippy.js@6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    /* --- ESTILOS MINIMALISTAS --- */
+
+    /* .fc {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .fc-toolbar-title {
+      font-size: 1.4rem !important;
+      font-weight: 600;
+    }
+
+    .fc-button {
+      border-radius: 8px !important;
+      padding: 6px 14px !important;
+      background: #f3f4f6 !important;
+      border: none !important;
+      transition: 0.2s;
+    }
+
+    .fc-button-primary {
+      background: #1f2937 !important;
+      color: white !important;
+    }
+
+    .fc-button-primary:hover {
+      background: #374151 !important;
+    } */
+  /* .fc-custom-event {
+      padding: 4px;
+      background: rgba(136, 255, 0, 0.8);
+      color: white;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 14px;
+    } */
+  .fc-custom-event strong {
+      color: #FFF;
+    }
+
+  .fc-timegrid-event{
+      border: none;
+      border-radius: 8px;
+      overflow: hidden;
+  }
+  </style>
+</head>
+
+<body class="bg-gray-100 p-8">
+
+  <div class="w-full px-4 bg-white p-6 rounded shadow">
+    <h1 class="text-3xl font-bold mb-6">Agendamientos</h1>
+
+    <!-- FILTROS -->
+    <form method="get" action="/admin/panel" class="mb-4 flex gap-4 items-center">
+      <select name="subtipo" class="border rounded-lg px-3 py-2 bg-white shadow">
+        <option value="">Todos</option>
+        <option value="Taller" {% if subtipo=='Taller' %}selected{% endif %}>Taller</option>
+        <option value="Domicilio" {% if tipo_servicio=='Domicilio' %}selected{% endif %}>Domicilio</option>
+      </select>
+
+      <input type="date" name="fecha" id="fecha" class="border rounded-lg px-3 py-2 bg-white shadow">
+
+      <button type="submit"
+        class="px-4 py-2 rounded-lg bg-blue-600 text-white shadow hover:bg-blue-700">Filtrar</button>
+
+      <a href="/admin/panel" class="px-4 py-2 rounded-lg bg-gray-200 shadow hover:bg-gray-300">Limpiar</a>
       
-      <div class="pt-6"  flex gap-2>
-        <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded">Filtrar</button>
-        <a href="/admin/panel" class="bg-gray-300 text-black px-4 py-2 rounded">Limpiar</a>
-      </div>
+      <a href="/admin/export/utm" class="px-4 py-2 rounded-lg bg-green-600 text-white shadow hover:bg-green-700">
+        Exportar UTM 
+      </a>
     </form>
+
+    
+
+    <!-- CALENDARIO
+    <div id="calendar" class="w-full h-full"></div> -->
+
+    <!-- TABLA -->
+    <!-- CALENDARIO -->
+    <div id="calendar" class="w-full h-full mb-6"></div>
+
+    <!-- TABLA -->
     <table class="table-auto w-full text-sm border">
       <thead>
         <tr class="bg-gray-200">
           <th class="p-2 border">ID</th>
+          <th class="p-2 border">Rut</th>
           <th class="p-2 border">Nombre</th>
           <th class="p-2 border">Patente</th>
+          <th class="p-2 border">Dirección</th>
           <th class="p-2 border">Tipo</th>
+          <th class="p-2 border">Equipo</th>
           <th class="p-2 border">Inicio</th>
-          <th class="p-2 border">Termino</th>
+          <th class="p-2 border">Término</th>
+          <th class="p-2 border">UTM</th>
+          <th class="p-2 border">Nota Interna</th>
+          <th class="p-2 border">Acciones</th>
         </tr>
       </thead>
+
       <tbody>
         {% for item in agendamientos %}
-        <tr class="border-b hover:bg-gray-100">
+        <tr class="border-b hover:bg-gray-100 {% if item.estado == 'cancelado' %}bg-red-50 text-gray-400{% endif %}">
+          
           <td class="p-2 border">{{ item.id }}</td>
+          <td class="p-2 border">{{ item.rut }}</td>
           <td class="p-2 border">{{ item.nombre }} {{ item.apellido }}</td>
           <td class="p-2 border">{{ item.patente }}</td>
-          <td class="p-2 border">{{ item.tipo_servicio }}</td>
-          <td class="p-2 border">{{ item.fecha_inicio.strftime("%Y-%m-%d %H:%M") }}</td>
-          <td class="p-2 border">{{ item.fecha_termino.strftime("%Y-%m-%d %H:%M") }}</td>
+          <td class="p-2 border">{{ item.direccion or "-" }}</td>
+          <td class="p-2 border">{{ item.subtipo }}</td>
+          <td class="p-2 border">{{ item.equipo }}</td>
+
+          <td class="p-2 border">
+            {{ item.fecha_inicio.strftime("%Y-%m-%d %H:%M") }}
+          </td>
+          <td class="p-2 border">
+            {{ item.fecha_termino.strftime("%Y-%m-%d %H:%M") }}
+          </td>
+
+          <!-- ORIGEN UTM -->
+          <td class="p-2 border text-center">
+            {% if item.utm %}
+              <button 
+                onclick="Swal.fire(
+                  'Origen del cliente',
+                  'Fuente: {{ item.utm.utm_source }}<br>Medio: {{ item.utm.utm_medium }}<br>Campaña: {{ item.utm.utm_campaign }}',
+                  'info'
+                )"
+                class="px-2 py-1 bg-blue-500 text-white rounded text-xs"
+              >
+                Ver origen
+              </button>
+            {% else %}
+              -
+            {% endif %}
+          </td>
+
+          <!-- NOTA INTERNA -->
+          <td class="p-2 border">
+            <form action="/admin/actualizar-nota/{{ item.id }}" method="post">
+              <textarea name="nota" rows="2"
+                class="border rounded p-1 w-full text-xs">{{ item.nota_interna or '' }}</textarea>
+              <button class="bg-blue-600 text-white px-2 py-1 rounded mt-1 text-xs">
+                Guardar
+              </button>
+            </form>
+          </td>
+
+          <!-- ACCIONES -->
+          <td class="p-2 border text-center">
+
+            {% if item.estado != "cancelado" %}
+            <form 
+              action="/admin/cancelar/{{ item.id }}" 
+              method="post"
+              onsubmit="return confirm('¿Cancelar esta mantención? Se notificará al cliente.');"
+            >
+              <button 
+                type="submit"
+                class="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700"
+              >
+                Cancelar
+              </button>
+            </form>
+            {% else %}
+              <span class="text-red-500 text-xs font-semibold">
+                Cancelado
+              </span>
+            {% endif %}
+
+          </td>
         </tr>
-        <td class="p-3 border">
-          <form action="/admin/eliminar/{{ item.id }}" method="post"
-            onsubmit="return confirm('¿Eliminar agendamiento?');">
-            <button class="text-red-600 hover:underline" type="submit">Eliminar</button>
-          </form>
-        </td>
         {% endfor %}
       </tbody>
-
-
     </table>
   </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- SCRIPT CALENDARIO -->
+  <script>
+    const coloresPorEquipo ={
+              "Equipo Israel": "#3F22FF",
+              "Equipo Mendez": "#FC4646",
+              "Equipo Movil": "#32CD32",
+              "Equipo Taller": "#FF8C00",
+            }; 
+    document.addEventListener("DOMContentLoaded", function () {
+      
+
+      var calendarEl = document.getElementById('calendar');
+
+      window.calendar = new FullCalendar.Calendar(calendarEl, {
+        slotMinTime: "08:00:00",
+        slotMaxTime: "18:00:00",
+        hiddenDays: [0, 6],
+        initialView: 'dayGridMonth',
+        locale: 'es',
+        height: 700,
+
+        headerToolbar: {
+          left: 'prev,next today',
+          center: 'title',
+          right: 'dayGridMonth,timeGridWeek'
+        },
+
+        // views: { 
+        //   timeGridWeek:{
+        //     slotMinTime: "08:00:00",
+        //     slotMaxTime: "18:00:00",
+        //     slotDuration: '00:30:00',          
+        //   }
+        // },
+
+        // slotLabelFormat: {
+        //   hour: '2-digit',
+        //   minute: '2-digit',
+        //   hour12: false
+        // },
+      
+        events: JSON.parse('{{ eventos | safe }}'),
+
+        eventContent: function(arg) {            
+
+            let data = arg.event.extendedProps;
+
+            let color = arg.event.backgroundColor || "#6C63FF";
+
+            let div = document.createElement("div");
+            div.classList.add("fc-custom-event");
+
+            div.style.backgroundColor = color;
+            div.style.border = '4px solid ${color}';
+            div.style.color = "white";
+            div.style.padding = "4px";
+            div.style.borderRadius = "6px";
+            div.style.fontSize = "12px";
+
+            div.innerHTML = 
+              `<strong>${data.nombre} ${data.apellido}</strong>
+              <br>${data.subtipo ? data.subtipo.toUpperCase(): ""}
+              <br> Patente: ${data.patente}<br>
+              <span style="font-size:12px;">Equipo: ${data.equipo}</span>`;
+            return { domNodes: [div] };
+        },
+
+        eventClick: function(info) {
+            const equipo = info.event.extendedProps.equipo;
+            const colores = info.event.extendedProps.colores;
+            
+            let d = info.event.extendedProps;
+
+            //Subtipo
+            let subtipo = "";
+            if (d.subtipo) {
+                subtipolimpio = d.subtipo.toLowerCase().includes("domi") ? "Domicilio" : "Taller";
+            }
+
+            // Mostrar direccion solo si aplica
+            let direccion = "";
+            if (subtipolimpio === "Domicilio") {
+              direccion = `<b>Direccion:</b> ${d.direccion || "No registrada"}<br>`;
+            }
+            Swal.fire({
+                title: `<b>${d.subtipo}</b>`,
+                html: `
+                    <b>Tipo:</b> ${d.tipo}<br>
+                    <b>Subtipo:</b> ${d.subtipo || "-"}<br>
+                    <b>Patente:</b> ${d.patente}<br>
+                    <b>Cliente:</b> ${d.nombre} ${d.apellido}<br>
+                    <b>Teléfono:</b> ${d.telefono}<br>
+                    <b>Correo:</b> ${d.correo}<br>
+                    ${direccion}
+                    <b>Equipo asignado:</b> ${d.equipo}<br><br>
+
+                    <b>Inicio:</b> ${info.event.start.toLocaleString()}<br>
+                    <b>Fin:</b> ${info.event.end.toLocaleString()}`,
+                confirmButtonText: "Cerrar"
+            });
+        },
+    });
+      window.calendar.render();
+    });
+  </script>
+
 </body>
 
 </html>

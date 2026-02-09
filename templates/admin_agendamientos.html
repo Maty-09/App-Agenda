@@ -98,6 +98,28 @@
     <!-- CALENDARIO -->
     <div id="calendar" class="w-full h-full mb-6"></div>
 
+    <!-- Agendamiento de hora -->
+    <div class="bg-gray-100 p-4 rounded mb-6">
+      <h3 class="font-semibold mb-2">Links de agendamiento</h3>
+
+      {% for nombre, link in links_agenda.items() %}
+        <div class="flex items-center gap-2 mb-2">
+          <input 
+            type="text"
+            readonly
+            value="{{ link }}"
+            class="w-full border px-2 py-1 rounded text-sm"
+          >
+          <button
+            onclick="navigator.clipboard.writeText('{{ link }}')"
+            class="bg-blue-600 text-white px-3 py-1 rounded text-sm"
+          >
+            Copiar
+          </button>
+        </div>        
+      {% endfor %}
+      <button onclick="abrirLinkEspecializado()" class="bg-blue-600 text-white px-3 py-2 rounded">Copiar Link especializado</button>
+    </div>
     <!-- TABLA -->
     <table class="table-auto w-full text-sm border">
       <thead>
@@ -125,9 +147,10 @@
           <td class="p-2 border">{{ item.rut }}</td>
           <td class="p-2 border">{{ item.nombre }} {{ item.apellido }}</td>
           <td class="p-2 border">{{ item.patente }}</td>
+          <td class="p-2 border">{{ item.marca }}</td>
           <td class="p-2 border">{{ item.direccion or "-" }}</td>
           <td class="p-2 border">{{ item.subtipo }}</td>
-          <td class="p-2 border">{{ item.equipo }}</td>
+          <td class="p-2 border">{{ item.equipo }}</td>          
 
           <td class="p-2 border">
             {{ item.fecha_inicio.strftime("%Y-%m-%d %H:%M") }}
@@ -286,10 +309,13 @@
                     <b>Subtipo:</b> ${d.subtipo || "-"}<br>
                     <b>Patente:</b> ${d.patente}<br>
                     <b>Cliente:</b> ${d.nombre} ${d.apellido}<br>
+                    <b>Marca:</b> ${d.marca}<br>
+                    <b>Modelo:</b> ${d.modelo}<br>
                     <b>Teléfono:</b> ${d.telefono}<br>
                     <b>Correo:</b> ${d.correo}<br>
                     ${direccion}
                     <b>Equipo asignado:</b> ${d.equipo}<br><br>
+                    
 
                     <b>Inicio:</b> ${info.event.start.toLocaleString()}<br>
                     <b>Fin:</b> ${info.event.end.toLocaleString()}`,
@@ -299,6 +325,49 @@
     });
       window.calendar.render();
     });
+
+    function abrirLinkEspecializado(){
+      Swal.fire({
+        title:"Duracion del servicio",
+        text: "Selecciona la duracion del servicio",
+        input:"radio",
+        inputOptions: {
+          2: "2 horas",
+          3: "3 horas",
+          4: "4 horas"
+        },
+        inputValidator: (value) => {
+          if (!value) return "Debes Seleccionar una opcion";
+        },
+        confirmButtonText: "Generar Link",
+        showCancelButton: true,
+      }).then((result) => {
+        if (result.isConfirmed){
+          generarLinkEspecializado(result.value);
+        }
+      });
+    }
+
+    async function generarLinkEspecializado(duracion) {
+      const links = await fetch("/admin/links-agenda").then(r => r.json());
+
+      // Validación real
+      if (!links.especializado || !links.especializado[duracion]) {
+        Swal.fire("Error", "No se pudo generar el link", "error");
+        return;
+      }
+
+      // Obtener el link exacto según duración
+      const linkFinal = links.especializado[duracion];
+
+      await navigator.clipboard.writeText(linkFinal);
+
+      Swal.fire(
+        "Link copiado",
+        `Servicio especializado (${duracion} hrs)`,
+        "success"
+      );
+    }
   </script>
 
 </body>

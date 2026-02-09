@@ -133,14 +133,15 @@ def panel_agendamientos(
 
         color_equipo = colores.get(item.equipo, "#6c63ff")
         eventos.append({
-            "id": item.id,
-            "title": f"{item.nombre} {item.apellido}",
-            "start": item.fecha_inicio.strftime("%Y-%m-%dT%H:%M:%S"),
-            "end": item.fecha_termino.strftime("%Y-%m-%dT%H:%M:%S"),
-            "backgroundColor": color_equipo,
-            "borderColor": color_equipo,
+        "id": item.id,
+        "title": f"{item.nombre} {item.apellido}",
+        "start": item.fecha_inicio.strftime("%Y-%m-%dT%H:%M:%S"),
+        "end": item.fecha_termino.strftime("%Y-%m-%dT%H:%M:%S"),
+        "backgroundColor": color_equipo,
+        "borderColor": color_equipo,
 
-            # Propiedades adicionales
+        # ✅ TODO LO EXTRA VA AQUÍ
+        "extendedProps": {
             "tipo": item.tipo_servicio,
             "subtipo": item.subtipo,
             "patente": item.patente,
@@ -149,8 +150,11 @@ def panel_agendamientos(
             "telefono": item.telefono,
             "correo": item.correo,
             "direccion": item.direccion,
+            "marca": item.marca,
+            "modelo": item.modelo,
             "equipo": item.equipo,
-            "utm_link": item.utm_link
+            "utm_link": item.utm_link,
+        }
         })
 
     # Convertir eventos a JSON
@@ -159,6 +163,13 @@ def panel_agendamientos(
     # print("\n=== EVENTOS PARA EL CALENDARIO ===")
     # print(eventos_json)
     # print("===================================\n")
+    base_url = str(request.base_url).rstrip("/")
+
+    links_agenda = {
+        "Domicilio": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio",
+        "Taller": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=taller",
+        "Especializado": f"{base_url}/cliente/agendar_web?tipo=especializado",
+    }
 
     return templates.TemplateResponse("admin_agendamientos.html", {
         "request": request,
@@ -167,7 +178,8 @@ def panel_agendamientos(
         "subtipo": subtipo,
         "eventos": eventos_json,
         "fecha": fecha,
-        "utm_registro": utm_registro
+        "utm_registro": utm_registro,
+        "links_agenda": links_agenda,  
     })
 
 @router.post("/admin/actualizar_nota/{id}")
@@ -193,22 +205,25 @@ def export_utm(
 ):
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "UTM"
+    ws.title = "Agendamientos UTM"
     
-    ws.append(["ID","UTM Source", "UTM Medium","RUT","Nombre","Apellido","Direccion","Fecha Inicio","Fecha Termino"])
+    ws.append(["ID","Origen Link", "Canal","Creado Por","RUT","Nombre","Apellido","Direccion","Patente","Marca","Modelo","Fecha Inicio","Fecha Termino"])
 
-    registros = db.query(models.UTMRegistro).all()
-    cliente = db.query(models.Agendamiento).all()
-
-    for a in cliente: 
+    agendamientos = db.query(models.Agendamiento).order_by(models.Agendamiento.fecha_inicio.desc()).all()
+    
+    for a in agendamientos: 
         ws.append([
             a.id,
-            a.utm_link if a.utm_link else "",
-            a.utm_source_real if a.utm_source_real else "",
+            a.utm_link or "",
+            a.utm_source_real or "",
+            a.creado_en or "",
             a.rut,
             a.nombre, 
             a.apellido,
-            a.direccion,
+            a.direccion or "",
+            a.patente,
+            a.marca,
+            a.modelo,
             a.fecha_inicio.strftime("%Y-%m-%d %H:%M:%S"),
             a.fecha_termino.strftime("%Y-%m-%d %H:%M:%S")
         ])
@@ -247,3 +262,28 @@ def cancelar_agendamiento(
         url="/admin/agendamientos",
         status_code=303
     )
+
+
+# ENVIAR LINKS POR ADMIN
+@router.get("/admin/links-agenda")
+def obtener_links_agenda(request: Request, admin = Depends(verificar_login)):
+    base_url = str(request.base_url).rstrip("/")
+
+    links = {
+        "domicilio": {
+            "label": "Servicio a Domicilio",
+            "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio"
+            },
+        "taller" : {
+            "label": "Sevicio en Taller",
+            "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=taller"
+            },
+        "especializado" : {
+            "label": "Equipo Especializado",
+            2: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=2",
+            3: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=3",
+            4: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=4",
+        } 
+    }
+
+    return links

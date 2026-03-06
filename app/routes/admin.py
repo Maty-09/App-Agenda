@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Request, HTTPException, Query, Form
+from fastapi import APIRouter, Depends, Request, HTTPException, Query, Form, Body
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.database import SessionLocal
 from app import models, schemas
-from typing import List
+from typing import List, Optional
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 import json
 from fastapi.templating import Jinja2Templates
@@ -13,7 +14,7 @@ from datetime import datetime, timedelta
 import sqlite3
 import openpyxl
 from io import BytesIO 
-from app.utils.email_utils import enviar_correo_cancelacion, enviar_correo_confirmacion
+from app.utils.email_utils import  enviar_confirmacion_agendamiento
 
 # Templates
 templates = Jinja2Templates(directory="templates")
@@ -93,23 +94,16 @@ def panel_agendamientos(
     db: Session = Depends(get_db),
     cred: HTTPBasicCredentials = Depends(verificar_login)
 ):
-    
     query = db.query(models.Agendamiento)
-    utm_registro = db.query(models.UTMRegistro).all()
 
     if subtipo:
         query = query.filter(models.Agendamiento.subtipo == subtipo)
-
-    # filtro tipo
     if tipo_servicio:
         query = query.filter(models.Agendamiento.tipo_servicio == tipo_servicio)
-
-    # filtro fecha
     if fecha:
         try:
             fecha_inicio = datetime.strptime(fecha, "%Y-%m-%d")
             fecha_fin = fecha_inicio + timedelta(days=1)
-
             query = query.filter(
                 models.Agendamiento.fecha_inicio >= fecha_inicio,
                 models.Agendamiento.fecha_inicio < fecha_fin
@@ -118,8 +112,7 @@ def panel_agendamientos(
             pass
 
     agendamientos = query.order_by(models.Agendamiento.id).all()
-
-    eventos = []
+    utm_registro = db.query(models.UTMRegistro).all()
 
     colores = {
         "Equipo Israel": "#3F22FF",
@@ -127,44 +120,37 @@ def panel_agendamientos(
         "Equipo Movil": "#32CD32",
         "Equipo Taller": "#FF8C00",
     }
-
+    
+    eventos_lista = []
     for item in agendamientos:
-        #colores = colores.get(item.equipo.upper(), "#8A2BE2") 
+        start_iso = item.fecha_inicio.strftime("%Y-%m-%dT%H:%M:%S")
+        end_iso = item.fecha_termino.strftime("%Y-%m-%dT%H:%M:%S") if item.fecha_termino else start_iso
 
-        color_equipo = colores.get(item.equipo, "#6c63ff")
-        eventos.append({
-        "id": item.id,
-        "title": f"{item.nombre} {item.apellido}",
-        "start": item.fecha_inicio.strftime("%Y-%m-%dT%H:%M:%S"),
-        "end": item.fecha_termino.strftime("%Y-%m-%dT%H:%M:%S"),
-        "backgroundColor": color_equipo,
-        "borderColor": color_equipo,
+        # LIMPIEZA CLAVE: Evita que comillas o saltos de línea rompan el JS
+        nota_limpia = (item.nota_interna or "").replace('"', '\\"').replace('\n', ' ').replace('\r', '')
 
-        # ✅ TODO LO EXTRA VA AQUÍ
-        "extendedProps": {
-            "tipo": item.tipo_servicio,
-            "subtipo": item.subtipo,
-            "patente": item.patente,
-            "nombre": item.nombre,
-            "apellido": item.apellido,
-            "telefono": item.telefono,
-            "correo": item.correo,
-            "direccion": item.direccion,
-            "marca": item.marca,
-            "modelo": item.modelo,
-            "equipo": item.equipo,
-            "utm_link": item.utm_link,
-        }
+        eventos_lista.append({
+            "id": str(item.id),
+            "title": f"{item.nombre} {item.apellido}",
+            "start": start_iso,
+            "end": end_iso,
+            "backgroundColor": colores.get(item.equipo, "#6C63FF"),
+            "borderColor": colores.get(item.equipo, "#6C63FF"),
+            "extendedProps": {
+                "nombre": item.nombre or "",
+                "apellido": item.apellido or "",
+                "patente": item.patente or "S/P",
+                "equipo": item.equipo or "Sin equipo",
+                "subtipo": item.subtipo or "",
+                "direccion": item.direccion or "",
+                "nota": nota_limpia 
+            }
         })
 
-    # Convertir eventos a JSON
-    eventos_json = json.dumps(eventos)
+    # Convertimos a string JSON
+    eventos_json_str = json.dumps(eventos_lista)
 
-    # print("\n=== EVENTOS PARA EL CALENDARIO ===")
-    # print(eventos_json)
-    # print("===================================\n")
     base_url = str(request.base_url).rstrip("/")
-
     links_agenda = {
         "Domicilio": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio",
         "Taller": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=taller",
@@ -176,24 +162,37 @@ def panel_agendamientos(
         "agendamientos": agendamientos,
         "tipo_servicio": tipo_servicio,
         "subtipo": subtipo,
-        "eventos": eventos_json,
+        "eventos_json": eventos_json_str, # <--- IMPORTANTE: Nombre unificado
         "fecha": fecha,
         "utm_registro": utm_registro,
         "links_agenda": links_agenda,  
     })
 
-@router.post("/admin/actualizar_nota/{id}")
-def actualizar_nota(id: int, nota: str = Form(...)):
-    conn = sqlite3.connect("agendaminetos.db")
-    cur = conn.cursor()
 
-    cur.execute("UPDATE agendamientos SET nota_interna = ? WHERE id = ?", (nota, id))
-    conn.commit()
-    conn.close()
+@router.post("/actualizar_nota/{id}")
+def actualizar_nota(
+    id: int, 
+    nota: str = Form(...), 
+    db: Session = Depends(get_db)
+):
+    # Buscamos el registro en la DB usando SQLAlchemy
+    agendamiento = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
+    
+    if not agendamiento:
+        print(f"Error: No se encontró el agendamiento ID {id}")
+        return RedirectResponse("/admin/panel", status_code=303)
+
+    # Actualizamos la nota interna
+    agendamiento.nota_interna = nota
+    
+    try:
+        db.commit()
+        print(f"Nota del agendamiento {id} actualizada con éxito.")
+    except Exception as e:
+        db.rollback()
+        print(f"Error al guardar: {e}")
     
     return RedirectResponse("/admin/panel", status_code=303)
-
-
 # =============================
 # Exportacion UTM
 # ============================
@@ -265,7 +264,7 @@ def cancelar_agendamiento(
 
 
 # ENVIAR LINKS POR ADMIN
-@router.get("/admin/links-agenda")
+@router.get("/links-agenda")
 def obtener_links_agenda(request: Request, admin = Depends(verificar_login)):
     base_url = str(request.base_url).rstrip("/")
 
@@ -287,3 +286,182 @@ def obtener_links_agenda(request: Request, admin = Depends(verificar_login)):
     }
 
     return links
+# ==========================================
+#   GESTIÓN DE FORMULARIO DINÁMICO
+# ==========================================
+
+@router.get("/configurar-formulario")
+def configurar_formulario(
+    request: Request, 
+    subtipo: str = "taller", # Por defecto taller
+    db: Session = Depends(get_db)
+):
+    # Buscamos los campos que coincidan con el subtipo seleccionado
+    campos = db.query(models.CampoFormulario).filter(
+        models.CampoFormulario.subtipo_servicio == subtipo
+    ).order_by(models.CampoFormulario.orden.asc()).all()
+
+    return templates.TemplateResponse("admin_config_form.html", {
+        "request": request,
+        "campos": campos,
+        "subtipo_actual": subtipo
+    })
+@router.post("/configurar-formulario/guardar")
+async def guardar_campo(
+    campo_id: Optional[int] = Form(None),
+    subtipo_servicio: str = Form(...),
+    label: Optional[str] = Form(None), # Permitir que sea None inicialmente
+    tipo_campo: str = Form(...),
+    opciones: Optional[str] = Form(None),
+    obligatorio: bool = Form(False),
+    db: Session = Depends(get_db)
+):
+    # VALIDACIÓN: Si label es None, le damos un valor por defecto para que no explote
+    texto_label = label if label else "Campo sin nombre"
+    
+    # Ahora procesamos el nombre técnico con seguridad
+    nombre_tecnico = texto_label.lower().strip().replace(" ", "_")
+
+    # Mapeo inteligente para campos críticos de la tabla Agendamiento
+    if any(x in nombre_tecnico for x in ["correo", "email", "mail"]):
+        nombre_tecnico = "correo"
+    elif any(x in nombre_tecnico for x in ["rut", "identificacion", "dni"]):
+        nombre_tecnico = "rut"
+    elif "nombre" in nombre_tecnico and "apellido" not in nombre_tecnico:
+        nombre_tecnico = "nombre"
+    elif "apellido" in nombre_tecnico:
+        nombre_tecnico = "apellido"
+    elif any(x in nombre_tecnico for x in ["telefono", "celular", "movil", "whatsapp"]):
+        nombre_tecnico = "telefono"
+    elif any(x in nombre_tecnico for x in ["kilometr", "km"]):
+        nombre_tecnico = "kilometraje"
+    elif "marca" in nombre_tecnico:
+        nombre_tecnico = "marca"
+    elif "modelo" in nombre_tecnico:
+        nombre_tecnico = "modelo"
+    elif "patente" in nombre_tecnico or "placa" in nombre_tecnico:
+        nombre_tecnico = "patente"
+    elif "direccion" in nombre_tecnico or "calle" in nombre_tecnico:
+        nombre_tecnico = "direccion"
+    elif "vivienda" in nombre_tecnico or "casa" in nombre_tecnico:
+        nombre_tecnico = "tipo_vivienda"
+
+    if campo_id:
+        campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id).first()
+        if campo:
+            campo.label = texto_label
+            campo.tipo_campo = tipo_campo
+            campo.opciones = opciones
+            campo.obligatorio = obligatorio
+            campo.nombre_tecnico = nombre_tecnico
+    else:
+        nuevo = models.CampoFormulario(
+            subtipo_servicio=subtipo_servicio,
+            label=texto_label,
+            nombre_tecnico=nombre_tecnico,
+            tipo_campo=tipo_campo,
+            opciones=opciones,
+            obligatorio=obligatorio
+        )
+        db.add(nuevo)
+
+    db.commit()
+    return RedirectResponse(url=f"/admin/configurar-formulario?subtipo={subtipo_servicio}", status_code=303)
+
+@router.get("/configurar-formulario/eliminar/{campo_id}")
+async def eliminar_campo(campo_id: int, db: Session = Depends(get_db)):
+    # 1. Buscamos el campo en la base de datos
+    campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id).first()
+    
+    if not campo:
+        print(f"No se encontró el campo con ID {campo_id}")
+        return RedirectResponse(url="/admin/configurar-formulario", status_code=303)
+
+    # Guardamos el subtipo para poder redireccionar al mismo sitio después
+    subtipo_servicio = campo.subtipo_servicio
+
+    # 2. Lo eliminamos
+    db.delete(campo)
+    db.commit()
+
+    print(f"Campo {campo_id} eliminado correctamente")
+    
+    # 3. Redirigimos de vuelta a la configuración de ese subtipo
+    return RedirectResponse(
+        url=f"/admin/configurar-formulario?subtipo={subtipo_servicio}", 
+        status_code=303
+    )
+
+@router.post("/configurar-formulario/reordenar")
+async def reordenar_campos(
+    payload: dict = Body(...), 
+    db: Session = Depends(get_db)
+):
+    posiciones = payload.get("posiciones", [])
+    
+    try:
+        for item in posiciones:
+            # Buscamos el campo por su ID
+            campo = db.query(models.CampoFormulario).filter(
+                models.CampoFormulario.id == int(item['id'])
+            ).first()
+            
+            if campo:
+                campo.orden = item['orden']
+        
+        db.commit()
+        return {"status": "success", "message": "Orden actualizado"}
+    
+    except Exception as e:
+        db.rollback()
+        return {"status": "error", "message": str(e)}, 500
+
+
+
+@router.post("/configurar-formulario/editar/{campo_id}")
+def editar_campo(
+    campo_id: int,
+    label: str = Form(...),
+    tipo_campo: str = Form(...),
+    opciones: str = Form(None),
+    obligatorio: str = Form(None),
+    db: Session = Depends(get_db),
+    cred: HTTPBasicCredentials = Depends(verificar_login)
+):
+    campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id).first()
+    if not campo:
+        return RedirectResponse("/admin/editor-visual-formulario", status_code=303)
+
+    campo.label = label
+    campo.tipo_campo = tipo_campo
+    campo.opciones = opciones
+    campo.obligatorio = True if obligatorio == "on" else False
+
+    db.commit()
+    return RedirectResponse(f"/admin/configurar-formulario?subtipo={campo.subtipo_servicio}", status_code=303)
+
+
+
+@router.post("/reubicar-emergencia/{id}")
+async def reubicar_emergencia(
+    id: int, 
+    payload: dict = Body(...), 
+    db: Session = Depends(get_db),
+    admin = Depends(verificar_login)
+):
+    nueva_direccion = payload.get("nueva_direccion")
+    ag = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
+    
+    if not ag:
+        return {"status": "error", "message": "No encontrado"}
+
+    ahora = datetime.now().strftime("%H:%M")
+    log = f"\n[REUBICACIÓN {ahora}]: {ag.direccion} -> {nueva_direccion}"
+    
+    ag.direccion = nueva_direccion
+    ag.nota_interna = (ag.nota_interna or "") + log
+    # Guardamos una marca de modificación para el estilo visual
+    ag.modificado = True 
+    
+    db.commit()
+    return {"status": "ok"}

@@ -11,3 +11,5 @@ dnspython
 greenlet
 openpyxl
 pytz
+vobject
+apscheduler

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Configurador de Formulario | Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* ... Tus estilos existentes ... */
+        .admin-config-card {
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 2.5rem;
+            max-width: 650px;
+            margin: 2rem auto;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.05);
+            border: 1px solid #f0f0f0;
+        }
+
+        .btn-volver {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #64748b;
+            font-weight: 600;
+            font-size: 14px;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .btn-volver:hover { color: #1e293b; }
+
+        .divisor-dinamico {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            margin: 2.5rem 0 1.5rem 0;
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        .divisor-dinamico::before, .divisor-dinamico::after {
+            content: '';
+            flex: 1;
+            border-bottom: 2px solid #f1f5f9;
+        }
+        .divisor-dinamico:not(:empty)::before { margin-right: 1.5em; }
+        .divisor-dinamico:not(:empty)::after { margin-left: 1.5em; }
+
+        .pregunta-card {
+            background: white;
+            border: 2px solid #000000;
+            border-radius: 14px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+        /* Estilo para cuando se está arrastrando */
+        .sortable-ghost {
+            opacity: 0.4;
+            border-style: dashed;
+            background: #f8fafc;
+        }
+        .handle {
+            cursor: grab;
+            padding-right: 15px;
+            color: #cbd5e1;
+        }
+        .handle:active { cursor: grabbing; }
+
+        .contenedor-anadir {
+            width: 100%;
+            background: transparent;
+            border: 2px dashed #cbd5e1;
+            border-radius: 18px;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 0.5rem;
+        }
+        .contenedor-anadir:hover {
+            border-color: #3b82f6;
+            background-color: #f8fafc;
+        }
+        .icono-plus-circulo {
+            width: 36px;
+            height: 36px;
+            border: 2px solid #3b82f6;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #3b82f6;
+            margin-bottom: 10px;
+        }
+
+        .input-admin {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .input-admin:focus { border-color: #000; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen pb-10">
+
+    <div class="admin-config-card">
+        <div class="flex justify-between items-center mb-8">
+            <a href="/admin/panel" class="btn-volver">
+                <i class="fas fa-arrow-left"></i> Volver al Panel
+            </a>
+            <span class="text-xs font-bold px-3 py-1 bg-blue-50 text-blue-600 rounded-full uppercase tracking-wider">
+                Subtipo: {{ subtipo_actual }}
+            </span>
+        </div>
+
+        <h1 class="text-3xl font-extrabold text-gray-900 text-center mb-2">Agendar Mantención</h1>
+        <p class="text-center text-gray-400 text-sm mb-10">Configura los datos adicionales que el dueño debe completar</p>
+
+        <div class="divisor-dinamico">Preguntas (Arrastra para reordenar)</div>
+
+        <div id="lista-preguntas">
+            {% for campo in campos %}
+            <div class="pregunta-card" data-id="{{ campo.id }}">
+                <div class="flex items-center">
+                    <div class="handle">
+                        <i data-lucide="grip-vertical"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-black text-blue-500 uppercase tracking-tighter mb-0.5">
+                            {{ campo.tipo_campo }} {% if campo.obligatorio %}(Requerido){% endif %}
+                        </div>
+                        <div class="text-gray-900 font-bold text-lg">{{ campo.label }}</div>
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="abrirModalEdicion(this)"
+                        data-id="{{ campo.id }}"
+                        data-label="{{ campo.label }}"
+                        data-tipo="{{ campo.tipo_campo }}"
+                        data-opciones="{{ campo.opciones or '' }}"
+                        data-req="{{ 'true' if campo.obligatorio else 'false' }}"
+                        class="p-2 text-gray-400 hover:text-blue-600 transition">
+                        <i data-lucide="edit-3" class="w-5 h-5"></i>
+                    </button>
+                    <a href="/admin/configurar-formulario/eliminar/{{ campo.id }}" 
+                       onclick="return confirm('¿Eliminar esta pregunta?')"
+                       class="p-2 text-gray-400 hover:text-red-600 transition">
+                        <i data-lucide="trash-2" class="w-5 h-5"></i>
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-center text-gray-400 py-4 italic">No has añadido preguntas personalizadas aún.</p>
+            {% endfor %}
+        </div>
+
+        <button id="btnGuardarOrden" onclick="guardarNuevoOrden()" class="hidden w-full bg-blue-600 text-white py-4 rounded-2xl font-bold mt-4 shadow-lg hover:bg-blue-700 transition">
+            Guardar nuevo orden
+        </button>
+
+        <button type="button" onclick="abrirModalNuevo()" class="contenedor-anadir">
+            <div class="icono-plus-circulo">
+                <i data-lucide="plus" class="w-6 h-6"></i>
+            </div>
+            <span class="text-blue-500 font-bold text-xs uppercase tracking-widest">Añadir nueva pregunta aquí</span>
+        </button>
+    </div>
+
+    <div id="modalCampo" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all">
+            <div class="bg-gray-50 px-8 py-6 border-b border-gray-100">
+                <h3 id="modalTitulo" class="text-xl font-bold text-gray-800">Nueva Pregunta</h3>
+            </div>
+            
+            <form id="formCampo" method="POST" action="/admin/configurar-formulario/guardar" class="p-8">
+                <input type="hidden" name="campo_id" id="campo_id">
+                <input type="hidden" name="subtipo_servicio" value="{{ subtipo_actual }}">
+
+                <div class="mb-5">
+                    <label class="block text-gray-700 text-xs font-black uppercase tracking-wider mb-2">Etiqueta de la pregunta</label>
+                    <input type="text" name="label" id="campo_label" required placeholder="Ej: Dirección exacta"
+                           class="input-admin">
+                </div>
+
+                <div class="mb-5">
+                    <label class="block text-gray-700 text-xs font-black uppercase tracking-wider mb-2">Tipo de respuesta</label>
+                    <select name="tipo_campo" id="campo_tipo" onchange="verificarTipo()" class="input-admin bg-white">
+                        <option value="text">Texto corto</option>
+                        <option value="number">Número</option>
+                        <option value="select">Lista de opciones (Select)</option>
+                        <option value="textarea">Texto largo</option>
+                    </select>
+                </div>
+
+                <div id="divOpciones" class="mb-5 hidden">
+                    <label class="block text-gray-700 text-xs font-black uppercase tracking-wider mb-2">Opciones (separadas por coma)</label>
+                    <input type="text" name="opciones" id="campo_opciones" placeholder="Casa, Depto, Oficina"
+                           class="input-admin">
+                </div>
+
+                <div class="mb-8 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="checkbox" name="obligatorio" id="campo_obligatorio" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5">
+                        <span class="ml-3 text-blue-800 text-sm font-bold">Marcar como campo obligatorio</span>
+                    </label>
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="button" onclick="cerrarModal()" class="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="flex-1 py-3 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition">
+                        Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // --- LÓGICA DE REORDENAMIENTO AUTOMÁTICO ---
+        const listaPreguntas = document.getElementById('lista-preguntas');
+
+        const sortable = new Sortable(listaPreguntas, {
+            handle: '.handle', // Se mueve desde el icono
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            
+            // Este evento se dispara apenas el usuario suelta la tarjeta
+            onEnd: async function (evt) {
+                // 1. Obtenemos el nuevo orden de los IDs
+                const cards = Array.from(listaPreguntas.querySelectorAll('.pregunta-card'));
+                const dataOrden = cards.map((card, index) => ({
+                    id: card.getAttribute('data-id'),
+                    orden: index + 1
+                }));
+
+                // 2. Enviamos al servidor automáticamente
+                try {
+                    const response = await fetch('/admin/configurar-formulario/reordenar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ posiciones: dataOrden })
+                    });
+
+                    if (!response.ok) {
+                        console.error('Error al guardar el orden automáticamente');
+                        // Opcional: podrías mostrar una pequeña notificación tipo toast aquí
+                    } else {
+                        console.log('Orden actualizado con éxito');
+                    }
+                } catch (error) {
+                    console.error('Error de red:', error);
+                }
+            }
+        });
+
+        // --- TUS FUNCIONES EXISTENTES ---
+        const modal = document.getElementById('modalCampo');
+        const divOpciones = document.getElementById('divOpciones');
+
+        function verificarTipo() {
+            const tipo = document.getElementById('campo_tipo').value;
+            divOpciones.classList.toggle('hidden', tipo !== 'select');
+        }
+
+        function abrirModalNuevo() {
+            document.getElementById('formCampo').reset();
+            document.getElementById('campo_id').value = '';
+            document.getElementById('modalTitulo').innerText = 'Nueva Pregunta';
+            modal.classList.replace('hidden', 'flex');
+            verificarTipo();
+        }
+
+        function abrirModalEdicion(btn) {
+            document.getElementById('modalTitulo').innerText = 'Editar Pregunta';
+            document.getElementById('campo_id').value = btn.dataset.id;
+            document.getElementById('campo_label').value = btn.dataset.label;
+            document.getElementById('campo_tipo').value = btn.dataset.tipo;
+            document.getElementById('campo_opciones').value = btn.dataset.opciones;
+            document.getElementById('campo_obligatorio').checked = btn.dataset.req === 'true';
+            
+            modal.classList.replace('hidden', 'flex');
+            verificarTipo();
+        }
+
+        function cerrarModal() {
+            modal.classList.replace('flex', 'hidden');
+        }
+    </script>
+</body>
+</html>

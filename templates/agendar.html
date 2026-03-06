@@ -1,268 +1,227 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
     <title>Agendar Mantención</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-
 <body class="bg-gray-100 font-sans">
 
 <div class="w-full max-w-md md:max-w-2xl mx-auto my-3 md:my-10 px-2">
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 sm:p-6 md:p-8">
+        
+        <h1 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-6">Agendar Mantención</h1>
 
-<div class="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 sm:p-6 md:p-8">
+        {% if success %}
+        <div class="bg-green-100 text-green-800 p-4 rounded-xl mb-6 border border-green-300">
+            ✔ Mantención agendada con éxito.<br> Te enviaremos un correo con la confirmación.
+        </div>
+        {% endif %}
 
-<h1 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-6">
-    Agendar Mantención
-</h1>
+        {% if mensaje_error %}
+        <div class="bg-red-100 text-red-700 p-4 rounded-xl mb-6 border border-red-300">
+            ⚠ {{ mensaje_error }}
+        </div>
+        {% endif %}
 
-{% if success %}
-<div class="bg-green-100 text-green-800 p-4 rounded-xl mb-6 border border-green-300">
-    ✔ Mantención agendada con éxito.<br>
-    Te enviaremos un correo con la confirmación.
-</div>
-{% endif %}
+        {% if not fecha_seleccionada %}
+        <div class="space-y-6">
+            <h2 class="text-lg font-semibold text-gray-700">1️⃣ Selecciona la fecha</h2>
+            <form method="get" action="/cliente/agendar_web" class="space-y-4">
+                <input type="hidden" name="tipo" value="{{ tipo }}">
+                <input type="hidden" name="subtipo" value="{{ subtipo }}">
+                <input type="hidden" name="duracion_horas" value="{{ duracion_horas }}">
+                <input type="text" id="fecha" name="fecha" placeholder="📅 Haz clic para seleccionar fecha" readonly required class="w-full border-2 border-blue-100 px-4 py-4 rounded-xl text-base bg-white cursor-pointer hover:border-blue-300 transition-all outline-none">
+    
+    <p class="text-xs text-gray-500 ml-1">* Atención de Lunes a Viernes</p>
+                <button class="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-base">Buscar horarios disponibles</button>
+            </form>
+        </div>
+        {% endif %}
 
-{% if mensaje_error %}
-<div class="bg-red-100 text-red-700 p-4 rounded-xl mb-6 border border-red-300">
-    ⚠ {{ mensaje_error }}
-</div>
-{% endif %}
+        {% if fecha_seleccionada and horas_disponibles and not hora_confirmada %}
+        <div class="mt-8 space-y-6">
+            <h2 class="text-lg font-semibold text-gray-700">2️⃣ Selecciona la hora</h2>
+            <div class="bg-blue-50 border border-blue-200 p-4 rounded-xl text-sm">
+                <strong>Fecha:</strong> {{ fecha_seleccionada }} | <strong>Duración:</strong> {{ duracion_horas }}h
+            </div>
+            <form method="get" action="/cliente/agendar_web" class="space-y-4">
+                <input type="hidden" name="tipo" value="{{ tipo }}">
+                <input type="hidden" name="subtipo" value="{{ subtipo }}">
+                <input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">
+                <input type="hidden" name="duracion_horas" value="{{ duracion_horas }}">
+                <select name="hora" required class="w-full border px-4 py-4 rounded-xl text-base bg-white">
+                    {% for h in horas_disponibles %}
+                    <option value="{{ h }}">{{ h }}</option>
+                    {% endfor %}
+                </select>
+                <button class="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-base">Continuar</button>
+            </form>
+        </div>
+        {% endif %}
 
-<!-- PASO 1 -->
-{% if not fecha_seleccionada %}
-<div class="space-y-6">
+        {% if fecha_seleccionada and hora_confirmada %}
+        <div class="mt-10 space-y-6">
+            <h2 class="text-lg font-semibold text-gray-700">3️⃣ Tus datos</h2>
+            <div class="bg-green-50 border border-green-200 p-4 rounded-xl text-sm mb-6">
+                <strong>Fecha:</strong> {{ fecha_seleccionada }} | <strong>Hora:</strong> {{ hora_confirmada }} a {{ hora_termino }}
+            </div>
 
-<h2 class="text-lg font-semibold text-gray-700">
-    1️⃣ Selecciona la fecha
-</h2>
+            <form method="post" action="/cliente/agendar_web" class="space-y-5">
+                <input type="hidden" name="tipo_servicio" value="{{ tipo }}">
+                <input type="hidden" name="subtipo" value="{{ subtipo }}">
+                <input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">
+                <input type="hidden" name="hora" value="{{ hora_confirmada }}">
+                <input type="hidden" name="duracion_horas" value="{{ duracion_horas }}">                
 
-<form method="get" action="/cliente/agendar_web" class="space-y-4">
+                <div class="space-y-4">
+                    {% for campo in campos_dinamicos %}
+                    <div>
+                        {# --- CASO 1: DIRECCIÓN (ESTILO NEGRO BOLD) --- #}
+                        {% if campo.nombre_tecnico == 'direccion' %}
+                            <input type="text" 
+                                name="dinamico_{{ campo.id }}" 
+                                placeholder="{{ campo.label }}"
+                                {% if campo.obligatorio %}required{% endif %}
+                                class="w-full border-2 border-black px-4 py-4 rounded-xl text-base outline-none focus:ring-2 focus:ring-blue-500">
 
-    <input type="hidden" name="tipo" value="{{ tipo }}">
-    <input type="hidden" name="subtipo" value="{{ subtipo }}">
-    <input type="hidden" name="duracion_horas" value="{{ duracion_horas }}">
+                        {# --- CASO 2: TIPO DE VIVIENDA (RADIO BUTTONS) --- #}
+                        {% elif campo.nombre_tecnico == 'tipo_vivienda' %}
+                            <div class="flex gap-6 mt-2 ml-1">
+                                <label class="flex items-center cursor-pointer">
+                                    <input type="radio" name="dinamico_{{ campo.id }}" value="Casa" required class="w-5 h-5 accent-blue-600">
+                                    <span class="ml-2 text-gray-700">Casa</span>
+                                </label>
+                                <label class="flex items-center cursor-pointer">
+                                    <input type="radio" name="dinamico_{{ campo.id }}" value="Departamento" class="w-5 h-5 accent-blue-600">
+                                    <span class="ml-2 text-gray-700">Depto</span>
+                                </label>
+                            </div>
 
-    <label class="block font-medium text-gray-700">Fecha</label>
+                        {# --- CASO 3: MARCA (SELECT ESPECIAL) --- #}
+                        {% elif campo.tipo_campo == 'select' and campo.nombre_tecnico == 'marca' %}
+                            <label class="block text-xs font-black text-gray-400 uppercase mb-1 ml-1 tracking-widest">{{ campo.label }}</label>
+                            <select name="dinamico_{{ campo.id }}" required class="w-full border border-gray-200 px-4 py-4 rounded-xl text-base bg-white">
+                                <option value="">Selecciona una marca</option>
+                                <option>Chevrolet</option><option>Hyundai</option><option>Kia</option><option>Nissan</option><option>Toyota</option>
+                                <option>Mazda</option><option>Ford</option><option>Volkswagen</option><option>Suzuki</option>
+                            </select>
 
-    <input
-        type="date"
-        name="fecha"
-        id="fecha"
-        required
-        class="w-full border px-4 py-4 rounded-xl text-base"
-    >
+                        {# --- CASO 4: OTROS SELECTS --- #}
+                        {% elif campo.tipo_campo == 'select' %}
+                            <label class="block text-xs font-black text-gray-400 uppercase mb-1 ml-1 tracking-widest">{{ campo.label }}</label>
+                            <select name="dinamico_{{ campo.id }}" {% if campo.obligatorio %}required{% endif %} class="w-full border border-gray-200 px-4 py-4 rounded-xl bg-white">
+                                {% for opcion in campo.opciones.split(',') %}
+                                    <option value="{{ opcion.strip() }}">{{ opcion.strip() }}</option>
+                                {% endfor %}
+                            </select>
 
-    <button class="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-base">
-        Buscar horarios disponibles
-    </button>
-</form>
-</div>
-{% endif %}
+                        {# --- CASO 5: CAMPOS GENÉRICOS (NOMBRE, RUT, ETC) --- #}
+                        {% else %}
+                            <label class="block text-xs font-black text-gray-400 uppercase mb-1 ml-1 tracking-widest">
+                                {{ campo.label }} {% if campo.obligatorio %}<span class="text-red-500">*</span>{% endif %}
+                            </label>
+                            <input type="{{ campo.tipo_campo }}" 
+                                name="dinamico_{{ campo.id }}" 
+                                {% if campo.nombre_tecnico == 'patente' %}id="patente"{% endif %}
+                                placeholder="Ingrese {{ campo.label.lower() }}"
+                                {% if campo.obligatorio %}required{% endif %}
+                                class="w-full border border-gray-200 px-4 py-4 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
+                            
+                            {% if campo.nombre_tecnico == 'patente' %}
+                                <div id="patente_error" class="text-red-500 text-xs mt-1 ml-2"></div>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
 
-<!-- PASO 2 -->
-{% if fecha_seleccionada and horas_disponibles and not hora_confirmada %}
-<div class="mt-8 space-y-6">
-
-<h2 class="text-lg font-semibold text-gray-700">
-    2️⃣ Selecciona la hora
-</h2>
-
-<div class="bg-blue-50 border border-blue-200 p-4 rounded-xl text-base">
-    <strong>Fecha:</strong> {{ fecha_seleccionada }}<br>
-    <strong>Duración:</strong> {{ duracion_horas }} hora{{ 's' if duracion_horas > 1 else '' }}
-</div>
-
-<form method="get" action="/cliente/agendar_web" class="space-y-4">
-
-    <input type="hidden" name="tipo" value="{{ tipo }}">
-    <input type="hidden" name="subtipo" value="{{ subtipo }}">
-    <input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">
-    <input type="hidden" name="duracion_horas" value="{{ duracion_horas }}">
-
-    <label class="font-medium text-gray-700">Hora disponible</label>
-
-    <select name="hora" required class="w-full border px-4 py-4 rounded-xl text-base">
-        {% for h in horas_disponibles %}
-        <option value="{{ h }}">{{ h }}</option>
-        {% endfor %}
-    </select>
-
-    <button class="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-base">
-        Continuar
-    </button>
-</form>
-</div>
-{% endif %}
-
-<!-- PASO 3 -->
-{% if fecha_seleccionada and hora_confirmada %}
-<div class="mt-10 space-y-6">
-
-<h2 class="text-lg font-semibold text-gray-700">
-    3️⃣ Tus datos
-</h2>
-
-<div class="bg-green-50 border border-green-200 p-4 rounded-xl text-base">
-    <strong>Fecha:</strong> {{ fecha_seleccionada }}<br>
-    <strong>Hora:</strong> {{ hora_confirmada }} ({{ hora_termino }})
-</div>
-
-<form method="post" action="/cliente/agendar_web" class="space-y-5">
-
-<input type="hidden" name="tipo_servicio" value="{{ tipo }}">
-<input type="hidden" name="subtipo" value="{{ subtipo }}">
-<input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">
-<input type="hidden" name="hora" value="{{ hora_confirmada }}">
-<input type="hidden" name="duracion_horas" value="{{ duracion_horas }}">
-
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <input name="nombre" placeholder="Nombre" required class="w-full border px-4 py-4 rounded-xl">
-    <input name="apellido" placeholder="Apellido" required class="w-full border px-4 py-4 rounded-xl">
-</div>
-
-<input name="correo" type="email" placeholder="Correo electrónico" required class="w-full border px-4 py-4 rounded-xl">
-<input name="telefono" placeholder="Teléfono celular" required class="w-full border px-4 py-4 rounded-xl">
-<input name="rut" placeholder="RUT" required class="w-full border px-4 py-4 rounded-xl">
-
-{% if mostrar_tipo_vivienda %}
-<div>
-    <label class="font-medium block mb-2">Tipo de vivienda</label>
-    <div class="flex gap-6">
-        <label class="flex items-center gap-2">
-            <input type="radio" name="tipo_vivienda" value="casa" required> Casa
-        </label>
-        <label class="flex items-center gap-2">
-            <input type="radio" name="tipo_vivienda" value="departamento"> Departamento
-        </label>
+                <button class="w-full bg-green-600 text-white py-5 rounded-2xl font-bold text-lg shadow-lg hover:bg-green-700 transition-colors mt-6">
+                    Confirmar mantención
+                </button>
+            </form>
+        </div>
+        {% endif %}
     </div>
 </div>
-{% endif %}
 
-{% if subtipo != "taller" %}
-<input name="direccion" placeholder="Dirección" required class="w-full border px-4 py-4 rounded-xl">
-{% endif %}
-
-<div class="border-t pt-4 space-y-4">
-<h3 class="font-semibold text-gray-700">Datos del vehículo</h3>
-
-<!-- <input name="marca" placeholder="Marca" required class="w-full border px-4 py-4 rounded-xl"> -->
-<div>
-    <label class="font-medium">Marca</label>
-    <select name="marca" required class="w-full border px-4 py-4 rounded-xl text-base bg-white">
-        <option value="">Selecciona una marca </option>
-        <option>Chevrolet</option>
-        <option>Hyundai</option>
-        <option>Kia</option>
-        <option>Nissan</option>
-        <option>Toyota</option>
-        <option>Mazda</option>
-        <option>Ford</option>
-        <option>Vlokswagen</option>
-        <option>Peugeot</option>
-        <option>Citroen</option>
-        <option>Renault</option>
-        <option>Subaru</option>
-        <option>Mitsubishi</option>
-        <option>Bmw</option>
-        <option>Mercedes-Benz</option>
-        <option>Audi</option>
-        <option>Volvo</option>
-        <option>Suzuki</option>
-    </select>
-</div>
-<input name="modelo" placeholder="Modelo" required class="w-full border px-4 py-4 rounded-xl">
-<input id="patente" name="patente" placeholder="Patente" required class="w-full border px-4 py-4 rounded-xl uppercase">
-<input name="kilometraje" type="number" placeholder="Kilometraje" class="w-full border px-4 py-4 rounded-xl">
-</div>
-
-<button class="w-full bg-green-600 text-white py-4 rounded-xl font-semibold text-lg">
-    Confirmar mantención
-</button>
-
-</form>
-</div>
-{% endif %}
-
-</div>
-</div>
-
-</body>
-</html>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
-        const input = document.getElementById("patente");
-        const errorMsg = document.getElementById("patente_error");
+        // --- 1. CONFIGURACIÓN DEL CALENDARIO (Solo mes actual y el siguiente) ---
+        const inputFecha = document.getElementById("fecha");
+        const hoy = new Date();
+        const fechaMinima = new Date();
+        fechaMinima.setDate(hoy.getDate() + 2);
 
-        input.addEventListener("input", () => {
-            let raw = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); // limpiar
-            raw = raw.slice(0, 6); // solo 6 caracteres reales
+        if (inputFecha) {
+            const hoy = new Date();
+            // Calculamos el último día del mes siguiente
+            const ultimoDiaProximoMes = new Date(hoy.getFullYear(), hoy.getMonth() + 2, 0);
 
-            let result = "";
-
-            for (let i = 0; i < raw.length; i++) {
-                const char = raw[i];
-
-                // POS 0 y 1 → letras obligatorias
-                if (i <= 1) {
-                    if (/[A-Z]/.test(char)) result += char;
-                }
-
-                // POS 2 y 3 → letra o número (se detecta formato)
-                else if (i <= 3) {
-                    if (/[A-Z0-9]/.test(char)) result += char;
-                }
-
-                // POS 4 y 5 → depende del formato
-                else {
-                    const c2 = result[2];
-                    const c3 = result[3];
-
-                    if (/[0-9]/.test(c2) || /[0-9]/.test(c3)) {
-                        // Formato 2 → BB 12 CC
-                        if (/[A-Z]/.test(char)) result += char;
-                    } else {
-                        // Formato 1 → AA BB 11
-                        if (/[0-9]/.test(char)) result += char;
+            flatpickr(inputFecha, {
+                locale: "es",
+                minDate: fechaMinima,
+                maxDate: ultimoDiaProximoMes, // Limita a mes actual + 1 mes
+                dateFormat: "Y-m-d",
+                
+                // --- QUITAR EL AÑO Y SIMPLIFICAR ---
+                showMonths: 1,       // Muestra un mes a la vez
+                static: false,       // El calendario flota sobre el input
+                monthSelectorType: "static", // Evita que puedan cambiar el mes con un dropdown
+                
+                disable: [
+                    function(date) {
+                        // Bloquea Sábados (6) y Domingos (0)
+                        return (date.getDay() === 0 || date.getDay() === 6);
                     }
+                ],
+                
+                onChange: function(selectedDates, dateStr) {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("fecha", dateStr);
+                    window.location.href = url.href;
+                },
+
+                // CSS para ocultar el selector de año visualmente
+                onReady: function(selectedDates, dateStr, instance) {
+                    const yearInput = instance.calendarContainer.querySelector(".numInputWrapper");
+                    if (yearInput) {
+                        yearInput.style.display = "none"; // Oculta el campo del año
+                    }
+                    // Centrar el nombre del mes
+                    instance.calendarContainer.querySelector(".flatpickr-month").style.display = "flex";
+                    instance.calendarContainer.querySelector(".flatpickr-month").style.justifyContent = "center";
                 }
-            }
-
-            // Insertar separadores automáticos: XX·XX·XX
-            let display = "";
-            for (let i = 0; i < result.length; i++) {
-                display += result[i];
-                if (i === 1 || i === 3) display += "·";
-            }
-
-            input.value = display;
-
-            // Validación final
-            const f1 = /^[A-Z]{2}[A-Z]{2}\d{2}$/;   // AA BB 11
-            const f2 = /^[A-Z]{2}\d{2}[A-Z]{2}$/;   // BB 12 CC
-
-            if (result.length === 6) {
-                if (f1.test(result) || f2.test(result)) {
-                    input.style.border = "2px solid #4CAF50"; // verde
-                    errorMsg.textContent = "";
-                } else {
-                    input.style.border = "2px solid #E53935"; // rojo
-                    errorMsg.textContent = "Formato de patente chilena inválido.";
-                }
-            } else {
-                input.style.border = "2px solid #ccc";
-                errorMsg.textContent = "";
-            }
-        });
-
-        // Al enviar el formulario → limpiar separadores
-        const form = input.closest("form");
-        if (form) {
-            form.addEventListener("submit", () => {
-                input.value = input.value.replace(/·/g, "");
             });
+        }
+
+        // --- 2. LÓGICA DE LA PATENTE (Tu código original) ---
+        const inputPatente = document.getElementById("patente");
+        if (inputPatente) {
+            inputPatente.addEventListener("input", () => {
+                let raw = inputPatente.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+                let display = "";
+                for (let i = 0; i < raw.length; i++) {
+                    display += raw[i];
+                    // Formato chileno: AA·BB·11
+                    if (i === 1 || i === 3) display += "·";
+                }
+                inputPatente.value = display;
+            });
+
+            const form = inputPatente.closest("form");
+            if (form) {
+                form.addEventListener("submit", () => {
+                    // Limpiamos los puntos antes de enviar a la base de datos
+                    inputPatente.value = inputPatente.value.replace(/·/g, "");
+                });
+            }
         }
     });
 </script>
-
+</body>
 </html>

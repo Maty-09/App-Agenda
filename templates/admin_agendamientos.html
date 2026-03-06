@@ -61,6 +61,36 @@
       border-radius: 8px;
       overflow: hidden;
   }
+    /* Bordes suaves y sombras para los eventos */
+  .fc-event {
+      border: none !important;
+      border-radius: 8px !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin: 2px !important;
+      padding: 2px 5px !important;
+  }
+
+  /* Líneas de tiempo más discretas */
+  .fc-timegrid-slot {
+      height: 3.5em !important; /* Más altura para que no se vea apretado */
+      border-bottom: 1px solid #f0f0f0 !important;
+  }
+
+  /* Encabezados de Recursos (Equipos) */
+  .fc-resource-header {
+      background: #f8fafc;
+      padding: 10px 0 !important;
+      font-weight: 700 !important;
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 0.85rem;
+  }
+
+  /* Colores pasteles profesionales por equipo */
+  .event-israel { background-color: #e0f2fe !important; border-left: 4px solid #0ea5e9 !important; color: #0369a1 !important; }
+  .event-mendez { background-color: #fef2f2 !important; border-left: 4px solid #ef4444 !important; color: #991b1b !important; }
+  .event-especializado { background-color: #f0fdf4 !important; border-left: 4px solid #22c55e !important; color: #166534 !important; }
   </style>
 </head>
 
@@ -89,11 +119,6 @@
       </a>
     </form>
 
-    
-
-    <!-- CALENDARIO
-    <div id="calendar" class="w-full h-full"></div> -->
-
     <!-- TABLA -->
     <!-- CALENDARIO -->
     <div id="calendar" class="w-full h-full mb-6"></div>
@@ -103,21 +128,19 @@
       <h3 class="font-semibold mb-2">Links de agendamiento</h3>
 
       {% for nombre, link in links_agenda.items() %}
-        <div class="flex items-center gap-2 mb-2">
-          <input 
-            type="text"
-            readonly
-            value="{{ link }}"
-            class="w-full border px-2 py-1 rounded text-sm"
-          >
-          <button
-            onclick="navigator.clipboard.writeText('{{ link }}')"
-            class="bg-blue-600 text-white px-3 py-1 rounded text-sm"
-          >
-            Copiar
-          </button>
-        </div>        
+        {% set nombre_min = nombre|lower %}
+        {% if "especializado" not in nombre_min %}
+          <div class="flex items-center gap-2 mb-2">
+            <input 
+              type="text"
+              readonly
+              value="{{ link }}"
+              class="w-full border px-2 py-1 rounded text-sm">
+            <button onclick="navigator.clipboard.writeText('{{ link }}')" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">Copiar</button>
+          </div>        
+        {% endif %}
       {% endfor %}
+
       <button onclick="abrirLinkEspecializado()" class="bg-blue-600 text-white px-3 py-2 rounded">Copiar Link especializado</button>
     </div>
     <!-- TABLA -->
@@ -128,12 +151,13 @@
           <th class="p-2 border">Rut</th>
           <th class="p-2 border">Nombre</th>
           <th class="p-2 border">Patente</th>
+          <th class="p-2 border">Marca</th>
           <th class="p-2 border">Dirección</th>
           <th class="p-2 border">Tipo</th>
           <th class="p-2 border">Equipo</th>
           <th class="p-2 border">Inicio</th>
           <th class="p-2 border">Término</th>
-          <th class="p-2 border">UTM</th>
+          <!-- <th class="p-2 border">UTM</th> -->
           <th class="p-2 border">Nota Interna</th>
           <th class="p-2 border">Acciones</th>
         </tr>
@@ -176,15 +200,17 @@
               -
             {% endif %}
           </td>
+          
 
-          <!-- NOTA INTERNA -->
           <td class="p-2 border">
-            <form action="/admin/actualizar-nota/{{ item.id }}" method="post">
-              <textarea name="nota" rows="2"
-                class="border rounded p-1 w-full text-xs">{{ item.nota_interna or '' }}</textarea>
-              <button class="bg-blue-600 text-white px-2 py-1 rounded mt-1 text-xs">
-                Guardar
-              </button>
+            <form action="/admin/actualizar_nota/{{ item.id }}" method="post">
+                <textarea name="nota" rows="2"
+                  class="border border-gray-300 rounded-lg p-2 w-full text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                  placeholder="Escribe una nota interna...">{{ item.nota_interna or '' }}</textarea>
+                  
+                  <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded-md mt-1 text-[10px] uppercase tracking-wider transition-colors">
+                      <i class="fas fa-save mr-1"></i> Guardar Nota
+                  </button>
             </form>
           </td>
 
@@ -213,162 +239,216 @@
           </td>
         </tr>
         {% endfor %}
+        <div class="flex gap-2">
+          <a href="/admin/configurar-formulario?tipo=domicilio_taller&subtipo=taller" 
+            class="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-700 transition">
+              <i data-lucide="settings-2"></i> Configurar Formulario Taller
+          </a>
+          <a href="/admin/configurar-formulario?tipo=domicilio_taller&subtipo=domicilio" 
+            class="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition">
+              <i data-lucide="home"></i> Configurar Formulario Domicilio
+          </a>
+        </div>
       </tbody>
     </table>
+    <div id="data-eventos" data-json='{{ eventos_json | safe if eventos_json else "[]" }}' style="display: none;"></div>
   </div>
   
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- SCRIPT CALENDARIO -->
   <script>
-    const coloresPorEquipo ={
-              "Equipo Israel": "#3F22FF",
-              "Equipo Mendez": "#FC4646",
-              "Equipo Movil": "#32CD32",
-              "Equipo Taller": "#FF8C00",
-            }; 
+    const coloresPorEquipo = {
+        "Equipo Israel": "#3F22FF",
+        "Equipo Mendez": "#FC4646",
+        "Equipo Movil": "#32CD32",
+        "Equipo Taller": "#FF8C00",
+    };
+
     document.addEventListener("DOMContentLoaded", function () {
-      
-
-      var calendarEl = document.getElementById('calendar');
-
-      window.calendar = new FullCalendar.Calendar(calendarEl, {
-        slotMinTime: "08:00:00",
-        slotMaxTime: "18:00:00",
-        hiddenDays: [0, 6],
-        initialView: 'dayGridMonth',
-        locale: 'es',
-        height: 700,
-
-        headerToolbar: {
-          left: 'prev,next today',
-          center: 'title',
-          right: 'dayGridMonth,timeGridWeek'
-        },
-
-        // views: { 
-        //   timeGridWeek:{
-        //     slotMinTime: "08:00:00",
-        //     slotMaxTime: "18:00:00",
-        //     slotDuration: '00:30:00',          
-        //   }
-        // },
-
-        // slotLabelFormat: {
-        //   hour: '2-digit',
-        //   minute: '2-digit',
-        //   hour12: false
-        // },
-      
-        events: JSON.parse('{{ eventos | safe }}'),
-
-        eventContent: function(arg) {            
-
-            let data = arg.event.extendedProps;
-
-            let color = arg.event.backgroundColor || "#6C63FF";
-
-            let div = document.createElement("div");
-            div.classList.add("fc-custom-event");
-
-            div.style.backgroundColor = color;
-            div.style.border = '4px solid ${color}';
-            div.style.color = "white";
-            div.style.padding = "4px";
-            div.style.borderRadius = "6px";
-            div.style.fontSize = "12px";
-
-            div.innerHTML = 
-              `<strong>${data.nombre} ${data.apellido}</strong>
-              <br>${data.subtipo ? data.subtipo.toUpperCase(): ""}
-              <br> Patente: ${data.patente}<br>
-              <span style="font-size:12px;">Equipo: ${data.equipo}</span>`;
-            return { domNodes: [div] };
-        },
-
-        eventClick: function(info) {
-            const equipo = info.event.extendedProps.equipo;
-            const colores = info.event.extendedProps.colores;
-            
-            let d = info.event.extendedProps;
-
-            //Subtipo
-            let subtipo = "";
-            if (d.subtipo) {
-                subtipolimpio = d.subtipo.toLowerCase().includes("domi") ? "Domicilio" : "Taller";
-            }
-
-            // Mostrar direccion solo si aplica
-            let direccion = "";
-            if (subtipolimpio === "Domicilio") {
-              direccion = `<b>Direccion:</b> ${d.direccion || "No registrada"}<br>`;
-            }
-            Swal.fire({
-                title: `<b>${d.subtipo}</b>`,
-                html: `
-                    <b>Tipo:</b> ${d.tipo}<br>
-                    <b>Subtipo:</b> ${d.subtipo || "-"}<br>
-                    <b>Patente:</b> ${d.patente}<br>
-                    <b>Cliente:</b> ${d.nombre} ${d.apellido}<br>
-                    <b>Marca:</b> ${d.marca}<br>
-                    <b>Modelo:</b> ${d.modelo}<br>
-                    <b>Teléfono:</b> ${d.telefono}<br>
-                    <b>Correo:</b> ${d.correo}<br>
-                    ${direccion}
-                    <b>Equipo asignado:</b> ${d.equipo}<br><br>
-                    
-
-                    <b>Inicio:</b> ${info.event.start.toLocaleString()}<br>
-                    <b>Fin:</b> ${info.event.end.toLocaleString()}`,
-                confirmButtonText: "Cerrar"
-            });
-        },
-    });
-      window.calendar.render();
-    });
-
-    function abrirLinkEspecializado(){
-      Swal.fire({
-        title:"Duracion del servicio",
-        text: "Selecciona la duracion del servicio",
-        input:"radio",
-        inputOptions: {
-          2: "2 horas",
-          3: "3 horas",
-          4: "4 horas"
-        },
-        inputValidator: (value) => {
-          if (!value) return "Debes Seleccionar una opcion";
-        },
-        confirmButtonText: "Generar Link",
-        showCancelButton: true,
-      }).then((result) => {
-        if (result.isConfirmed){
-          generarLinkEspecializado(result.value);
+        var calendarEl = document.getElementById('calendar');
+        
+        // --- NUEVA FORMA DE LEER LOS DATOS ---
+        const divData = document.getElementById('data-eventos');
+        let datosEventos = [];
+        
+        try {
+            datosEventos = JSON.parse(divData.getAttribute('data-json'));
+        } catch (e) {
+            console.error("Error al leer los eventos:", e);
         }
-      });
+
+        window.calendar = new FullCalendar.Calendar(calendarEl, {
+          initialView: 'timeGridWeek',
+          locale: 'es',
+
+          height: 'auto',
+          contentHeight: 'auto',
+          expandRows:true,
+          aspectRatio: 1.8,
+          slotMinTime: "08:00:00",
+          slotMaxTime: "18:30:00",
+          allDaySlot: false,
+          hiddenDays: [0, 6],
+          // --- RECURSOS (COLUMNAS) ---
+          resources: [
+              { id: 'israel', title: '🛠️ Equipo Israel' },
+              { id: 'mendez', title: '🛠️ Equipo Mendez' },
+              { id: 'especializado', title: '⭐ Especializado' }
+          ],
+
+          // --- ESTÉTICA DE EVENTOS ---
+          eventClassNames: function(arg) {
+              // Asignamos la clase de color según el equipo
+              const equipo = arg.event.extendedProps.equipo ? arg.event.extendedProps.equipo.toLowerCase() : '';
+              if (equipo.includes('israel')) return ['event-israel'];
+              if (equipo.includes('mendez')) return ['event-mendez'];
+              return ['event-especializado'];
+          },
+          eventContent: function(arg) {
+          return {
+                  html: `
+                      <div class="fc-content flex flex-col h-full justify-between">
+                          <div>
+                              <div class="fc-title font-bold text-[11px] truncate">${arg.event.title}</div>
+                              <div class="text-[10px] opacity-80 italic">Patente: ${arg.event.extendedProps.patente || 'N/A'}</div>
+                          </div>
+                          <div class="text-[9px] font-mono self-end bg-white/50 px-1 rounded">
+                              ${arg.timeText}
+                          </div>
+                      </div>
+                  `
+              };
+          },
+
+          eventConstraint: "businessHours",
+          events: datosEventos,
+          headerToolbar: {
+              left: 'prev,next today',
+              center: 'title',
+              right: 'dayGridMonth,timeGridWeek'
+          },
+        
+          events: datosEventos,
+
+              // Renderizado personalizado de cada bloque
+              eventContent: function(arg) {
+                  const data = arg.event.extendedProps;
+                  const color = arg.event.backgroundColor || "#6C63FF";
+
+                  const div = document.createElement("div");
+                  div.style.backgroundColor = color;
+                  div.style.color = "white";
+                  div.style.padding = "4px";
+                  div.style.borderRadius = "4px";
+                  div.style.fontSize = "11px";
+                  div.style.width = "100%";
+                  div.style.minHeight = "40px";
+                  
+                  // Lógica de borde para reubicación
+                  // Buscamos la marca tanto en 'nota' como en 'respuestas_dinamicas'
+                  const esReubicado = (data.nota && data.nota.includes("[REUBICACIÓN")) || 
+                                    (data.respuestas_dinamicas && data.respuestas_dinamicas.includes("[REUBICACIÓN"));
+
+                  if (esReubicado) {
+                      div.style.border = "3px solid #FFFF00"; // Borde amarillo neón
+                      div.style.boxShadow = "0 0 5px rgba(255, 255, 0, 0.8)";
+                  } else {
+                      div.style.border = `1px solid rgba(0,0,0,0.1)`;
+                  }
+
+                  div.innerHTML = `
+                      <div style="font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                          ${arg.event.title}
+                      </div>
+                      <div>🚗 ${data.patente || 'S/P'}</div>
+                      <div style="font-size:9px; background:rgba(0,0,0,0.2); border-radius:2px; padding:0 2px; margin-top:2px; display:inline-block;">
+                          ${data.equipo || 'Sin equipo'}
+                      </div>
+                  `;
+
+                  return { domNodes: [div] };
+              },
+
+            // Al hacer clic, cambiar dirección
+            eventClick: function(info) {
+                const eventObj = info.event;
+                const props = eventObj.extendedProps;
+                const currentDir = props.direccion || "Sin dirección";
+
+                const nuevaDir = prompt(`🚨 CAMBIO DE EMERGENCIA\nCliente: ${eventObj.title}\nDirección actual: ${currentDir}\n\nIngresa la nueva ubicación:`, currentDir);
+
+                if (nuevaDir !== null && nuevaDir !== currentDir && nuevaDir.trim() !== "") {
+                    fetch(`/admin/reubicar-emergencia/${eventObj.id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nueva_direccion: nuevaDir })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'ok') {
+                            alert("📍 Ubicación actualizada");
+                            location.reload(); 
+                        } else {
+                            alert("Error al actualizar");
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert("Error de conexión");
+                    });
+                }
+            }
+        });
+
+        window.calendar.render();
+    });
+
+    // --- Funciones para Generar Links ---
+    function abrirLinkEspecializado(){
+        Swal.fire({
+            title: "Duración del servicio",
+            text: "Selecciona la duración para generar el link",
+            input: "radio",
+            inputOptions: {
+                2: "2 horas",
+                3: "3 horas",
+                4: "4 horas"
+            },
+            inputValidator: (value) => {
+                if (!value) return "Debes seleccionar una opción";
+            },
+            confirmButtonText: "Generar y Copiar Link",
+            showCancelButton: true,
+        }).then((result) => {
+            if (result.isConfirmed){
+                generarLinkEspecializado(result.value);
+            }
+        });
     }
 
     async function generarLinkEspecializado(duracion) {
-      const links = await fetch("/admin/links-agenda").then(r => r.json());
+        try {
+            const response = await fetch("/admin/links-agenda");
+            const links = await response.json();
 
-      // Validación real
-      if (!links.especializado || !links.especializado[duracion]) {
-        Swal.fire("Error", "No se pudo generar el link", "error");
-        return;
-      }
+            if (!links.especializado || !links.especializado[duracion]) {
+                Swal.fire("Error", "No se pudo encontrar el link para esa duración", "error");
+                return;
+            }
 
-      // Obtener el link exacto según duración
-      const linkFinal = links.especializado[duracion];
+            const linkFinal = links.especializado[duracion];
+            await navigator.clipboard.writeText(linkFinal);
 
-      await navigator.clipboard.writeText(linkFinal);
-
-      Swal.fire(
-        "Link copiado",
-        `Servicio especializado (${duracion} hrs)`,
-        "success"
-      );
+            Swal.fire(
+                "¡Copiado!",
+                `Link para servicio especializado (${duracion} hrs) copiado al portapapeles.`,
+                "success"
+            );
+        } catch (error) {
+            Swal.fire("Error", "No se pudo conectar con el servidor", "error");
+        }
     }
-  </script>
+</script>
 
 </body>
 

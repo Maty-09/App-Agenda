@@ -1,49 +1,111 @@
-import sqlite3
-from fastapi import FastAPI, Form
-from fastapi.responses import RedirectResponse
-from app.database import Base, engine
-from app.routes import cliente, admin
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-import sys
 import os
-print("DB REAL:", os.path.abspath("agendamientos.db"))
-from fastapi.templating import Jinja2Templates
+import sys
+import logging
 from pathlib import Path
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
+
+# Importaciones del Scheduler
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger # Cambiamos a Interval para la prueba
+
+# Importaciones locales
+from .database import SessionLocal, engine, Base
+from . import models
+from app.routes import cliente, admin
+# IMPORTANTE: Cambiamos el import para usar la función que está en email_utils
+from app.utils.email_utils import procesar_flujo_automatico 
+
+# Configuración de logs
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-
-
-
-
-app = FastAPI()
-templates = Jinja2Templates(directory="app/templates")
-@app.post("/admin/actualizar-nota/{id}")
-def actualizar_nota(id: int, nota: str = Form(...)):
-    conn = sqlite3.connect("agendamientos.db")
-    cur = conn.cursor()
-
-    cur.execute("UPDATE agendamientos SET nota_interna=? WHERE id=?", (nota, id))
-    conn.commit()
-    conn.close()
-
-    # Volver directo al panel
-    return RedirectResponse(url="/admin/panel", status_code=303)
-
 BASE_DIR = Path(__file__).resolve().parent 
 
-# Crear tablas en la DB
-Base.metadata.create_all(bind=engine)
+app = FastAPI()
 
+# --- CONFIGURACIÓN DEL SCHEDULER ---
+scheduler = BackgroundScheduler(timezone="America/Santiago")
 
-# Incluir rutas
-app.include_router(cliente.router, prefix="/cliente", tags=["Cliente"])
+def inicializar_campos_sistema(db: Session):
+    existe = db.query(models.CampoFormulario).filter(
+        models.CampoFormulario.es_sistema == True
+    ).first()
+    
+    if existe:
+        return
+
+    campos_base = [
+        {"label": "RUT", "tec": "rut", "ord": 1},
+        {"label": "Nombre", "tec": "nombre", "ord": 2},
+        {"label": "Apellido", "tec": "apellido", "ord": 3},
+        {"label": "Teléfono", "tec": "telefono", "ord": 4},
+        {"label": "Marca", "tec": "marca", "ord": 5},
+        {"label": "Modelo", "tec": "modelo", "ord": 6},
+        {"label": "Patente", "tec": "patente", "ord": 7},
+        {"label": "Kilometraje", "tec": "kilometraje", "ord": 8},
+    ]
+
+    for c in campos_base:
+        for sub in ["taller", "domicilio"]:
+            nuevo = models.CampoFormulario(
+                label=c["label"],
+                nombre_tecnico=c["tec"],
+                tipo_campo="text",
+                es_sistema=True,
+                orden=c["ord"],
+                subtipo_servicio=sub,
+                obligatorio=True,
+                activo=True
+            )
+            db.add(nuevo)
+    db.commit()
+    print("✅ Campos base inicializados.")
+
+# --- EVENTOS DE CICLO DE VIDA ---
+
+@app.on_event("startup")
+async def startup_event():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        inicializar_campos_sistema(db)
+    finally:
+        db.close()
+
+    # --- CONFIGURACIÓN DE PRUEBA (Cada 10 minutos) ---
+    if not scheduler.get_job("recordatorios_test"):
+        scheduler.add_job(
+            procesar_flujo_automatico,
+            'interval',
+            minutes=1, 
+            id="recordatorios_test",
+            replace_existing=True
+        )
+        scheduler.start()
+    
+    if not scheduler.running:
+        scheduler.start()
+        logger.info("🚀 SISTEMA DE PRUEBA INICIADO: Revisión cada 1 minutos activada.")
+
+@app.on_event("shutdown")
+def shutdown_event():
+    if scheduler.running:
+        scheduler.shutdown()
+        logger.info("🛑 Scheduler apagado correctamente.")
+
+# Registro de rutas
 app.include_router(admin.router, prefix="/admin", tags=["Administrador"])
+app.include_router(cliente.router, prefix="/cliente", tags=["Cliente"])
 
-# carpeta para archivos estáticos
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
-
-
-
+@app.on_event("startup")
+async def debug_routes():
+    print("\n--- RUTAS CARGADAS ---")
+    for route in app.routes:
+        if hasattr(route, 'path'):
+            print(f"Ruta: {route.path}")
+    print("----------------------\n")

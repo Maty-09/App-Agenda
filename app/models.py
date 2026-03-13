@@ -1,5 +1,5 @@
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum,Time, ForeignKey
+from datetime import datetime, timedelta
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum,Time, ForeignKey, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -9,6 +9,13 @@ import pytz
 
 def get_now_chile():
     return datetime.now(pytz.timezone("America/Santiago")).replace(tzinfo=None)
+
+
+class DiaBloqueado(Base):
+    __tablename__ = "dias_bloqueados"
+    id = Column(Integer, primary_key=True, index=True)
+    fecha = Column(Date, unique=True, nullable=False)
+    motivo = Column(String, nullable=True)
 
 class TipoServicio(str, enum.Enum):
     especializado = "especializado"
@@ -38,7 +45,7 @@ class Agendamiento(Base):
     fecha_inicio = Column(DateTime, nullable=False)
     fecha_termino = Column(DateTime, nullable=False)
     creado_en = Column(DateTime, default=get_now_chile)
-    duracion_horas = Column(Integer, nullable=False)
+    duracion_horas = Column(Integer, default=2)
     hora = Column(Time, nullable=True)
     equipo = Column(String, nullable=False)
     subtipo = Column(String, nullable=True)  

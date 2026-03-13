@@ -14,30 +14,40 @@
 <div class="w-full max-w-md md:max-w-2xl mx-auto my-3 md:my-10 px-2">
     <div class="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 sm:p-6 md:p-8">
         
-        <h1 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-6">Agendar Mantención</h1>
-
         {% if success %}
-        <div class="bg-green-100 text-green-800 p-4 rounded-xl mb-6 border border-green-300">
-            ✔ Mantención agendada con éxito.<br> Te enviaremos un correo con la confirmación.
-        </div>
-        {% endif %}
-
-        {% if mensaje_error %}
-        <div class="bg-red-100 text-red-700 p-4 rounded-xl mb-6 border border-red-300">
-            ⚠ {{ mensaje_error }}
-        </div>
-        {% endif %}
+            <div class="flex flex-col items-center text-center animate-fade-in">
+                <div class="w-24 h-24 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-6 border border-green-100">
+                    <i class="fas fa-check-circle text-5xl"></i>
+                </div>
+                    
+                <h1 class="text-3xl font-extrabold text-slate-900 mb-4 tracking-tight">¡Agendado con éxito!</h1>
+                
+                <p class="text-slate-600 text-lg leading-relaxed mb-8">
+                    Tu mantención ha sido registrada correctamente.<br>
+                    <span class="font-semibold text-slate-800">Revisa tu correo</span>, te enviamos los detalles de la confirmación.
+                </p>
+            </div>
+        {% else %}
+           {% if mensaje_error %}
+                <div class="bg-red-50 text-red-700 p-4 rounded-2xl mb-6 border border-red-100 flex items-center gap-3">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span class="text-sm font-medium">{{ mensaje_error }}</span>
+                </div>
+            {% endif %}
+        
+        <h1 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-6">Agendar Mantención</h1>
 
         {% if not fecha_seleccionada %}
         <div class="space-y-6">
             <h2 class="text-lg font-semibold text-gray-700">1️⃣ Selecciona la fecha</h2>
             <form method="get" action="/cliente/agendar_web" class="space-y-4">
+                <input type="hidden" name="modo_emergencia" value="{{ 'true' if request.query_params.get('modo') == 'emergencia' else 'false' }}">
                 <input type="hidden" name="tipo" value="{{ tipo }}">
                 <input type="hidden" name="subtipo" value="{{ subtipo }}">
                 <input type="hidden" name="duracion_horas" value="{{ duracion_horas }}">
                 <input type="text" id="fecha" name="fecha" placeholder="📅 Haz clic para seleccionar fecha" readonly required class="w-full border-2 border-blue-100 px-4 py-4 rounded-xl text-base bg-white cursor-pointer hover:border-blue-300 transition-all outline-none">
     
-    <p class="text-xs text-gray-500 ml-1">* Atención de Lunes a Viernes</p>
+            <p class="text-xs text-gray-500 ml-1">* Atención de Lunes a Viernes</p>
                 <button class="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-base">Buscar horarios disponibles</button>
             </form>
         </div>
@@ -147,15 +157,35 @@
         </div>
         {% endif %}
     </div>
+    {% endif %}
 </div>
 
 <script>
     document.addEventListener("DOMContentLoaded", () => {
+        // --- NUEVO: DETECCIÓN DE MODO DUEÑO ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const esEmergencia = urlParams.get('modo') === 'emergencia';
         // --- 1. CONFIGURACIÓN DEL CALENDARIO (Solo mes actual y el siguiente) ---
         const inputFecha = document.getElementById("fecha");
         const hoy = new Date();
-        const fechaMinima = new Date();
-        fechaMinima.setDate(hoy.getDate() + 2);
+        // --- NUEVA LÓGICA DE 48H HÁBILES ---
+        let fechaMinima = new Date();
+        let horasContadas = 0;
+
+        // Mientras no completemos 48 horas de Lunes a Viernes...
+        while (horasContadas < 48) {
+            fechaMinima.setHours(fechaMinima.getHours() + 1);
+            let dia = fechaMinima.getDay();
+            // 0 es Domingo, 6 es Sábado. Solo contamos la hora si es día de semana.
+            if (dia !== 0 && dia !== 6) {
+                horasContadas++;
+            }
+        }
+        // --- NUEVO: SOBREESCRIBIR SI ES EMERGENCIA ---
+        // Si es el dueño, la fecha mínima es HOY mismo, no 48h después.
+        if (esEmergencia) {
+            fechaMinima = new Date(); // Reset a ahora mismo
+        }
 
         if (inputFecha) {
             const hoy = new Date();
@@ -164,7 +194,7 @@
 
             flatpickr(inputFecha, {
                 locale: "es",
-                minDate: fechaMinima,
+                minDate: esEmergencia ? "today" : fechaMinima,
                 maxDate: ultimoDiaProximoMes, // Limita a mes actual + 1 mes
                 dateFormat: "Y-m-d",
                 
@@ -173,17 +203,37 @@
                 static: false,       // El calendario flota sobre el input
                 monthSelectorType: "static", // Evita que puedan cambiar el mes con un dropdown
                 
+                // --- MODIFICADO: DESACTIVAR BLOQUEOS ---
                 disable: [
                     function(date) {
-                        // Bloquea Sábados (6) y Domingos (0)
+                        // Si es emergencia, NO deshabilitamos nada (devuelve false).
+                        // Si es cliente, deshabilitamos Sábado (6) y Domingo (0).
+                        if (esEmergencia) return false;
                         return (date.getDay() === 0 || date.getDay() === 6);
                     }
-                ],
-                
+                ],            
+
                 onChange: function(selectedDates, dateStr) {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set("fecha", dateStr);
-                    window.location.href = url.href;
+                    // 1. Buscamos el div donde muestras las horas (ponle id="contenedor-horas")
+                    const contenedor = document.getElementById("contenedor-horas");
+                    contenedor.innerHTML = "<p>Buscando horarios...</p>";
+                    // Agregamos el modo a la petición de la API por si acaso
+                    const modoStr = esEmergencia ? "&modo=emergencia" : "";
+
+                    // 2. Llamamos a tu nuevo endpoint de Python
+                    fetch(`/cliente/api/horas-disponibles?fecha=${dateStr}&tipo={{tipo}}&duracion={{duracion_horas}}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            contenedor.innerHTML = ""; // Limpiamos
+                            if(data.horas.length === 0) {
+                                contenedor.innerHTML = "<p>No hay horas para este día.</p>";
+                                return;
+                            }
+                            // 3. Dibujamos los botones de las horas
+                            data.horas.forEach(h => {
+                                contenedor.innerHTML += `<button type="button" class="btn-hora" onclick="seleccionarHora('${h}')">${h}</button>`;
+                            });
+                        });
                 },
 
                 // CSS para ocultar el selector de año visualmente
@@ -195,6 +245,12 @@
                     // Centrar el nombre del mes
                     instance.calendarContainer.querySelector(".flatpickr-month").style.display = "flex";
                     instance.calendarContainer.querySelector(".flatpickr-month").style.justifyContent = "center";
+
+                    // --- NUEVO: AVISO VISUAL EN EL CALENDARIO ---
+                    if (esEmergencia) {
+                        instance.calendarContainer.style.border = "2px solid #f97316";
+                        console.log("Calendario en modo LIBRE para el dueño.");
+                    }
                 }
             });
         }

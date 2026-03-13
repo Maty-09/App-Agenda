@@ -5,7 +5,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-
+from datetime import datetime, timedelta
+import pytz
 # Importaciones del Scheduler
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger # Cambiamos a Interval para la prueba
@@ -28,6 +29,26 @@ app = FastAPI()
 
 # --- CONFIGURACIÓN DEL SCHEDULER ---
 scheduler = BackgroundScheduler(timezone="America/Santiago")
+
+
+
+
+def obtener_fecha_minima_habil():
+    # Configuramos la hora de Chile
+    tz = pytz.timezone('America/Santiago')
+    ahora = datetime.now(tz)
+    
+    contar_horas = 0
+    fecha_chequeo = ahora
+    
+    # Este bucle suma horas una a una, saltando fines de semana
+    while contar_horas < 48:
+        fecha_chequeo += timedelta(hours=1)
+        # 0=Lunes, 4=Viernes, 5=Sábado, 6=Domingo
+        if fecha_chequeo.weekday() < 5: 
+            contar_horas += 1
+            
+    return fecha_chequeo
 
 def inicializar_campos_sistema(db: Session):
     existe = db.query(models.CampoFormulario).filter(

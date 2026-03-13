@@ -173,17 +173,11 @@
                         Limpiar
                     </a>
                 </div>
-
-                <div class="flex items-center justify-between p-4 bg-amber-50 rounded-2xl border border-amber-100 my-4">
-                    <div class="flex flex-col">
-                        <span class="text-[11px] font-black text-amber-800 uppercase tracking-widest">Modo Superusuario</span>
-                        <span class="text-[10px] text-amber-600 font-medium">Ignorar bloqueos y fines de semana</span>
-                    </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="ignorar_reglas" class="sr-only peer">
-                            <div class="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
-                        </label>
-                </div>
+                <a href="/admin/agendar-emergencia-total" 
+                    class="inline-flex items-center gap-2 px-6 py-3 bg-amber-600 text-white font-black rounded-2xl hover:bg-amber-700 transition-all shadow-lg shadow-amber-200 uppercase text-xs tracking-widest">
+                        <i class="fas fa-bolt"></i> Agendar Emergencia Total
+                </a>
+                
             </form>
 
             <div id="calendar" class="w-full"></div>
@@ -370,10 +364,9 @@
     <script>
         // Tus datos de colores originales (mantenidos por si acaso)
         const coloresPorEquipo = {
-            "Equipo Israel": "#3F22FF",
-            "Equipo Mendez": "#FC4646",
+            "Equipo Cristhian": "#3F22FF",
+            "Equipo Samuel": "#FC4646",
             "Equipo Movil": "#32CD32",
-            "Equipo Taller": "#FF8C00",
         };
 
         document.addEventListener("DOMContentLoaded", function () {
@@ -421,17 +414,17 @@
 
                 // --- RECURSOS (COLUMNAS) ORIGINALES MANTENIDOS ---
                 resources: [
-                    { id: 'israel', title: '🛠️ Equipo Israel' },
-                    { id: 'mendez', title: '🛠️ Equipo Mendez' },
-                    { id: 'especializado', title: '⭐ Especializado' }
+                    { id: 'Samuel', title: '🛠️ Equipo Samuel' },
+                    { id: 'Cristhian', title: '🛠️ Equipo Cristhian' },
+                    { id: 'Movil', title: '⭐ Movil' }
                 ],
 
                 // --- ESTÉTICA DE EVENTOS (MEJORADA) ---
                 eventClassNames: function(arg) {
                     const equipo = arg.event.extendedProps.equipo ? arg.event.extendedProps.equipo.toLowerCase() : '';
-                    if (equipo.includes('israel')) return ['event-israel'];
-                    if (equipo.includes('mendez')) return ['event-mendez'];
-                    return ['event-especializado'];
+                    if (equipo.includes('Samuel')) return ['event-Samuel'];
+                    if (equipo.includes('Cristhian')) return ['event-Cristhian'];
+                    return ['event-Movil'];
                 },
 
                 // --- RENDERIZADO DE CONTENIDO (MEJORADO) ---
@@ -627,21 +620,93 @@
 
         function eliminarBloqueo(bloqueoId) {
             Swal.fire({
-                title: '¿Desbloquear día?',
-                text: "Los clientes podrán volver a agendar en esta fecha.",
+                title: '¿Eliminar bloqueo?',
+                text: "El día volverá a estar disponible para los clientes.",
                 icon: 'warning',
                 showCancelButton: true,
-                confirmButtonText: 'Sí, desbloquear',
-                confirmButtonColor: '#ef4444'
+                confirmButtonText: 'Sí, liberar día',
+                confirmButtonColor: '#ef4444',
+                cancelButtonText: 'Cancelar',
+                reverseButtons: true
             }).then((result) => {
                 if (result.isConfirmed) {
-                    fetch(`/admin/eliminar-bloqueo/${bloqueoId}`, { method: 'POST' })
-                        .then(res => res.json())
-                        .then(data => {
-                            if(data.status === 'ok') {
-                                Swal.fire('Eliminado', 'Día disponible', 'success').then(() => location.reload());
-                            }
-                        });
+                    // Ajustado a tu ruta exacta: /desbloquear-dia/{id}
+                    // Importante: Verifica si tu router de Python usa POST o DELETE
+                    fetch(`/admin/desbloquear-dia/${bloqueoId}`, { 
+                        method: 'DELETE' // O 'POST' según cómo esté definida en tu @router
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        // Tu Python devolvía "status": "success" en la otra función, 
+                        // asegúrate que aquí sea igual
+                        if(data.status === 'success' || data.status === 'ok') {
+                            Swal.fire({
+                                icon: 'success',
+                                title: '¡Día liberado!',
+                                showConfirmButton: false,
+                                timer: 1500
+                            }).then(() => location.reload());
+                        } else {
+                            Swal.fire('Error', data.message || 'No se pudo eliminar', 'error');
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        Swal.fire('Error', 'No se pudo conectar con el servidor', 'error');
+                    });
+                }
+            });
+        }
+
+        function abrirAgendamientoEmergencia() {
+            Swal.fire({
+                title: 'Agendamiento de Emergencia',
+                text: 'Se ignorarán bloqueos y fines de semana',
+                html: `
+                    <div class="space-y-3 text-left">
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Fecha</label>
+                            <input type="date" id="em_fecha" class="swal2-input !m-0 !w-full" style="border-radius: 12px;">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Rut Cliente</label>
+                            <input type="text" id="em_rut" class="swal2-input !m-0 !w-full" placeholder="12.345.678-9" style="border-radius: 12px;">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Patente</label>
+                            <input type="text" id="em_patente" class="swal2-input !m-0 !w-full" placeholder="ABCD12" style="border-radius: 12px;">
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Forzar Agendamiento',
+                confirmButtonColor: '#f59e0b',
+                preConfirm: () => {
+                    const fecha = document.getElementById('em_fecha').value;
+                    const rut = document.getElementById('em_rut').value;
+                    const patente = document.getElementById('em_patente').value;
+                    
+                    if (!fecha || !rut || !patente) {
+                        return Swal.showValidationMessage('Todos los campos son obligatorios');
+                    }
+                    return { fecha, rut, patente };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Enviamos a la ruta de emergencia que mencionaste
+                    fetch('/admin/agendar-emergencia-total', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(result.value)
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.status === 'success' || data.status === 'ok') {
+                            Swal.fire('¡Éxito!', 'Agendamiento forzado realizado', 'success').then(() => location.reload());
+                        } else {
+                            Swal.fire('Error', data.message || 'No se pudo agendar', 'error');
+                        }
+                    });
                 }
             });
         }

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Request, HTTPException, Query, Form, Body
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from sqlalchemy import func
 from app.database import SessionLocal
 from app import models, schemas
@@ -15,6 +16,7 @@ import sqlite3
 import openpyxl
 from io import BytesIO 
 from app.utils.email_utils import  enviar_confirmacion_agendamiento
+from datetime import datetime, timedelta
 
 # Templates
 templates = Jinja2Templates(directory="templates")
@@ -114,14 +116,16 @@ def panel_agendamientos(
     agendamientos = query.order_by(models.Agendamiento.id).all()
     utm_registro = db.query(models.UTMRegistro).all()
 
+    dias_bloqueados = db.query(models.DiaBloqueado).all()
+
     colores = {
-        "Equipo Israel": "#3F22FF",
-        "Equipo Mendez": "#FC4646",
+        "Equipo Cristhian": "#3F22FF",
+        "Equipo Samuel": "#FC4646",
         "Equipo Movil": "#32CD32",
-        "Equipo Taller": "#FF8C00",
     }
     
     eventos_lista = []
+
     for item in agendamientos:
         start_iso = item.fecha_inicio.strftime("%Y-%m-%dT%H:%M:%S")
         end_iso = item.fecha_termino.strftime("%Y-%m-%dT%H:%M:%S") if item.fecha_termino else start_iso
@@ -147,6 +151,16 @@ def panel_agendamientos(
             }
         })
 
+    # --- NUEVA LÍNEA 2: Agregamos los bloqueos al calendario ---
+    for b in dias_bloqueados:
+        eventos_lista.append({
+            "id": str(b.id),
+            "start": b.fecha.strftime("%Y-%m-%d"), # Solo fecha para que sea todo el día
+            "display": "background",              # Pinta el fondo del calendario
+            "backgroundColor": "#FFDADA",         # Color rojo suave
+            "extendedProps": { "tipo": "bloqueo" } # Identificador para JS
+        })
+
     # Convertimos a string JSON
     eventos_json_str = json.dumps(eventos_lista)
 
@@ -160,12 +174,13 @@ def panel_agendamientos(
     return templates.TemplateResponse("admin_agendamientos.html", {
         "request": request,
         "agendamientos": agendamientos,
+        "dias_bloqueados": dias_bloqueados,
         "tipo_servicio": tipo_servicio,
         "subtipo": subtipo,
         "eventos_json": eventos_json_str, # <--- IMPORTANTE: Nombre unificado
         "fecha": fecha,
         "utm_registro": utm_registro,
-        "links_agenda": links_agenda,  
+        "links_agenda": links_agenda
     })
 
 
@@ -465,3 +480,106 @@ async def reubicar_emergencia(
     
     db.commit()
     return {"status": "ok"}
+
+# 1. Definimos la estructura que esperamos recibir del JS
+class BloqueoDiaSchema(BaseModel):
+    fecha: str
+    motivo: Optional[str] = None
+
+@router.post("/bloquear-dia-completo")
+def bloquear_dia(datos: BloqueoDiaSchema, db: Session = Depends(get_db)):
+    # Ahora accedemos a datos.fecha en lugar de un Form
+    try:
+        fecha_dt = datetime.strptime(datos.fecha, "%Y-%m-%d").date()
+    except ValueError:
+        return {"error": "Formato de fecha inválido"}, 400
+    
+    # Verificamos que no exista ya
+    existe = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == fecha_dt).first()
+    
+    if not existe:
+        nuevo = models.DiaBloqueado(fecha=fecha_dt, motivo=datos.motivo)
+        db.add(nuevo)
+        db.commit()
+    
+    
+    # Como es una petición AJAX (fetch), es mejor devolver un JSON de éxito 
+    # en lugar de un RedirectResponse, para que el JS haga el reload.
+    return {"status": "success", "message": "Día bloqueado correctamente"}
+
+@router.post("/desbloquear-dia/{id}")
+def desbloquear_dia(id: int, db: Session = Depends(get_db)):
+    dia = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.id == id).first()
+    if dia:
+        db.delete(dia)
+        db.commit()
+        print(f"DEBUG: Día {id} desbloqueado con éxito")
+        return {"status": "ok", "message": "Día eliminado"} # Cambiamos la redirección por JSON
+    
+    return {"status": "error", "message": "No se encontró el registro"}, 404
+
+
+@router.post("/editar-cita/{id}")
+async def editar_cita_admin(id: int, db: Session = Depends(get_db), duracion_horas: int = Form(...)):
+    cita = db.query(models.Agendamiento).get(id)
+    
+    # Actualizamos la duración que puso Tommy
+    cita.duracion_horas = duracion_horas
+    
+    # Recalculamos el término: Inicio + duracion_horas
+    # Esto "empuja" la hora de término y bloquea los cupos automáticamente
+    cita.fecha_termino = cita.fecha_inicio + timedelta(hours=duracion_horas)
+    
+    print(f"DEBUG: Bloqueo guardado para la fecha: {fecha_str}")
+    return {"status": "ok"}
+    db.commit()
+    return RedirectResponse(url="/admin/panel", status_code=303)
+
+
+@router.post("/admin/editar-cita/{cita_id}")
+async def admin_editar_cita(
+    cita_id: int, 
+    fecha: str = Form(...), 
+    hora: str = Form(...), 
+    duracion_horas: int = Form(...), 
+    db: Session = Depends(get_db)
+):
+    # 1. Buscar la cita en la base de datos
+    cita = db.query(models.Agendamiento).filter(models.Agendamiento.id == cita_id).first()
+    
+    if not cita:
+        return {"error": "Cita no encontrada"}
+
+    # 2. Construir la nueva fecha y hora de inicio
+    # Combinamos el string de fecha (YYYY-MM-DD) y hora (HH:MM)
+    nueva_fecha_inicio = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
+
+    # 3. RECALCULAR EL TÉRMINO (Aquí ocurre la magia del bloqueo)
+    # Sumamos la duración que puso Tommy al inicio
+    nueva_fecha_termino = nueva_fecha_inicio + timedelta(hours=duracion_horas)
+
+    # 4. Actualizar los campos en la base de datos
+    cita.fecha_inicio = nueva_fecha_inicio
+    cita.fecha_termino = nueva_fecha_termino
+    cita.duracion_horas = duracion_horas # Guardamos el nuevo valor (ej. 8 o 9)
+
+    db.commit()
+
+    # 5. Redirigir de vuelta al panel de configuración
+    return RedirectResponse(url="/admin/configuracion", status_code=303)
+
+@router.get("/agendar-emergencia-total")
+async def agendar_emergencia(request: Request):
+    """
+    Ruta para el modo sobrecupo. 
+    Redirige al agendamiento web ignorando restricciones (si el formulario lo permite).
+    """
+    # Obtenemos la base de la URL (ej: http://127.0.0.1:8000)
+    base_url = str(request.base_url).rstrip("/")
+    
+    # Redirigimos al agendamiento de taller, pero puedes cambiar el 'tipo' 
+    # o añadirle un parámetro 'emergencia=true' para tu lógica interna.
+    target_url = f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=taller&modo=emergencia"
+    
+    print(f"DEBUG: Accediendo a Modo Emergencia -> {target_url}")
+    return RedirectResponse(url=target_url)

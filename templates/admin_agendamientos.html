@@ -2,453 +2,650 @@
 <html lang="es">
 
 <head>
-  <meta charset="UTF-8">
-  <title>Panel de Administración</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración | Tommy Crozier</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- FullCalendar -->
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
 
-  <!-- Tippy tooltips -->
-  <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/themes/light.css" />
-  <script src="https://unpkg.com/@popperjs/core@2"></script>
-  <script src="https://unpkg.com/tippy.js@6"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/themes/light.css" />
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script src="https://unpkg.com/tippy.js@6"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-  <style>
-    /* --- ESTILOS MINIMALISTAS --- */
-
-    /* .fc {
-      font-family: 'Inter', sans-serif;
-    }
-
-    .fc-toolbar-title {
-      font-size: 1.4rem !important;
-      font-weight: 600;
-    }
-
-    .fc-button {
-      border-radius: 8px !important;
-      padding: 6px 14px !important;
-      background: #f3f4f6 !important;
-      border: none !important;
-      transition: 0.2s;
-    }
-
-    .fc-button-primary {
-      background: #1f2937 !important;
-      color: white !important;
-    }
-
-    .fc-button-primary:hover {
-      background: #374151 !important;
-    } */
-  /* .fc-custom-event {
-      padding: 4px;
-      background: rgba(136, 255, 0, 0.8);
-      color: white;
-      border-radius: 6px;
-      font-size: 12px;
-      line-height: 14px;
-    } */
-  .fc-custom-event strong {
-      color: #FFF;
-    }
-
-  .fc-timegrid-event{
-      border: none;
-      border-radius: 8px;
-      overflow: hidden;
-  }
-    /* Bordes suaves y sombras para los eventos */
-  .fc-event {
-      border: none !important;
-      border-radius: 8px !important;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      margin: 2px !important;
-      padding: 2px 5px !important;
-  }
-
-  /* Líneas de tiempo más discretas */
-  .fc-timegrid-slot {
-      height: 3.5em !important; /* Más altura para que no se vea apretado */
-      border-bottom: 1px solid #f0f0f0 !important;
-  }
-
-  /* Encabezados de Recursos (Equipos) */
-  .fc-resource-header {
-      background: #f8fafc;
-      padding: 10px 0 !important;
-      font-weight: 700 !important;
-      color: #334155;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-size: 0.85rem;
-  }
-
-  /* Colores pasteles profesionales por equipo */
-  .event-israel { background-color: #e0f2fe !important; border-left: 4px solid #0ea5e9 !important; color: #0369a1 !important; }
-  .event-mendez { background-color: #fef2f2 !important; border-left: 4px solid #ef4444 !important; color: #991b1b !important; }
-  .event-especializado { background-color: #f0fdf4 !important; border-left: 4px solid #22c55e !important; color: #166534 !important; }
-  </style>
-</head>
-
-<body class="bg-gray-100 p-8">
-
-  <div class="w-full px-4 bg-white p-6 rounded shadow">
-    <h1 class="text-3xl font-bold mb-6">Agendamientos</h1>
-
-    <!-- FILTROS -->
-    <form method="get" action="/admin/panel" class="mb-4 flex gap-4 items-center">
-      <select name="subtipo" class="border rounded-lg px-3 py-2 bg-white shadow">
-        <option value="">Todos</option>
-        <option value="Taller" {% if subtipo=='Taller' %}selected{% endif %}>Taller</option>
-        <option value="Domicilio" {% if tipo_servicio=='Domicilio' %}selected{% endif %}>Domicilio</option>
-      </select>
-
-      <input type="date" name="fecha" id="fecha" class="border rounded-lg px-3 py-2 bg-white shadow">
-
-      <button type="submit"
-        class="px-4 py-2 rounded-lg bg-blue-600 text-white shadow hover:bg-blue-700">Filtrar</button>
-
-      <a href="/admin/panel" class="px-4 py-2 rounded-lg bg-gray-200 shadow hover:bg-gray-300">Limpiar</a>
-      
-      <a href="/admin/export/utm" class="px-4 py-2 rounded-lg bg-green-600 text-white shadow hover:bg-green-700">
-        Exportar UTM 
-      </a>
-    </form>
-
-    <!-- TABLA -->
-    <!-- CALENDARIO -->
-    <div id="calendar" class="w-full h-full mb-6"></div>
-
-    <!-- Agendamiento de hora -->
-    <div class="bg-gray-100 p-4 rounded mb-6">
-      <h3 class="font-semibold mb-2">Links de agendamiento</h3>
-
-      {% for nombre, link in links_agenda.items() %}
-        {% set nombre_min = nombre|lower %}
-        {% if "especializado" not in nombre_min %}
-          <div class="flex items-center gap-2 mb-2">
-            <input 
-              type="text"
-              readonly
-              value="{{ link }}"
-              class="w-full border px-2 py-1 rounded text-sm">
-            <button onclick="navigator.clipboard.writeText('{{ link }}')" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">Copiar</button>
-          </div>        
-        {% endif %}
-      {% endfor %}
-
-      <button onclick="abrirLinkEspecializado()" class="bg-blue-600 text-white px-3 py-2 rounded">Copiar Link especializado</button>
-    </div>
-    <!-- TABLA -->
-    <table class="table-auto w-full text-sm border">
-      <thead>
-        <tr class="bg-gray-200">
-          <th class="p-2 border">ID</th>
-          <th class="p-2 border">Rut</th>
-          <th class="p-2 border">Nombre</th>
-          <th class="p-2 border">Patente</th>
-          <th class="p-2 border">Marca</th>
-          <th class="p-2 border">Dirección</th>
-          <th class="p-2 border">Tipo</th>
-          <th class="p-2 border">Equipo</th>
-          <th class="p-2 border">Inicio</th>
-          <th class="p-2 border">Término</th>
-          <!-- <th class="p-2 border">UTM</th> -->
-          <th class="p-2 border">Nota Interna</th>
-          <th class="p-2 border">Acciones</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        {% for item in agendamientos %}
-        <tr class="border-b hover:bg-gray-100 {% if item.estado == 'cancelado' %}bg-red-50 text-gray-400{% endif %}">
-          
-          <td class="p-2 border">{{ item.id }}</td>
-          <td class="p-2 border">{{ item.rut }}</td>
-          <td class="p-2 border">{{ item.nombre }} {{ item.apellido }}</td>
-          <td class="p-2 border">{{ item.patente }}</td>
-          <td class="p-2 border">{{ item.marca }}</td>
-          <td class="p-2 border">{{ item.direccion or "-" }}</td>
-          <td class="p-2 border">{{ item.subtipo }}</td>
-          <td class="p-2 border">{{ item.equipo }}</td>          
-
-          <td class="p-2 border">
-            {{ item.fecha_inicio.strftime("%Y-%m-%d %H:%M") }}
-          </td>
-          <td class="p-2 border">
-            {{ item.fecha_termino.strftime("%Y-%m-%d %H:%M") }}
-          </td>
-
-          <!-- ORIGEN UTM -->
-          <td class="p-2 border text-center">
-            {% if item.utm %}
-              <button 
-                onclick="Swal.fire(
-                  'Origen del cliente',
-                  'Fuente: {{ item.utm.utm_source }}<br>Medio: {{ item.utm.utm_medium }}<br>Campaña: {{ item.utm.utm_campaign }}',
-                  'info'
-                )"
-                class="px-2 py-1 bg-blue-500 text-white rounded text-xs"
-              >
-                Ver origen
-              </button>
-            {% else %}
-              -
-            {% endif %}
-          </td>
-          
-
-          <td class="p-2 border">
-            <form action="/admin/actualizar_nota/{{ item.id }}" method="post">
-                <textarea name="nota" rows="2"
-                  class="border border-gray-300 rounded-lg p-2 w-full text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                  placeholder="Escribe una nota interna...">{{ item.nota_interna or '' }}</textarea>
-                  
-                  <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded-md mt-1 text-[10px] uppercase tracking-wider transition-colors">
-                      <i class="fas fa-save mr-1"></i> Guardar Nota
-                  </button>
-            </form>
-          </td>
-
-          <!-- ACCIONES -->
-          <td class="p-2 border text-center">
-
-            {% if item.estado != "cancelado" %}
-            <form 
-              action="/admin/cancelar/{{ item.id }}" 
-              method="post"
-              onsubmit="return confirm('¿Cancelar esta mantención? Se notificará al cliente.');"
-            >
-              <button 
-                type="submit"
-                class="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700"
-              >
-                Cancelar
-              </button>
-            </form>
-            {% else %}
-              <span class="text-red-500 text-xs font-semibold">
-                Cancelado
-              </span>
-            {% endif %}
-
-          </td>
-        </tr>
-        {% endfor %}
-        <div class="flex gap-2">
-          <a href="/admin/configurar-formulario?tipo=domicilio_taller&subtipo=taller" 
-            class="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-700 transition">
-              <i data-lucide="settings-2"></i> Configurar Formulario Taller
-          </a>
-          <a href="/admin/configurar-formulario?tipo=domicilio_taller&subtipo=domicilio" 
-            class="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition">
-              <i data-lucide="home"></i> Configurar Formulario Domicilio
-          </a>
-        </div>
-      </tbody>
-    </table>
-    <div id="data-eventos" data-json='{{ eventos_json | safe if eventos_json else "[]" }}' style="display: none;"></div>
-  </div>
-  
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <!-- SCRIPT CALENDARIO -->
-  <script>
-    const coloresPorEquipo = {
-        "Equipo Israel": "#3F22FF",
-        "Equipo Mendez": "#FC4646",
-        "Equipo Movil": "#32CD32",
-        "Equipo Taller": "#FF8C00",
-    };
-
-    document.addEventListener("DOMContentLoaded", function () {
-        var calendarEl = document.getElementById('calendar');
-        
-        // --- NUEVA FORMA DE LEER LOS DATOS ---
-        const divData = document.getElementById('data-eventos');
-        let datosEventos = [];
-        
-        try {
-            datosEventos = JSON.parse(divData.getAttribute('data-json'));
-        } catch (e) {
-            console.error("Error al leer los eventos:", e);
-        }
-
-        window.calendar = new FullCalendar.Calendar(calendarEl, {
-          initialView: 'timeGridWeek',
-          locale: 'es',
-
-          height: 'auto',
-          contentHeight: 'auto',
-          expandRows:true,
-          aspectRatio: 1.8,
-          slotMinTime: "08:00:00",
-          slotMaxTime: "18:30:00",
-          allDaySlot: false,
-          hiddenDays: [0, 6],
-          // --- RECURSOS (COLUMNAS) ---
-          resources: [
-              { id: 'israel', title: '🛠️ Equipo Israel' },
-              { id: 'mendez', title: '🛠️ Equipo Mendez' },
-              { id: 'especializado', title: '⭐ Especializado' }
-          ],
-
-          // --- ESTÉTICA DE EVENTOS ---
-          eventClassNames: function(arg) {
-              // Asignamos la clase de color según el equipo
-              const equipo = arg.event.extendedProps.equipo ? arg.event.extendedProps.equipo.toLowerCase() : '';
-              if (equipo.includes('israel')) return ['event-israel'];
-              if (equipo.includes('mendez')) return ['event-mendez'];
-              return ['event-especializado'];
-          },
-          eventContent: function(arg) {
-          return {
-                  html: `
-                      <div class="fc-content flex flex-col h-full justify-between">
-                          <div>
-                              <div class="fc-title font-bold text-[11px] truncate">${arg.event.title}</div>
-                              <div class="text-[10px] opacity-80 italic">Patente: ${arg.event.extendedProps.patente || 'N/A'}</div>
-                          </div>
-                          <div class="text-[9px] font-mono self-end bg-white/50 px-1 rounded">
-                              ${arg.timeText}
-                          </div>
-                      </div>
-                  `
-              };
-          },
-
-          eventConstraint: "businessHours",
-          events: datosEventos,
-          headerToolbar: {
-              left: 'prev,next today',
-              center: 'title',
-              right: 'dayGridMonth,timeGridWeek'
-          },
-        
-          events: datosEventos,
-
-              // Renderizado personalizado de cada bloque
-              eventContent: function(arg) {
-                  const data = arg.event.extendedProps;
-                  const color = arg.event.backgroundColor || "#6C63FF";
-
-                  const div = document.createElement("div");
-                  div.style.backgroundColor = color;
-                  div.style.color = "white";
-                  div.style.padding = "4px";
-                  div.style.borderRadius = "4px";
-                  div.style.fontSize = "11px";
-                  div.style.width = "100%";
-                  div.style.minHeight = "40px";
-                  
-                  // Lógica de borde para reubicación
-                  // Buscamos la marca tanto en 'nota' como en 'respuestas_dinamicas'
-                  const esReubicado = (data.nota && data.nota.includes("[REUBICACIÓN")) || 
-                                    (data.respuestas_dinamicas && data.respuestas_dinamicas.includes("[REUBICACIÓN"));
-
-                  if (esReubicado) {
-                      div.style.border = "3px solid #FFFF00"; // Borde amarillo neón
-                      div.style.boxShadow = "0 0 5px rgba(255, 255, 0, 0.8)";
-                  } else {
-                      div.style.border = `1px solid rgba(0,0,0,0.1)`;
-                  }
-
-                  div.innerHTML = `
-                      <div style="font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                          ${arg.event.title}
-                      </div>
-                      <div>🚗 ${data.patente || 'S/P'}</div>
-                      <div style="font-size:9px; background:rgba(0,0,0,0.2); border-radius:2px; padding:0 2px; margin-top:2px; display:inline-block;">
-                          ${data.equipo || 'Sin equipo'}
-                      </div>
-                  `;
-
-                  return { domNodes: [div] };
-              },
-
-            // Al hacer clic, cambiar dirección
-            eventClick: function(info) {
-                const eventObj = info.event;
-                const props = eventObj.extendedProps;
-                const currentDir = props.direccion || "Sin dirección";
-
-                const nuevaDir = prompt(`🚨 CAMBIO DE EMERGENCIA\nCliente: ${eventObj.title}\nDirección actual: ${currentDir}\n\nIngresa la nueva ubicación:`, currentDir);
-
-                if (nuevaDir !== null && nuevaDir !== currentDir && nuevaDir.trim() !== "") {
-                    fetch(`/admin/reubicar-emergencia/${eventObj.id}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ nueva_direccion: nuevaDir })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'ok') {
-                            alert("📍 Ubicación actualizada");
-                            location.reload(); 
-                        } else {
-                            alert("Error al actualizar");
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert("Error de conexión");
-                    });
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], },
+                    colors: {
+                        israel: { light: '#e0f2fe', border: '#0ea5e9', text: '#0369a1' },
+                        mendez: { light: '#fef2f2', border: '#ef4444', text: '#991b1b' },
+                        especializado: { light: '#f0fdf4', border: '#22c55e', text: '#166534' },
+                    }
                 }
             }
-        });
-
-        window.calendar.render();
-    });
-
-    // --- Funciones para Generar Links ---
-    function abrirLinkEspecializado(){
-        Swal.fire({
-            title: "Duración del servicio",
-            text: "Selecciona la duración para generar el link",
-            input: "radio",
-            inputOptions: {
-                2: "2 horas",
-                3: "3 horas",
-                4: "4 horas"
-            },
-            inputValidator: (value) => {
-                if (!value) return "Debes seleccionar una opción";
-            },
-            confirmButtonText: "Generar y Copiar Link",
-            showCancelButton: true,
-        }).then((result) => {
-            if (result.isConfirmed){
-                generarLinkEspecializado(result.value);
-            }
-        });
-    }
-
-    async function generarLinkEspecializado(duracion) {
-        try {
-            const response = await fetch("/admin/links-agenda");
-            const links = await response.json();
-
-            if (!links.especializado || !links.especializado[duracion]) {
-                Swal.fire("Error", "No se pudo encontrar el link para esa duración", "error");
-                return;
-            }
-
-            const linkFinal = links.especializado[duracion];
-            await navigator.clipboard.writeText(linkFinal);
-
-            Swal.fire(
-                "¡Copiado!",
-                `Link para servicio especializado (${duracion} hrs) copiado al portapapeles.`,
-                "success"
-            );
-        } catch (error) {
-            Swal.fire("Error", "No se pudo conectar con el servidor", "error");
         }
-    }
-</script>
+    </script>
+
+    <style>
+        /* --- MEJORAS VISUALES FULLCALENDAR --- */
+        .fc { font-family: inherit; border: none !important; }
+        
+        /* Toolbar */
+        .fc-toolbar { padding: 1rem 0; }
+        .fc-toolbar-title { font-weight: 800 !important; font-size: 1.25rem !important; color: #1f2937; text-transform: capitalize; }
+        
+        /* Botones */
+        .fc-button { padding: 8px 16px !important; border-radius: 12px !important; font-weight: 600 !important; font-size: 0.875rem !important; text-transform: capitalize !important; transition: all 0.2s; }
+        .fc-button-primary { background-color: #f3f4f6 !important; border: 1px solid #e5e7eb !important; color: #4b5563 !important; box-shadow: none !important; }
+        .fc-button-primary:hover { background-color: #e5e7eb !important; border-color: #d1d5db !important; color: #1f2937 !important; }
+        .fc-button-active { background-color: #1f2937 !important; color: white !important; border-color: #1f2937 !important; }
+        .fc-button-active:hover { background-color: #111827 !important; }
+        
+        /* Grid y Slots */
+        .fc-timegrid-slot { height: 4em !important; border-bottom: 1px solid #f3f4f6 !important; }
+        .fc-timegrid-slot-label { font-size: 0.75rem; color: #6b7280; font-weight: 500; }
+        .fc-col-header-cell { background-color: #f9fafb; padding: 12px 0 !important; border-bottom: 1px solid #e5e7eb !important; }
+        .fc-col-header-cell-cushion { font-weight: 700 !important; color: #374151 !important; font-size: 0.85rem !important; text-transform: uppercase; letter-spacing: 0.05em; }
+        
+        /* Colores dinámicos originales mantenidos vía clases CSS */
+        .event-israel { background-color: theme('colors.israel.light') !important; border-left: 4px solid theme('colors.israel.border') !important; color: theme('colors.israel.text') !important; }
+        .event-mendez { background-color: theme('colors.mendez.light') !important; border-left: 4px solid theme('colors.mendez.border') !important; color: theme('colors.mendez.text') !important; }
+        .event-especializado { background-color: theme('colors.especializado.light') !important; border-left: 4px solid theme('colors.especializado.border') !important; color: theme('colors.especializado.text') !important; }
+        
+        /* Scrollbar styling */
+        .fc-scroller::-webkit-scrollbar { width: 8px; height: 8px; }
+        .fc-scroller::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .fc-scroller::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        .fc-scroller::-webkit-scrollbar-thumb:hover { background: #a1a1a1; }
+
+        /* --- MEJORAS ESPECÍFICAS DE VISIBILIDAD EN EVENTOS --- */
+    
+        /* Contenedor del evento: más redondeado y con sombra suave */
+        .fc-v-event {
+            border: none !important;
+            border-radius: 10px !important;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.12) !important;
+            overflow: visible !important;
+        }
+
+        /* Estilo para las horas (Time Text) dentro del evento */
+        .event-time-badge {
+            background: rgba(0, 0, 0, 0.6);
+            color: white !important;
+            padding: 1px 6px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            backdrop-filter: blur(2px);
+        }
+
+        /* Títulos y Patentes más legibles */
+        .event-title-main {
+            font-weight: 800;
+            font-size: 11px;
+            line-height: 1.1;
+            margin-bottom: 2px;
+        }
+
+        .event-patente-label {
+            background: rgba(255, 255, 255, 0.4);
+            padding: 1px 4px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 10px;
+            display: inline-block;
+            color: inherit;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+
+        /* Resaltado de Reubicación (Neon sutil) */
+        .reubicacion-glow {
+            animation: glow 2s infinite alternate;
+            border: 2px solid #fbbf24 !important;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 5px rgba(251, 191, 36, 0.4); }
+            to { box-shadow: 0 0 12px rgba(251, 191, 36, 0.8); }
+        }
+
+        /* Slot del calendario - líneas de hora más marcadas */
+        .fc-timegrid-slot-minor {
+            border-top-style: dotted !important;
+            border-top-color: #e5e7eb !important;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-900 antialiased font-sans">
+
+    <div class="min-h-screen p-4 md:p-8">
+        
+        <header class="flex items-center justify-between pb-8 mb-8 border-b border-slate-200">
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-white rounded-2xl shadow-sm border border-slate-100 text-slate-500">
+                    <i class="fas fa-calendar-alt text-2xl"></i>
+                </div>
+                <h1 class="text-3xl font-extrabold tracking-tighter text-slate-950">Panel de Control <span class="text-slate-400 font-medium">/ Agendamientos</span></h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/admin/export/utm" class="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm shadow-emerald-100">
+                    <i class="fas fa-file-export"></i> Exportar UTM
+                </a>
+                <button onclick="abrirBloqueoDia()" class="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-red-50 hover:text-red-600 transition flex items-center gap-2 border border-slate-200 hover:border-red-100 shadow-sm">
+                    <i class="fas fa-calendar-times"></i> Bloquear Fecha
+                </button>
+            </div>
+        </header>
+
+        <section class="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 mb-10">
+            
+            <form method="get" action="/admin/panel" class="mb-8 p-5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-wrap gap-4 items-end">
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Filtrar por Tipo</label>
+                    <select name="subtipo" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 text-sm font-medium">
+                        <option value="">Todos los servicios</option>
+                        <option value="Taller" {% if subtipo=='Taller' %}selected{% endif %}>🛠️ Taller</option>
+                        <option value="Domicilio" {% if subtipo=='Domicilio' %}selected{% endif %}>🏠 Domicilio</option>
+                    </select>                    
+                </div>               
+
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Filtrar por Fecha</label>
+                    <input type="date" name="fecha" id="fecha" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 text-sm font-medium">
+                </div>
+
+                <div class="flex gap-2">
+                    <button type="submit" class="px-6 py-2.5 rounded-xl bg-slate-900 text-white font-semibold text-sm hover:bg-slate-800 transition shadow-md shadow-slate-200">
+                        Filtrar
+                    </button>
+                    <a href="/admin/panel" class="px-6 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition shadow-sm">
+                        Limpiar
+                    </a>
+                </div>
+
+                <div class="flex items-center justify-between p-4 bg-amber-50 rounded-2xl border border-amber-100 my-4">
+                    <div class="flex flex-col">
+                        <span class="text-[11px] font-black text-amber-800 uppercase tracking-widest">Modo Superusuario</span>
+                        <span class="text-[10px] text-amber-600 font-medium">Ignorar bloqueos y fines de semana</span>
+                    </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="ignorar_reglas" class="sr-only peer">
+                            <div class="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                        </label>
+                </div>
+            </form>
+
+            <div id="calendar" class="w-full"></div>
+        </section>
+
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
+            
+            <div class="md:col-span-2 bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+                <div class="flex items-center gap-3 mb-6">
+                    <i class="fas fa-link text-slate-400 text-xl"></i>
+                    <h3 class="text-xl font-bold text-slate-900">Links de agendamiento para clientes</h3>
+                </div>
+
+                <div class="grid grid-cols-1 gap-3">
+                    {% for nombre, link in links_agenda.items() %}
+                        {% set nombre_min = nombre|lower %}
+                        {% if "especializado" not in nombre_min %}
+                        <div class="group flex items-center justify-between p-4 bg-slate-50 hover:bg-white border border-slate-100 hover:border-blue-200 hover:shadow-md hover:shadow-blue-50 transition-all duration-300 rounded-2xl">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 group-hover:text-blue-500 group-hover:border-blue-100 transition-all shadow-sm">
+                                    {% if "taller" in nombre_min %}
+                                        <i class="fas fa-tools text-sm"></i>
+                                    {% elif "domicilio" in nombre_min %}
+                                        <i class="fas fa-home text-sm"></i>
+                                    {% else %}
+                                        <i class="fas fa-link text-sm"></i>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="flex flex-col">
+                                    <span class="text-sm font-extrabold text-slate-800 tracking-tight">{{ nombre }}</span>
+                                    <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Link listo para compartir</span>
+                                </div>
+                            </div>
+                            
+                            <div class="flex gap-2">
+                                <button onclick="navigator.clipboard.writeText('{{ link }}'); Swal.fire({toast:true,position:'top-end',icon:'success',title:'Link copiado',showConfirmButton:false,timer:1000})" 
+                                        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm active:scale-95">
+                                    <i class="fas fa-copy"></i>
+                                    <span>Copiar</span>
+                                </button>
+                                
+                                <a href="{{ link }}" target="_blank" class="p-2 rounded-xl bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors" title="Abrir link">
+                                    <i class="fas fa-external-link-alt text-xs"></i>
+                                </a>
+                            </div>
+                        </div>        
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="bg-slate-900 p-8 rounded-3xl shadow-xl shadow-slate-200 text-white flex flex-col justify-between">
+                <div>
+                    <h3 class="text-xl font-bold mb-2">Configuración</h3>
+                    <p class="text-slate-400 text-sm mb-6">Administra los campos de los formularios de agendamiento.</p>
+                </div>
+                
+                <div class="space-y-3">
+                    <a href="/admin/configurar-formulario?tipo=domicilio_taller&subtipo=taller" class="group flex items-center justify-between gap-3 p-4 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition">
+                        <span class="text-sm font-semibold flex items-center gap-3"><i class="fas fa-tools text-blue-400 group-hover:scale-110 transition-transform"></i> Formulario Taller</span>
+                        <i class="fas fa-chevron-right text-white/30 text-xs"></i>
+                    </a>
+                    <a href="/admin/configurar-formulario?tipo=domicilio_taller&subtipo=domicilio" class="group flex items-center justify-between gap-3 p-4 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition">
+                        <span class="text-sm font-semibold flex items-center gap-3"><i class="fas fa-home text-emerald-400 group-hover:scale-110 transition-transform"></i> Formulario Domicilio</span>
+                        <i class="fas fa-chevron-right text-white/30 text-xs"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="mt-8 bg-white p-6 rounded-3xl border border-slate-100">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fas fa-calendar-lock text-red-500"></i> Días Bloqueados
+                    </h3>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {% for bloqueo in dias_bloqueados %} 
+                    <div class="group flex items-center justify-between p-4 bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-2xl transition-all">
+                        <div class="flex flex-col">
+                            <span class="text-sm font-black text-red-900">
+                                {{ bloqueo.fecha.strftime('%d/%m/%Y') if bloqueo.fecha.strftime else bloqueo.fecha }}
+                            </span>
+                            <span class="text-[10px] text-red-600 uppercase font-bold tracking-wider">
+                                {{ bloqueo.motivo or 'Sin motivo' }}
+                            </span>
+                        </div>
+                        
+                        <button onclick="eliminarBloqueo('{{ bloqueo.id }}')" 
+                                class="w-8 h-8 rounded-xl bg-white text-red-400 hover:bg-red-500 hover:text-white transition-all shadow-sm flex items-center justify-center">
+                            <i class="fas fa-trash-alt text-xs"></i>
+                        </button>
+                    </div>
+                    {% else %}
+                    <div class="col-span-full p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <p class="text-slate-400 text-sm font-medium">No hay días bloqueados actualmente.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+
+            </div>
+        </section>
+
+        <section class="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+            <div class="flex items-center gap-3 mb-6">
+                <i class="fas fa-list-ul text-slate-400 text-xl"></i>
+                <h3 class="text-xl font-bold text-slate-900">Listado detallado</h3>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                    <thead class="text-xs text-slate-500 uppercase bg-slate-50 rounded-xl">
+                        <tr>
+                            <th class="p-4 rounded-l-xl">ID</th>
+                            <th class="p-4">Rut / Cliente</th>
+                            <th class="p-4">Vehículo</th>
+                            <th class="p-4">Dirección</th>
+                            <th class="p-4">Tipo</th>
+                            <th class="p-4">Equipo</th>
+                            <th class="p-4">Horario</th>
+                            <th class="p-4">Nota Interna</th>
+                            <th class="p-4 rounded-r-xl">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for item in agendamientos %}
+                        <tr class="bg-white hover:bg-slate-50/50 {% if item.estado == 'cancelado' %}opacity-60 bg-red-50/50{% endif %}">
+                            <td class="p-4 font-mono text-xs text-slate-400">{{ item.id }}</td>
+                            <td class="p-4">
+                                <div class="font-bold text-slate-900">{{ item.nombre }} {{ item.apellido }}</div>
+                                <div class="text-xs text-slate-500">{{ item.rut }}</div>
+                            </td>
+                            <td class="p-4">
+                                <div class="font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-xs inline-block">{{ item.patente }}</div>
+                                <div class="text-xs text-slate-600 mt-1">{{ item.marca }}</div>
+                            </td>
+                            <td class="p-4 text-xs text-slate-600 max-w-[150px] truncate tippy-cls" data-tippy-content="{{ item.direccion or '-' }}">{{ item.direccion or "-" }}</td>
+                            <td class="p-4 ">
+                                {% if item.subtipo == 'taller' %}
+                                    <span class="px-2 py-1 rounded-full bg-slate-100 text-slate-800 text-[10px] font-bold uppercase tracking-wider border border-slate-200">
+                                        🛠️ Taller
+                                    </span>
+                                {% else %}
+                                    <span class="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wider border border-emerald-200">
+                                        🏠 Domicilio
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="p-4 font-semibold text-slate-800 text-xs">{{ item.equipo }}</td>          
+                            <td class="p-4 text-xs">
+                                <div class="font-medium">{{ item.fecha_inicio.strftime("%d/%m/%Y") }}</div>
+                                <div class="text-slate-500">{{ item.fecha_inicio.strftime("%H:%M") }} - {{ item.fecha_termino.strftime("%H:%M") }}</div>
+                            </td>
+                            <td class="p-4 min-w-[200px]">
+                                <form action="/admin/actualizar_nota/{{ item.id }}" method="post" class="space-y-1.5">
+                                    <textarea name="nota" rows="2" class="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-1 focus:ring-blue-300 focus:border-blue-300 outline-none transition" placeholder="Añadir nota interna...">{{ item.nota_interna or '' }}</textarea>
+                                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-3 rounded-lg text-[10px] uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5">
+                                        <i class="fas fa-save"></i> Guardar Nota
+                                    </button>
+                                </form>
+                            </td>
+                            <td class="p-4 text-center">
+                                {% if item.estado != "cancelado" %}
+                                <form action="/admin/cancelar/{{ item.id }}" method="post" onsubmit="return confirm('¿Estás seguro de cancelar esta mantención? Se notificará al cliente por correo.');">
+                                    <button type="submit" class="px-3 py-1.5 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition flex items-center gap-1.5">
+                                        <i class="fas fa-ban"></i> Cancelar
+                                    </button>
+                                </form>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1.5 text-red-500 text-xs font-bold uppercase p-1.5 bg-red-50 rounded-lg">
+                                    <i class="fas fa-times-circle"></i> Cancelado
+                                </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div id="data-eventos" data-json='{{ eventos_json | safe if eventos_json else "[]" }}' style="display: none;"></div>
+
+    <script>
+        // Tus datos de colores originales (mantenidos por si acaso)
+        const coloresPorEquipo = {
+            "Equipo Israel": "#3F22FF",
+            "Equipo Mendez": "#FC4646",
+            "Equipo Movil": "#32CD32",
+            "Equipo Taller": "#FF8C00",
+        };
+
+        document.addEventListener("DOMContentLoaded", function () {
+            // Inicializar Tippy
+            tippy('.tippy-cls');
+
+            var calendarEl = document.getElementById('calendar');
+            const divData = document.getElementById('data-eventos');
+            let datosEventos = [];
+            
+            try {
+                datosEventos = JSON.parse(divData.getAttribute('data-json'));
+            } catch (e) {
+                console.error("Error al leer los eventos:", e);
+            }
+
+            window.calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'timeGridWeek',
+                locale: 'es',
+                height: 'auto',
+                contentHeight: 'auto',
+                expandRows:true,
+                aspectRatio: 1.8,
+                slotMinTime: "08:00:00",
+                slotMaxTime: "18:30:00",
+                allDaySlot: false,
+                hiddenDays: [0, 6], // Ocultar Sábado y Domingo
+                
+                eventSources: [
+                    {
+                        url: '/admin/api/bloqueos', // Asegúrate de que esta ruta devuelva los bloqueos
+                        display: 'background',
+                        color: '#fee2e2', // Fondo rojizo suave
+                        className: 'dia-bloqueado-bg'
+                    },
+                    {
+                        events: datosEventos // Tus citas normales
+                    }                    
+                ],
+                eventDidMount: function(info) {
+                    if (info.event.display === 'background') {
+                        info.el.title = "Día Bloqueado: " + (info.event.extendedProps.nota || "Sin motivo");
+                    }
+                },
+
+                // --- RECURSOS (COLUMNAS) ORIGINALES MANTENIDOS ---
+                resources: [
+                    { id: 'israel', title: '🛠️ Equipo Israel' },
+                    { id: 'mendez', title: '🛠️ Equipo Mendez' },
+                    { id: 'especializado', title: '⭐ Especializado' }
+                ],
+
+                // --- ESTÉTICA DE EVENTOS (MEJORADA) ---
+                eventClassNames: function(arg) {
+                    const equipo = arg.event.extendedProps.equipo ? arg.event.extendedProps.equipo.toLowerCase() : '';
+                    if (equipo.includes('israel')) return ['event-israel'];
+                    if (equipo.includes('mendez')) return ['event-mendez'];
+                    return ['event-especializado'];
+                },
+
+                // --- RENDERIZADO DE CONTENIDO (MEJORADO) ---
+                eventContent: function(arg) {
+                    const data = arg.event.extendedProps;
+                    
+                    // Lógica de borde para reubicación mantenida
+                    let borderStyle = "";
+                    const esReubicado = (data.nota && data.nota.includes("[REUBICACIÓN")) || 
+                                        (data.respuestas_dinamicas && data.respuestas_dinamicas.includes("[REUBICACIÓN"));
+
+                    if (esReubicado) {
+                        borderStyle = "border: 2px solid #facc15; box-shadow: 0 0 10px rgba(250, 204, 21, 0.5);";
+                    }
+
+                    return {
+                        html: `
+                        <div class="h-full w-full flex flex-col justify-between p-1.5 rounded-md" style="${borderStyle}">
+                            <div>
+                                <div class="font-bold text-[11px] leading-tight truncate">${arg.event.title}</div>
+                                <div class="text-[10px] mt-1 flex items-center gap-1"><i class="fas fa-car opacity-70"></i> ${data.patente || 'S/P'}</div>
+                            </div>
+                            <div class="text-[9px] font-medium self-end bg-white/50 px-1 py-0.5 rounded">
+                                ${arg.timeText}
+                            </div>
+                        </div>
+                        `
+                    };
+                },
+
+                eventConstraint: "businessHours",
+                events: datosEventos,
+                
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                },
+                
+                // LÓGICA DE CLICK ORIGINAL MANTENIDA
+                eventClick: function(info) {
+                    const eventObj = info.event;
+                    const props = eventObj.extendedProps;
+                    const currentDir = props.direccion || "Sin dirección";
+
+                    const nuevaDir = prompt(`🚨 CAMBIO DE EMERGENCIA\nCliente: ${eventObj.title}\nDirección actual: ${currentDir}\n\nIngresa la nueva ubicación:`, currentDir);
+
+                    if (nuevaDir !== null && nuevaDir !== currentDir && nuevaDir.trim() !== "") {
+                        fetch(`/admin/reubicar-emergencia/${eventObj.id}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ nueva_direccion: nuevaDir })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'ok') {
+                                alert("📍 Ubicación actualizada");
+                                location.reload(); 
+                            } else {
+                                alert("Error al actualizar");
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert("Error de conexión");
+                        });
+                    }
+                }
+            });
+
+            window.calendar.render();
+        });
+
+        // --- Funciones para Generar Links ORIGINALES MANTENIDAS ---
+        function abrirLinkEspecializado(){
+            Swal.fire({
+                title: "Servicio Especializado",
+                text: "Selecciona la duración para generar el link",
+                icon: 'info',
+                input: "radio",
+                inputOptions: {
+                    2: "2 horas",
+                    3: "3 horas",
+                    4: "4 horas"
+                },
+                inputValidator: (value) => {
+                    if (!value) return "Debes seleccionar una opción";
+                },
+                confirmButtonText: "Generar y Copiar Link",
+                confirmButtonColor: '#1f2937',
+                showCancelButton: true,
+                cancelButtonText: 'Cancelar',
+                customClass: {
+                    popup: 'rounded-3xl',
+                    confirmButton: 'rounded-xl',
+                    cancelButton: 'rounded-xl'
+                }
+            }).then((result) => {
+                if (result.isConfirmed){
+                    generarLinkEspecializado(result.value);
+                }
+            });
+        }
+
+        async function generarLinkEspecializado(duracion) {
+            try {
+                const response = await fetch("/admin/links-agenda");
+                const links = await response.json();
+
+                if (!links.especializado || !links.especializado[duracion]) {
+                    Swal.fire("Error", "No se pudo encontrar el link para esa duración", "error");
+                    return;
+                }
+
+                const linkFinal = links.especializado[duracion];
+                await navigator.clipboard.writeText(linkFinal);
+
+                Swal.fire({
+                    icon: "success",
+                    title: "¡Copiado!",
+                    text: `Link para servicio especializado (${duracion} hrs) copiado al portapapeles.`,
+                    confirmButtonColor: '#1f2937',
+                    customClass: { popup: 'rounded-3xl', confirmButton: 'rounded-xl' }
+                });
+            } catch (error) {
+                Swal.fire("Error", "No se pudo conectar con el servidor", "error");
+            }
+        }
+        // Función para bloquear un día completo (Feriados/Vacaciones)
+        function abrirBloqueoDia() {
+            Swal.fire({
+                title: 'Bloquear Día',
+                text: 'Los clientes no podrán agendar en esta fecha',
+                html: `
+                    <div class="space-y-4 py-2">
+                        <input type="date" id="fecha_bloqueo" class="swal2-input !m-0 !w-full" style="border-radius: 12px;">
+                        <input type="text" id="motivo_bloqueo" class="swal2-input !m-0 !w-full" placeholder="Motivo (ej: Feriado Irrenunciable)" style="border-radius: 12px;">
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Confirmar Bloqueo',
+                confirmButtonColor: '#1f2937',
+                preConfirm: () => {
+                    const fecha = document.getElementById('fecha_bloqueo').value;
+                    const motivo = document.getElementById('motivo_bloqueo').value; // Cambiado de nota a motivo
+                    if (!fecha) return Swal.showValidationMessage('Selecciona una fecha');
+                    return { fecha: fecha, motivo: motivo }; // Enviamos los nombres que espera BloqueoDiaSchema
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // URL corregida (sin comillas extra) y con el nombre exacto de tu @router
+                    fetch('/admin/bloquear-dia-completo', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(result.value)
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        // Ajustado para leer "success" que es lo que envía tu Python
+                        if(data.status === 'success') {
+                            Swal.fire('¡Bloqueado!', 'El día ha sido cerrado.', 'success').then(() => location.reload());
+                        } else {
+                            Swal.fire('Error', data.error || 'No se pudo bloquear', 'error');
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        Swal.fire('Error', 'No se pudo conectar con el servidor', 'error');
+                    });
+                }
+            });
+        }
+
+        // Modificación a tu eventClick para incluir el modo Superusuario
+        // (Busca tu eventClick actual y asegúrate de enviar 'ignorar_reglas')
+        function reubicarConSuperusuario(eventId, nuevaFecha) {
+            const ignorar = document.getElementById('ignorar_reglas').checked;
+            
+            fetch(`/admin/reubicar-emergencia/${eventId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    nueva_fecha: nuevaFecha,
+                    ignorar_reglas: ignorar // Aquí recuperamos la regla de exclusión
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'ok') location.reload();
+                else Swal.fire('Error', data.mensaje || 'No se pudo mover', 'error');
+            });
+        }
+
+        function eliminarBloqueo(bloqueoId) {
+            Swal.fire({
+                title: '¿Desbloquear día?',
+                text: "Los clientes podrán volver a agendar en esta fecha.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, desbloquear',
+                confirmButtonColor: '#ef4444'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch(`/admin/eliminar-bloqueo/${bloqueoId}`, { method: 'POST' })
+                        .then(res => res.json())
+                        .then(data => {
+                            if(data.status === 'ok') {
+                                Swal.fire('Eliminado', 'Día disponible', 'success').then(() => location.reload());
+                            }
+                        });
+                }
+            });
+        }
+    </script>
 
 </body>
 

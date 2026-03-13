@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException,Request, Form, Query
+from fastapi import APIRouter, Depends, HTTPException,Request, Query, Form
 from sqlalchemy.orm import Session
 from datetime import datetime, date, time, timedelta
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -43,7 +43,7 @@ def agendar_web(
     tipo = tipo.lower().strip() if tipo else "domicilio_taller"
     subtipo = subtipo.lower().strip() if subtipo else "taller"
 
-    if tipo not in ["especializado", "domicilio_taller"]:
+    if tipo not in ["domicilio_taller"]:
         return RedirectResponse(url="/cliente/agendar_web?tipo=domicilio_taller", status_code=302)
 
     # 2. OBTENER CAMPOS DINÁMICOS (Lo que configuraste en el Admin)
@@ -109,13 +109,50 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
         subtipo = form_data.get("subtipo")
         fecha = form_data.get("fecha")
         hora = form_data.get("hora")
-        duracion_horas = int(form_data.get("duracion_horas", 1))
         
-        # 1. MAPEO DE CAMPOS DINÁMICOS
+        # --- 1. DETECTAR MODO EMERGENCIA (DUEÑO) ---
+        # Lo detectamos si viene en la URL o en un campo oculto del formulario
+        es_dueno = (request.query_params.get("modo") == "emergencia" or 
+                    form_data.get("modo_emergencia") == "true")
+
+        nota_interna = form_data.get("nota_interna", "")
+
+        # Validación de 48h hábiles (Se salta si es el dueño)
+        fecha_minima = obtener_fecha_minima_habil()
+        fecha_cliente = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
+        fecha_cliente = pytz.timezone('America/Santiago').localize(fecha_cliente)
+
+        # --- 2. VALIDACIONES DE FECHA (SE SALTAN SI ES DUEÑO) ---
+        if not es_dueno:
+            # Regla A: 48h hábiles
+            fecha_minima = obtener_fecha_minima_habil()
+            if fecha_cliente < fecha_minima:
+                return templates.TemplateResponse("agendar.html", {
+                    "request": request,
+                    "mensaje_error": f"Lo sentimos, debes agendar con 48h hábiles. Lo más pronto es {fecha_minima.strftime('%d/%m %H:%M')}",
+                    "tipo": tipo_servicio,
+                    "subtipo": subtipo
+                })
+            
+            # Regla B: Verificar si el día está bloqueado manualmente
+            dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == fecha).first()
+            if dia_bloqueado:
+                return templates.TemplateResponse("agendar.html", {
+                    "request": request,
+                    "mensaje_error": "Este día el taller se encuentra cerrado. Por favor selecciona otra fecha.",
+                    "tipo": tipo_servicio,
+                    "subtipo": subtipo
+                })
+        duracion_horas = int(form_data.get("duracion", 2))
+        fecha_termino = fecha_cliente + timedelta(hours=duracion_horas)
+
+        equipos_oficiales = ["Cristhian", "Samuel", "Movil"]
+        equipo_asignado = None
+
+        # 3. MAPEO DE CAMPOS DINÁMICOS
         respuestas = {}
         campos_db = db.query(models.CampoFormulario).all()
-        
-        print("--- DEBUG: Mapeando datos ---")
+        print("\n--- DEBUG: Mapeando datos desde el Formulario ---") # <--- Restaurado
         for c in campos_db:
             valor = form_data.get(f"dinamico_{c.id}")
             if valor:
@@ -123,7 +160,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
                 respuestas[nombre_key] = valor
                 print(f"✅ {nombre_key}: {valor}")
 
-        # 2. ASIGNACIÓN DE VARIABLES CON FALLBACKS
+        # 2. ASIGNACIÓN DE VARIABLES
         rut = respuestas.get("rut")
         nombre = respuestas.get("nombre")
         apellido = respuestas.get("apellido")
@@ -133,43 +170,48 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
         modelo = respuestas.get("modelo")
         patente = respuestas.get("patente", "").upper()
         kilometraje = respuestas.get("kilometraje")
-        
         direccion = respuestas.get("direccion") or form_data.get("direccion")
         tipo_vivienda = respuestas.get("tipo_vivienda") or form_data.get("tipo_vivienda") or "No especificado"
 
-        # 3. VALIDACIÓN DE CAMPOS OBLIGATORIOS
-        if not correo:
-            raise Exception("El correo es obligatorio para el agendamiento.")
-        if not rut:
-            raise Exception("El RUT es obligatorio.")
+        # 3. VALIDACIÓN DE CAMPOS
+        if not correo or not rut:
+            raise Exception("El correo y el RUT son obligatorios.")
 
-        # 4. LÓGICA DE FECHAS
+        # 4. LÓGICA DE DURACIÓN
+        try:
+            duracion_form = form_data.get("duracion_horas")
+            duracion_horas = int(duracion_form) if duracion_form else 2
+        except:
+            duracion_horas = 2
+
         fecha_inicio = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
-        fecha_termino = fecha_inicio + timedelta(hours=duracion_horas, minutes=30) 
+        fecha_termino = fecha_inicio + timedelta(hours=duracion_horas)
+        # --- 5. LÓGICA DE ASIGNACIÓN AUTOMÁTICA DE EQUIPO ---
+        # Definimos los equipos por tipo de servicio
+        equipos_posibles = Recursos.get(tipo_servicio, [])
+        equipo_asignado = None
 
-        # 5. ASIGNACIÓN DE EQUIPO
-        RECURSOS = {
-            "especializado": ["Equipo Especializado"],
-            "domicilio_taller": ["Equipo Israel", "Equipo Mendez"]
-        }
-        equipos = RECURSOS.get(tipo_servicio, [])
-        reservas = db.query(models.Agendamiento).filter(
-            models.Agendamiento.fecha_inicio < fecha_termino,
-            models.Agendamiento.fecha_termino > fecha_inicio,
-            models.Agendamiento.estado != "cancelado"
-        ).all()
+        for eq in equipos_posibles:
+            # ¿Este equipo específico está ocupado a esta hora?
+            ocupado = db.query(models.Agendamiento).filter(
+                models.Agendamiento.equipo == eq,
+                models.Agendamiento.fecha_inicio < fecha_termino,
+                models.Agendamiento.fecha_termino > fecha_inicio,
+                models.Agendamiento.estado != "cancelado"
+            ).first()
+            
+            if not ocupado:
+                equipo_asignado = eq
+                break # Asignamos al primero que esté libre y paramos
         
-        equipos_ocupados = {r.equipo for r in reservas}
-        equipos_libres = [e for e in equipos if e not in equipos_ocupados]
+        # Si no hay equipo libre pero es el DUEÑO, forzamos el primero de la lista (Sobrecupo)
+        if not equipo_asignado and es_dueno:
+            equipo_asignado = equipos_posibles[0] if equipos_posibles else "Equipo Taller"
+            print(f"⚠️ MODO EMERGENCIA: Sobrecupo detectado. Asignando a {equipo_asignado}")
 
-        if not equipos_libres:
-            if tipo_servicio == "domicilio_taller" and subtipo == "domicilio":
-                equipo_asignado = "Equipo Movil"
-            else:
-                raise Exception("No hay equipos disponibles en este horario.")
-        else:
-            equipo_asignado = equipos_libres[0]
-
+        if not equipo_asignado:
+            raise Exception(f"Lo sentimos, no hay equipos disponibles para las {hora}. Intente otro horario.")
+            
         # 6. GUARDAR EN BASE DE DATOS
         nueva = models.Agendamiento(
             rut=rut, 
@@ -189,6 +231,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
             fecha_inicio=fecha_inicio, 
             fecha_termino=fecha_termino, 
             duracion_horas=duracion_horas,
+            nota_interna = nota_interna,
             estado="pendiente"
         )
         db.add(nueva)
@@ -246,9 +289,8 @@ def calcular_fin_especializado(inicio: datetime, duracion: int) -> datetime:
     return actual
 
 Recursos = {
-    "domicilio_taller": ["israel", "mendez"],
-    "especializado": ["especializado"]
-}  
+    "domicilio_taller": ["Equipo Cristhian", "Equipo Samuel", "Equipo Movil"], # 3 equipos para este tipo
+}
 
 Horarios_base = ["09:00", "13:00", "15:30"]
 
@@ -280,42 +322,43 @@ def obtner_cupos_disponibles(tipo_servicio, fecha, duracion, db):
 
 
 def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db):
-    horas_disponibles = []
-    equipos = Recursos.get(tipo_servicio, [])
+    # 1. Bloqueo manual (Botón de Tommy)
+    bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == fecha).first()
+    if bloqueado:
+        return []
 
+    horas_disponibles = []
+    # IMPORTANTE: Asegúrate que Recursos["domicilio_taller"] tenga 3 nombres de equipos
+    equipos = Recursos.get(tipo_servicio, [])
     if not equipos:
         return []
 
-    # Obtener el día de la semana (0=Lunes, 2=Miércoles)
-    dia_semana = fecha.weekday() 
+    dia_semana = fecha.weekday() # 0:Lunes, 2:Miércoles
 
     for h in Horarios_base:
-        # --- NUEVA LÓGICA DE MIÉRCOLES ---
-        # Si es miércoles (2) y la hora es 15:30, la saltamos de inmediato
+        # --- REGLA ESTRICTA DE MIÉRCOLES ---
+        # Si es miércoles (2), el bloque de las 15:30 no existe para nadie.
         if dia_semana == 2 and h == "15:30":
             continue 
-        # ---------------------------------
 
         inicio = datetime.combine(fecha, datetime.strptime(h, "%H:%M").time())
         
-        # Usamos tu función de verificar_disponibilidad para validar reglas de negocio
-        # (Feriados, colación, etc.)
+        # Validaciones de horario general (08:00-18:00) y feriados
         if not verificar_disponibilidad(db, tipo_servicio, inicio, duracion_horas):
             continue
 
-        # Validar traslapes con equipos específicos
-        termino = inicio + timedelta(hours=duracion_horas, minutes=buffer_minutos)
+        # --- CONTADOR DE CUPOS POR EQUIPO ---
+        termino = inicio + timedelta(hours=duracion_horas)
         
-        reservas = db.query(models.Agendamiento).filter(
+        # Contamos cuántos de tus 3 equipos ya están ocupados en este bloque exacto
+        equipos_ocupados = db.query(models.Agendamiento).filter(
             models.Agendamiento.fecha_inicio < termino,
             models.Agendamiento.fecha_termino > inicio,
             models.Agendamiento.estado != "cancelado"
-        ).all()
+        ).count()
 
-        equipos_ocupados = {r.equipo for r in reservas}
-
-        # Si aún hay equipos libres, la hora es válida
-        if len(equipos_ocupados) < len(equipos):
+        # Si hay 3 equipos y solo hay 0, 1 o 2 ocupados, la hora SIGUE DISPONIBLE
+        if equipos_ocupados < len(equipos):
             horas_disponibles.append(h)
 
     return horas_disponibles
@@ -333,12 +376,17 @@ def carga_equipo_en_dia(db, equipo, fecha):
 
 def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, duracion_horas: int) -> bool:
 
+    # 1. NUEVO: Chequear si el día está bloqueado por Tommy
+    dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == inicio.date()).first()
+    if dia_bloqueado:
+        return False  # Si el día está bloqueado, no hay disponibilidad para nadie
+
     tz_chile = pytz.timezone("America/Santiago")
     
     if inicio.tzinfo is None:
         inicio = tz_chile.localize(inicio)
 
-    # Definir 'fin' al principio para que esté disponible para todas las validaciones
+   # 1. Calcular fin
     if tipo_servicio == "especializado":
         fin = calcular_fin_especializado(inicio, duracion_horas)
     else:
@@ -382,12 +430,16 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
         return False
 
     # 6. Validar traslapes en la DB
-    agendados = db.query(models.Agendamiento).filter(
+    # Contamos cuántos equipos están ocupados en este bloque
+    agendados_en_bloque = db.query(models.Agendamiento).filter(
         models.Agendamiento.fecha_inicio < fin,
-        models.Agendamiento.fecha_termino > inicio
-    ).all()
+        models.Agendamiento.fecha_termino > inicio,
+        models.Agendamiento.estado != "cancelado"
+    ).count()
 
-    return len(agendados) == 0
+    limite_equipos = len(Recursos.get(tipo_servicio, []))
+    
+    return agendados_en_bloque < limite_equipos
 
 def enviar_correo_confirmacion(destino, asunto, contenido):
     try:
@@ -439,3 +491,44 @@ async def confirmar_cita_endpoint(agendamiento_id: int, db: Session = Depends(ge
             </body>
         </html>
     """)
+
+def obtener_fecha_minima_habil():
+    tz_chile = pytz.timezone('America/Santiago')
+    fecha_chequeo = datetime.now(tz_chile)
+    horas_contadas = 0
+    
+    while horas_contadas < 48:
+        fecha_chequeo += timedelta(hours=1)
+        # 0=Lunes, 4=Viernes, 5=Sábado, 6=Domingo
+        if fecha_chequeo.weekday() < 5:
+            horas_contadas += 1
+    return fecha_chequeo
+
+
+
+@router.get("/api/horas-disponibles")
+def api_horas(
+    fecha: str, 
+    tipo: str = "domicilio_taller", 
+    duracion: int = 2, 
+    db: Session = Depends(get_db)
+):
+    try:
+        fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
+        # Reutilizamos tu función actual que ya tiene todas las reglas
+        horas = obtener_horas_disponibles(tipo, fecha_obj, duracion, db)
+        return {"horas": horas}
+    except Exception:
+        return {"horas": []}
+
+@router.post("/admin/editar-cita/{id}")
+async def editar_cita_admin(id: int,fecha: str = Form(...), hora: str = Form(...), duracion_horas: int = Form(...), db: Session = Depends(get_db)):
+    cita = db.query(models.Agendamiento).get(id)
+    nueva_duracion = int(form_data.get("duracion_horas"))
+    
+    cita.duracion_horas = nueva_duracion
+    # Recalculamos el término sin restricciones
+    cita.fecha_termino = cita.fecha_inicio + timedelta(hours=nueva_duracion)
+    
+    db.commit()
+    return {"status": "Cita modificada por el administrador"}

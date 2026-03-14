@@ -14,6 +14,7 @@ from app.utils.generar_utm import generar_utm
 from app import models
 from sqlalchemy import func
 import pytz
+import traceback
 
 
 # pruebas
@@ -102,8 +103,10 @@ feriados = [
 
 @router.post("/agendar_web", response_class=HTMLResponse)
 async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
+    print("\n🚀 --- INICIO DE PROCESAMIENTO POST ---")
     try:
         form_data = await request.form()
+        print(f"📦 Datos recibidos: {dict(form_data)}")
         
         tipo_servicio = form_data.get("tipo_servicio")
         subtipo = form_data.get("subtipo")
@@ -113,7 +116,9 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
         # --- 1. DETECTAR MODO EMERGENCIA (DUEÑO) ---
         # Lo detectamos si viene en la URL o en un campo oculto del formulario
         es_dueno = (request.query_params.get("modo") == "emergencia" or 
-                    form_data.get("modo_emergencia") == "true")
+                    form_data.get("modo_emergencia") == "true" or
+                    form_data.get("modo") == "emergencia")
+        print(f"👑 ¿Es dueño/admin?: {es_dueno}")
 
         nota_interna = form_data.get("nota_interna", "")
 
@@ -159,6 +164,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
                 nombre_key = c.nombre_tecnico.lower().strip()
                 respuestas[nombre_key] = valor
                 print(f"✅ {nombre_key}: {valor}")
+                print(f"🔍 Respuestas mapeadas: {respuestas}")
 
         # 2. ASIGNACIÓN DE VARIABLES
         rut = respuestas.get("rut")
@@ -237,6 +243,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
         db.add(nueva)
         db.commit()
         db.refresh(nueva)
+        print("✅ GUARDADO EXITOSO EN DB")
     # 7. ENVÍO DE AVISO INICIAL
         try:
         # 1. ESTO ES LO ÚNICO QUE LLEGA AL AGENDAR
@@ -260,6 +267,9 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         print(f"❌ ERROR EN AGENDAMIENTO: {e}")
+        error_trace = traceback.format_exc()
+        print(f"🔥 ERROR CRÍTICO EN RENDER:\n{error_trace}")
+        print(f"❌ ERROR DETALLO: {traceback.format_exc()}")
         return templates.TemplateResponse("agendar.html", {
             "request": request,
             "mensaje_error": str(e),

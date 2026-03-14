@@ -507,7 +507,7 @@ def bloquear_dia(datos: BloqueoDiaSchema, db: Session = Depends(get_db)):
     # en lugar de un RedirectResponse, para que el JS haga el reload.
     return {"status": "success", "message": "Día bloqueado correctamente"}
 
-@router.post("/desbloquear-dia/{id}")
+@router.post("/desbloquear-dia/{id}") 
 def desbloquear_dia(id: int, db: Session = Depends(get_db)):
     dia = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.id == id).first()
     if dia:

@@ -100,6 +100,9 @@
             </div>
 
             <form method="post" action="/cliente/agendar_web" class="space-y-5">
+                <input type="hidden" name="modo" value="{{ request.query_params.get('modo', 'normal') }}">
+                <input type="hidden" name="modo_emergencia" value="{{ 'true' if es_admin else 'false' }}">
+                
                 <input type="hidden" name="tipo_servicio" value="{{ tipo }}">
                 <input type="hidden" name="subtipo" value="{{ subtipo }}">
                 <input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">

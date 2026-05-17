@@ -45,7 +45,7 @@ def get_db():
 
 @router.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
-    return templates.TemplateResponse("admin_login.html", {"request": request})
+    return templates.TemplateResponse("admin_login.html",context={"request": request})
 
 
 @router.post("/login")

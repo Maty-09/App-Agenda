@@ -45,9 +45,9 @@ def get_db():
 
 @router.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
-    return templates.TemplateResponse("admin_login.html",context={"request": request})
-
-
+    # Cambia la línea 48 por esto:
+    return templates.TemplateResponse(request, "admin_login.html")
+    
 @router.post("/login")
 def login(request: Request, username: str = Form(...), password: str = Form(...)):
     if username == ADMIN_USER and password == ADMIN_PASS:

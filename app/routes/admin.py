@@ -171,8 +171,7 @@ def panel_agendamientos(
         "Especializado": f"{base_url}/cliente/agendar_web?tipo=especializado",
     }
 
-    return templates.TemplateResponse("admin_agendamientos.html", {
-        "request": request,
+    return templates.TemplateResponse(request,"admin_agendamientos.html", {
         "agendamientos": agendamientos,
         "dias_bloqueados": dias_bloqueados,
         "tipo_servicio": tipo_servicio,

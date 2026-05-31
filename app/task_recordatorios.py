@@ -1,16 +1,18 @@
 import os
 import smtplib
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from sqlalchemy.orm import Session
 from app.database import SessionLocal  # Importa tu conexión a la DB
 from app.models import Agendamiento    # Importa tu modelo
 
-def enviar_correo_recordatorio(cliente_email, nombre, fecha, hora, patente):
-    REMITENTE = "agendamiento.tommycrozier@gmail.com"
-    PASSWORD = "evvg megi vlgp gbds"
+load_dotenv()
 
+REMITENTE = os.getenv("EMAIL_SENDER", "agendamiento.localdemo@gmail.com")
+PASSWORD = os.getenv("EMAIL_PASSWORD") or os.getenv("EMAIL_TOKEN")
+def enviar_correo_recordatorio(cliente_email, nombre, fecha, hora, patente):
     asunto = f"⏰ Recordatorio: Tu mantención es mañana ({patente})"
     
     html = f"""
@@ -25,7 +27,7 @@ def enviar_correo_recordatorio(cliente_email, nombre, fecha, hora, patente):
                 <p>🚗 <b>Vehículo:</b> {patente}</p>
                 <hr>
                 <p>Si tienes algún inconveniente para asistir, por favor contáctanos lo antes posible respondiendo a este correo.</p>
-                <p>Saludos,<br><b>Equipo Tommy Crozier</b></p>
+                <p>Saludos,<br><b>Equipo Local</b></p>
             </div>
         </body>
     </html>
@@ -36,6 +38,10 @@ def enviar_correo_recordatorio(cliente_email, nombre, fecha, hora, patente):
     msg['To'] = cliente_email
     msg['Subject'] = asunto
     msg.attach(MIMEText(html, 'html'))
+
+    if not REMITENTE or not PASSWORD:
+        print("❌ No se puede enviar recordatorio: revisa EMAIL_SENDER y EMAIL_PASSWORD / EMAIL_TOKEN en el .env")
+        return False
 
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:

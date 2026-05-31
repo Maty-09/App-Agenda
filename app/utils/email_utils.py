@@ -14,12 +14,12 @@ from app.models import Agendamiento
 load_dotenv()
 
 # --- CONFIGURACIÓN GLOBAL ---
-REMITENTE = "agendamiento.tommycrozier@gmail.com"
-PASSWORD = "evvg megi vlgp gbds"
-CORREO_TALLER = "matiasduranm09@gmail.com" 
+REMITENTE = os.getenv("EMAIL_SENDER", "agendamiento.localdemo@gmail.com")
+PASSWORD = os.getenv("EMAIL_PASSWORD") or os.getenv("EMAIL_TOKEN")
+CORREO_LOCAL = os.getenv("EMAIL_ADMIN", "matiasduranm09@gmail.com")
 # IMPORTANTE: Cambia esto a tu URL de Render cuando subas el proyecto
-BASE_URL = "http://localhost:8000" 
-LOGO_URL = "https://static.wixstatic.com/media/63336e_1df8bf9a9c1542f2ba703877a908b01d~mv2.webp"
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+LOGO_URL = os.getenv("LOGO_URL", "https://static.wixstatic.com/media/63336e_1df8bf9a9c1542f2ba703877a908b01d~mv2.webp")
 
 def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, adjunto_name=None):
     """Función maestra para enviar correos y evitar repetir código de login"""
@@ -36,6 +36,10 @@ def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, a
         part.add_header('Content-Disposition', f'attachment; filename="{adjunto_name}"')
         msg.attach(part)
 
+    if not REMITENTE or not PASSWORD:
+        print("❌ No se puede enviar correo: revisa EMAIL_SENDER y EMAIL_PASSWORD / EMAIL_TOKEN en el .env")
+        return False
+
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(REMITENTE, PASSWORD)
@@ -46,7 +50,7 @@ def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, a
         return False
 
 def generar_url_mapa(direccion):
-    direccion_busqueda = direccion if (direccion and "taller" not in direccion.lower()) else "Tu Direccion Real, Ciudad, Chile"
+    direccion_busqueda = direccion if (direccion and "taller" not in direccion.lower() and "local" not in direccion.lower()) else "Tu Direccion Real, Ciudad, Chile"
     encoded_dir = urllib.parse.quote(direccion_busqueda)
     return f"https://www.google.com/maps/search/?api=1&query={encoded_dir}"
 
@@ -65,9 +69,9 @@ def enviar_solicitud_confirmacion(agendamiento):
                         <table width="500" border="0" cellspacing="0" cellpadding="0" style="background-color:#ffffff; border-radius:15px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                             <tr>
                                 <td align="center" style="padding: 30px 0 10px 0;">
-                                    <img src="{LOGO_URL}" alt="Tommy Crozier" width="80" style="display:block; border:0;">
-                                    <h2 style="color:#1e293b; margin: 15px 0 5px 0; letter-spacing: 1px;">TOMMY CROZIER</h2>
-                                    <p style="color:#64748b; font-size:12px; margin:0; text-transform: uppercase;">Servicio Técnico Automotriz</p>
+                                    <img src="{LOGO_URL}" alt="Local" width="80" style="display:block; border:0;">
+                                    <h2 style="color:#1e293b; margin: 15px 0 5px 0; letter-spacing: 1px;">LOCAL</h2>
+                                    <p style="color:#64748b; font-size:12px; margin:0; text-transform: uppercase;">Sistema de Agendamiento</p>
                                 </td>
                             </tr>
                             <tr>
@@ -84,7 +88,7 @@ def enviar_solicitud_confirmacion(agendamiento):
                             </tr>
                             <tr>
                                 <td style="background-color:#f8fafc; padding:20px; text-align:center; color:#94a3b8; font-size:11px;">
-                                    Este es un mensaje automático de Tommy Crozier Automotriz.
+                                    Este es un mensaje automático del Sistema de Agendamiento.
                                 </td>
                             </tr>
                         </table>
@@ -101,6 +105,7 @@ def enviar_aviso_accion_al_dueno(agendamiento, accion):
     asunto = f"📢 CITA {accion}: {agendamiento.nombre} - {agendamiento.patente}"
     # Color dinámico: Verde si acepta, Rojo si rechaza
     color_status = "#10b981" if "ACEPTADA" in accion or "CONFIRMADA" in accion else "#ef4444"
+    servicio_label = "Local" if getattr(agendamiento, 'subtipo', '').lower() == "taller" else getattr(agendamiento, 'subtipo', '').capitalize() or "Servicio"
     
     contenido_html = f"""
     <html>
@@ -127,7 +132,7 @@ def enviar_aviso_accion_al_dueno(agendamiento, accion):
                                         <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Vehículo:</strong></td><td style="text-align:right;">{agendamiento.marca} {agendamiento.modelo}</td></tr>
                                         <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Patente:</strong></td><td style="text-align:right;">{agendamiento.patente}</td></tr>
                                         <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Fecha/Hora:</strong></td><td style="text-align:right;">{agendamiento.fecha_inicio.strftime('%d-%m-%Y %H:%M')}</td></tr>
-                                        <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Servicio:</strong></td><td style="text-align:right;">{agendamiento.subtipo.capitalize()}</td></tr>
+                                        <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Servicio:</strong></td><td style="text-align:right;">{servicio_label}</td></tr>
                                     </table>
                                     <div style="margin-top:25px; background-color:#f8fafc; padding:15px; border-radius:8px; font-size:13px; color:#64748b; text-align:center;">
                                         La base de datos ha sido actualizada automáticamente.
@@ -141,7 +146,7 @@ def enviar_aviso_accion_al_dueno(agendamiento, accion):
         </body>
     </html>
     """
-    return enviar_email_base(CORREO_TALLER, asunto, contenido_html)
+    return enviar_email_base(CORREO_LOCAL, asunto, contenido_html)
 
 def enviar_confirmacion_agendamiento(agendamiento, nota_compartida):
     """ PASO 2 AUTOMÁTICO: Envía el calendario una vez confirmado """
@@ -168,7 +173,7 @@ def enviar_confirmacion_agendamiento(agendamiento, nota_compartida):
                                     <div style="background-color:#f8fafc; border-radius:10px; padding:20px; margin:25px 0;">
                                         <p style="margin:5px 0; color:#1e293b;">📅 <strong>Día:</strong> {agendamiento.fecha_inicio.strftime('%d de %B, %Y')}</p>
                                         <p style="margin:5px 0; color:#1e293b;">🕒 <strong>Hora:</strong> {agendamiento.fecha_inicio.strftime('%H:%M')} hrs</p>
-                                        <p style="margin:5px 0; color:#1e293b;">📍 <strong>Ubicación:</strong> {getattr(agendamiento, 'direccion', 'Taller Tommy Crozier')}</p>
+                                        <p style="margin:5px 0; color:#1e293b;">📍 <strong>Ubicación:</strong> {getattr(agendamiento, 'direccion', 'Local')}</p>
                                     </div>
 
                                     <div style="text-align:center;">
@@ -240,7 +245,7 @@ def enviar_aviso_recibido_cliente(agendamiento):
                         <table width="500" border="0" cellspacing="0" cellpadding="0" style="background-color:#ffffff; border-radius:15px; overflow:hidden;">
                             <tr>
                                 <td align="center" style="padding: 30px 0;">
-                                    <img src="{LOGO_URL}" alt="Tommy Crozier" width="60">
+                                    <img src="{LOGO_URL}" alt="Local" width="60">
                                 </td>
                             </tr>
                             <tr>
@@ -260,4 +265,4 @@ def enviar_aviso_recibido_cliente(agendamiento):
         </body>
     </html>
     """
-    return enviar_email_base(agendamiento.correo, "📨 Recibimos tu solicitud - Tommy Crozier", contenido_html)
+    return enviar_email_base(agendamiento.correo, "📨 Recibimos tu solicitud - Local", contenido_html)

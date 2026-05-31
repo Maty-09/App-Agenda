@@ -12,13 +12,23 @@ from app.database import SessionLocal
 from app.models import Agendamiento, get_now_chile
 
 load_dotenv()
+# En producción (Render) no existe el .env, usamos .env.example como fallback
+import pathlib
+_env_example = pathlib.Path(__file__).resolve().parent.parent.parent / ".env.example"
+if _env_example.exists():
+    load_dotenv(dotenv_path=str(_env_example), override=False)
 
 # --- CONFIGURACIÓN GLOBAL ---
-REMITENTE = os.getenv("EMAIL_SENDER", "agendamiento.localdemo@gmail.com")
+REMITENTE = os.getenv("EMAIL_SENDER")
 PASSWORD = os.getenv("EMAIL_PASSWORD") or os.getenv("EMAIL_TOKEN")
 CORREO_LOCAL = os.getenv("EMAIL_ADMIN", "matiasduranm09@gmail.com")
 # IMPORTANTE: Cambia esto a tu URL de Render cuando subas el proyecto
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+
+print(f"[EMAIL CONFIG] SENDER={'OK (' + REMITENTE + ')' if REMITENTE else 'FALTA (EMAIL_SENDER)'}")
+print(f"[EMAIL CONFIG] PASSWORD={'OK (set)' if PASSWORD else 'FALTA (EMAIL_PASSWORD o EMAIL_TOKEN)'}")
+print(f"[EMAIL CONFIG] ADMIN={CORREO_LOCAL}")
+print(f"[EMAIL CONFIG] BASE_URL={BASE_URL}")
 
 def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, adjunto_name=None):
     """Función maestra para enviar correos y evitar repetir código de login"""
@@ -36,7 +46,11 @@ def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, a
         msg.attach(part)
 
     if not REMITENTE or not PASSWORD:
-        print("❌ No se puede enviar correo: revisa EMAIL_SENDER y EMAIL_PASSWORD / EMAIL_TOKEN en el .env")
+        missing = []
+        if not REMITENTE: missing.append("EMAIL_SENDER")
+        if not PASSWORD:  missing.append("EMAIL_PASSWORD / EMAIL_TOKEN")
+        print(f"[EMAIL ERROR] Faltan variables de entorno: {', '.join(missing)}")
+        print(f"[EMAIL ERROR] Configura estas variables en el panel de Render > Environment")
         return False
 
     try:

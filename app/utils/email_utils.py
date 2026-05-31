@@ -19,7 +19,6 @@ PASSWORD = os.getenv("EMAIL_PASSWORD") or os.getenv("EMAIL_TOKEN")
 CORREO_LOCAL = os.getenv("EMAIL_ADMIN", "matiasduranm09@gmail.com")
 # IMPORTANTE: Cambia esto a tu URL de Render cuando subas el proyecto
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
-LOGO_URL = os.getenv("LOGO_URL", "https://static.wixstatic.com/media/63336e_1df8bf9a9c1542f2ba703877a908b01d~mv2.webp")
 
 def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, adjunto_name=None):
     """Función maestra para enviar correos y evitar repetir código de login"""
@@ -69,8 +68,8 @@ def enviar_solicitud_confirmacion(agendamiento):
                         <table width="500" border="0" cellspacing="0" cellpadding="0" style="background-color:#ffffff; border-radius:15px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                             <tr>
                                 <td align="center" style="padding: 30px 0 10px 0;">
-                                    <img src="{LOGO_URL}" alt="Local" width="80" style="display:block; border:0;">
-                                    <h2 style="color:#1e293b; margin: 15px 0 5px 0; letter-spacing: 1px;">LOCAL</h2>
+                                    <div style="display: inline-block; width: 60px; height: 60px; line-height: 60px; border-radius: 50%; background-color: #e6f7ed; color: #10b981; font-size: 32px; font-weight: bold; text-align: center; margin-bottom: 15px;">✓</div>
+                                    <h2 style="color:#1e293b; margin: 0 0 5px 0; letter-spacing: 1px;">LOCAL</h2>
                                     <p style="color:#64748b; font-size:12px; margin:0; text-transform: uppercase;">Sistema de Agendamiento</p>
                                 </td>
                             </tr>
@@ -116,7 +115,7 @@ def enviar_aviso_accion_al_dueno(agendamiento, accion):
                         <table width="550" border="0" cellspacing="0" cellpadding="0" style="background-color:#ffffff; border-radius:12px; overflow:hidden; border: 1px solid #e2e8f0;">
                             <tr>
                                 <td style="background-color:#1e293b; padding:20px; text-align:center;">
-                                    <img src="{LOGO_URL}" width="50" style="margin-bottom:10px;">
+                                    <div style="display: inline-block; width: 50px; height: 50px; line-height: 50px; border-radius: 50%; background-color: rgba(255,255,255,0.15); color: #10b981; font-size: 28px; font-weight: bold; text-align: center; margin-bottom: 10px;">✓</div>
                                     <h2 style="color:#ffffff; margin:0; font-size:18px; letter-spacing:1px;">REPORTE DE SISTEMA</h2>
                                 </td>
                             </tr>
@@ -161,8 +160,8 @@ def enviar_confirmacion_agendamiento(agendamiento, nota_compartida):
                     <td align="center">
                         <table width="500" border="0" cellspacing="0" cellpadding="0" style="background-color:#ffffff; border-radius:15px; overflow:hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
                             <tr>
-                                <td align="center" style="padding: 30px 0;">
-                                    <img src="{LOGO_URL}" width="70">
+                                <td align="center" style="padding: 30px 0 10px 0;">
+                                    <div style="display: inline-block; width: 60px; height: 60px; line-height: 60px; border-radius: 50%; background-color: #e6f7ed; color: #10b981; font-size: 32px; font-weight: bold; text-align: center;">✓</div>
                                 </td>
                             </tr>
                             <tr>
@@ -221,8 +220,8 @@ def enviar_correo_cancelacion(agendamiento):
                     <td align="center">
                         <table width="500" border="0" cellspacing="0" cellpadding="0" style="background-color:#ffffff; border-radius:15px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                             <tr>
-                                <td align="center" style="padding: 30px 0;">
-                                    <img src="{LOGO_URL}" alt="Local" width="60">
+                                <td align="center" style="padding: 30px 0 10px 0;">
+                                    <div style="display: inline-block; width: 60px; height: 60px; line-height: 60px; border-radius: 50%; background-color: #fde8e8; color: #ef4444; font-size: 32px; font-weight: bold; text-align: center;">✗</div>
                                 </td>
                             </tr>
                             <tr>
@@ -274,8 +273,8 @@ def enviar_aviso_recibido_cliente(agendamiento):
                     <td align="center">
                         <table width="500" border="0" cellspacing="0" cellpadding="0" style="background-color:#ffffff; border-radius:15px; overflow:hidden;">
                             <tr>
-                                <td align="center" style="padding: 30px 0;">
-                                    <img src="{LOGO_URL}" alt="Local" width="60">
+                                <td align="center" style="padding: 30px 0 10px 0;">
+                                    <div style="display: inline-block; width: 60px; height: 60px; line-height: 60px; border-radius: 50%; background-color: #e6f7ed; color: #10b981; font-size: 32px; font-weight: bold; text-align: center;">✓</div>
                                 </td>
                             </tr>
                             <tr>

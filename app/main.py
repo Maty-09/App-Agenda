@@ -110,6 +110,13 @@ async def startup_event():
     if not scheduler.running:
         scheduler.start()
         logger.info("🚀 SISTEMA DE PRUEBA INICIADO: Revisión cada 1 minutos activada.")
+    
+    # Debug routes
+    print("\n--- RUTAS CARGADAS ---")
+    for route in app.routes:
+        if hasattr(route, 'path'):
+            print(f"Ruta: {route.path}")
+    print("----------------------\n")
 
 @app.on_event("shutdown")
 def shutdown_event():
@@ -122,11 +129,3 @@ app.include_router(admin.router, prefix="/admin", tags=["Administrador"])
 app.include_router(cliente.router, prefix="/cliente", tags=["Cliente"])
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-
-@app.on_event("startup")
-async def debug_routes():
-    print("\n--- RUTAS CARGADAS ---")
-    for route in app.routes:
-        if hasattr(route, 'path'):
-            print(f"Ruta: {route.path}")
-    print("----------------------\n")

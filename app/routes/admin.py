@@ -10,6 +10,7 @@ import json
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasicCredentials
 import os
+from pathlib import Path
 from starlette.status import HTTP_303_SEE_OTHER
 from datetime import datetime, timedelta
 import sqlite3
@@ -18,8 +19,9 @@ from io import BytesIO
 from app.utils.email_utils import  enviar_confirmacion_agendamiento
 from datetime import datetime, timedelta
 
-# Templates
-templates = Jinja2Templates(directory="templates")
+# Templates - Use absolute path
+TEMPLATES_DIR = str(Path(__file__).resolve().parent.parent.parent / "templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 router = APIRouter()
 
@@ -45,8 +47,9 @@ def get_db():
 
 @router.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
-    # Cambia la línea 48 por esto:
-    return templates.TemplateResponse(request, "admin_login.html")
+    return templates.TemplateResponse(name="admin_login.html", context={
+        "request": request
+    })
     
 @router.post("/login")
 def login(request: Request, username: str = Form(...), password: str = Form(...)):
@@ -55,7 +58,7 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
         response.set_cookie(key="admin_session", value="valid")
         return response
 
-    return templates.TemplateResponse("admin_login.html", {
+    return templates.TemplateResponse(name="admin_login.html", context={
         "request": request,
         "error": "Credenciales inválidas"
     })
@@ -171,7 +174,8 @@ def panel_agendamientos(
         "Especializado": f"{base_url}/cliente/agendar_web?tipo=especializado",
     }
 
-    return templates.TemplateResponse(request,"admin_agendamientos.html", {
+    return templates.TemplateResponse(name="admin_agendamientos.html", context={
+        "request": request,
         "agendamientos": agendamientos,
         "dias_bloqueados": dias_bloqueados,
         "tipo_servicio": tipo_servicio,
@@ -315,7 +319,7 @@ def configurar_formulario(
         models.CampoFormulario.subtipo_servicio == subtipo
     ).order_by(models.CampoFormulario.orden.asc()).all()
 
-    return templates.TemplateResponse("admin_config_form.html", {
+    return templates.TemplateResponse(name="admin_config_form.html", context={
         "request": request,
         "campos": campos,
         "subtipo_actual": subtipo

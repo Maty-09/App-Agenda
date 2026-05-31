@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, date, time, timedelta
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pathlib import Path
 from app.database import SessionLocal , get_db
 from app.utils.email_utils import (
     enviar_confirmacion_agendamiento, 
@@ -27,7 +28,9 @@ def get_db():
 
 router = APIRouter()
 
-templates = Jinja2Templates(directory="templates")
+# Templates - Use absolute path
+TEMPLATES_DIR = str(Path(__file__).resolve().parent.parent.parent / "templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 
 @router.get("/agendar_web", response_class=HTMLResponse)
@@ -78,7 +81,7 @@ def agendar_web(
             mensaje_error = "Error al procesar la fecha."
 
     # 4. RENDER FINAL (Un solo return al final de la función)
-    return templates.TemplateResponse("agendar.html", {
+    return templates.TemplateResponse(name="agendar.html", context={
         "request": request,
         "tipo": tipo,
         "subtipo": subtipo,
@@ -132,7 +135,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
             # Regla A: 48h hábiles
             fecha_minima = obtener_fecha_minima_habil()
             if fecha_cliente < fecha_minima:
-                return templates.TemplateResponse("agendar.html", {
+                return templates.TemplateResponse(name="agendar.html", context={
                     "request": request,
                     "mensaje_error": f"Lo sentimos, debes agendar con 48h hábiles. Lo más pronto es {fecha_minima.strftime('%d/%m %H:%M')}",
                     "tipo": tipo_servicio,
@@ -142,7 +145,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
             # Regla B: Verificar si el día está bloqueado manualmente
             dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == fecha).first()
             if dia_bloqueado:
-                return templates.TemplateResponse("agendar.html", {
+                return templates.TemplateResponse(name="agendar.html", context={
                     "request": request,
                     "mensaje_error": "Este día el taller se encuentra cerrado. Por favor selecciona otra fecha.",
                     "tipo": tipo_servicio,
@@ -256,7 +259,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
         except Exception as e:
             print(f"⚠️ Error al enviar aviso inicial: {e}")
 
-        return templates.TemplateResponse("agendar.html", {
+        return templates.TemplateResponse(name="agendar.html", context={
             "request": request,
             "success": True,
             "horas_disponibles": [],
@@ -270,7 +273,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
         error_trace = traceback.format_exc()
         print(f"🔥 ERROR CRÍTICO EN RENDER:\n{error_trace}")
         print(f"❌ ERROR DETALLO: {traceback.format_exc()}")
-        return templates.TemplateResponse("agendar.html", {
+        return templates.TemplateResponse(name="agendar.html", context={
             "request": request,
             "mensaje_error": str(e),
             "tipo": form_data.get("tipo_servicio"),

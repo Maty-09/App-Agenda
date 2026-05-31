@@ -633,7 +633,7 @@
                     // Ajustado a tu ruta exacta: /desbloquear-dia/{id}
                     // Importante: Verifica si tu router de Python usa POST o DELETE
                     fetch(`/admin/desbloquear-dia/${bloqueoId}`, { 
-                        method: 'DELETE' // O 'POST' según cómo esté definida en tu @router
+                        method: 'POST'
                     })
                     .then(res => res.json())
                     .then(data => {

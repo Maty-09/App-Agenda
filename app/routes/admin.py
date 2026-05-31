@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 import sqlite3
 import openpyxl
 from io import BytesIO 
-from app.utils.email_utils import  enviar_confirmacion_agendamiento
+from app.utils.email_utils import enviar_confirmacion_agendamiento, enviar_correo_cancelacion
 from datetime import datetime, timedelta
 
 # Templates
@@ -290,7 +290,7 @@ def cancelar_agendamiento(
     enviar_correo_cancelacion(ag)
 
     return RedirectResponse(
-        url="/admin/agendamientos",
+        url="/admin/panel",
         status_code=303
     )
 
@@ -531,6 +531,26 @@ def bloquear_dia(datos: BloqueoDiaSchema, db: Session = Depends(get_db)):
     # en lugar de un RedirectResponse, para que el JS haga el reload.
     return {"status": "success", "message": "Día bloqueado correctamente"}
 
+@router.post("/bloquear-dia")
+def bloquear_dia_formulario(
+    fecha: str = Form(...),
+    motivo: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    admin = Depends(verificar_login)
+):
+    try:
+        fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido")
+    
+    existe = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == fecha_dt).first()
+    if not existe:
+        nuevo = models.DiaBloqueado(fecha=fecha_dt, motivo=motivo)
+        db.add(nuevo)
+        db.commit()
+    
+    return RedirectResponse(url="/admin/panel", status_code=303)
+
 @router.post("/desbloquear-dia/{id}") 
 def desbloquear_dia(id: int, db: Session = Depends(get_db)):
     dia = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.id == id).first()
@@ -544,53 +564,35 @@ def desbloquear_dia(id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/editar-cita/{id}")
-async def editar_cita_admin(id: int, db: Session = Depends(get_db), duracion_horas: int = Form(...)):
-    cita = db.query(models.Agendamiento).get(id)
-    
-    # Actualizamos la duración ingresada en el formulario
-    cita.duracion_horas = duracion_horas
-    
-    # Recalculamos el término: Inicio + duracion_horas
-    # Esto "empuja" la hora de término y bloquea los cupos automáticamente
-    cita.fecha_termino = cita.fecha_inicio + timedelta(hours=duracion_horas)
-    
-    print(f"DEBUG: Bloqueo guardado para la fecha: {fecha_str}")
-    return {"status": "ok"}
-    db.commit()
-    return RedirectResponse(url="/admin/panel", status_code=303)
-
-
-@router.post("/admin/editar-cita/{cita_id}")
-async def admin_editar_cita(
-    cita_id: int, 
+async def editar_cita_admin(
+    id: int, 
     fecha: str = Form(...), 
     hora: str = Form(...), 
     duracion_horas: int = Form(...), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    admin = Depends(verificar_login)
 ):
-    # 1. Buscar la cita en la base de datos
-    cita = db.query(models.Agendamiento).filter(models.Agendamiento.id == cita_id).first()
+    cita = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
     
     if not cita:
-        return {"error": "Cita no encontrada"}
-
-    # 2. Construir la nueva fecha y hora de inicio
-    # Combinamos el string de fecha (YYYY-MM-DD) y hora (HH:MM)
-    nueva_fecha_inicio = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
-
-    # 3. RECALCULAR EL TÉRMINO (Aquí ocurre la magia del bloqueo)
-    # Sumamos la duración ingresada al inicio
-    nueva_fecha_termino = nueva_fecha_inicio + timedelta(hours=duracion_horas)
-
-    # 4. Actualizar los campos en la base de datos
-    cita.fecha_inicio = nueva_fecha_inicio
-    cita.fecha_termino = nueva_fecha_termino
-    cita.duracion_horas = duracion_horas # Guardamos el nuevo valor (ej. 8 o 9)
-
-    db.commit()
-
-    # 5. Redirigir de vuelta al panel de configuración
-    return RedirectResponse(url="/admin/configuracion", status_code=303)
+        raise HTTPException(status_code=404, detail="Cita no encontrada")
+        
+    try:
+        nueva_fecha_inicio = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
+        nueva_fecha_termino = nueva_fecha_inicio + timedelta(hours=duracion_horas)
+        
+        cita.fecha_inicio = nueva_fecha_inicio
+        cita.fecha_termino = nueva_fecha_termino
+        cita.duracion_horas = duracion_horas
+        
+        db.commit()
+        print(f"✅ Cita ID {id} modificada con éxito: {nueva_fecha_inicio} ({duracion_horas} hrs)")
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error al editar cita: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    return RedirectResponse(url="/admin/panel", status_code=303)
 
 @router.get("/api/bloqueos")
 def obtener_bloqueos_json(db: Session = Depends(get_db)):

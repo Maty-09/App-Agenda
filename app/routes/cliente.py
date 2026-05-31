@@ -355,6 +355,7 @@ def calcular_fin_especializado(inicio: datetime, duracion: int) -> datetime:
 
 Recursos = {
     "domicilio_taller": ["Equipo Cristhian", "Equipo Samuel", "Equipo Movil"], # 3 equipos para este tipo
+    "especializado": ["Equipo Cristhian", "Equipo Samuel", "Equipo Movil"],
 }
 
 Horarios_base = ["09:00", "13:00", "15:30"]
@@ -366,21 +367,19 @@ CUPOS_TIPO = {
 
 
 def obtner_cupos_disponibles(tipo_servicio, fecha, duracion, db):
-    recursos = Recursos[tipo]
+    recursos = Recursos.get(tipo_servicio, [])
     cupos = []
 
     for recurso in recursos:
         for hora in Horarios_base:
-            existe = db.query(Agendamiento).filter(
-                Agendamiento.fecha == fecha,
-                Agendamiento.hora == hora,
-                Agendamiento.recurso == recurso,
+            existe = db.query(models.Agendamiento).filter(
+                models.Agendamiento.equipo == recurso,
             ).first()
 
             if not existe:
                 cupos.append({
                     "hora": hora,
-                    "recurso":recurso
+                    "recurso": recurso
                 })
     return cupos
 
@@ -585,15 +584,4 @@ def api_horas(
         return {"horas": horas}
     except Exception:
         return {"horas": []}
-
-@router.post("/admin/editar-cita/{id}")
-async def editar_cita_admin(id: int,fecha: str = Form(...), hora: str = Form(...), duracion_horas: int = Form(...), db: Session = Depends(get_db)):
-    cita = db.query(models.Agendamiento).get(id)
-    nueva_duracion = int(form_data.get("duracion_horas"))
-    
-    cita.duracion_horas = nueva_duracion
-    # Recalculamos el término sin restricciones
-    cita.fecha_termino = cita.fecha_inicio + timedelta(hours=nueva_duracion)
-    
-    db.commit()
-    return {"status": "Cita modificada por el administrador"}
+

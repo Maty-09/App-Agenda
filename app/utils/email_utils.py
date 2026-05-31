@@ -9,7 +9,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 import urllib.parse
 from app.database import SessionLocal 
-from app.models import Agendamiento
+from app.models import Agendamiento, get_now_chile
 
 load_dotenv()
 
@@ -211,9 +211,39 @@ def enviar_confirmacion_agendamiento(agendamiento, nota_compartida):
         adjunto_name=f"cita_{agendamiento.patente}.ics"
     )
 
+def enviar_correo_cancelacion(agendamiento):
+    asunto = f"❌ Tu cita ha sido cancelada - {agendamiento.patente}"
+    contenido_html = f"""
+    <html>
+        <body style="margin:0; padding:0; background-color:#f4f7f6; font-family: 'Segoe UI', Arial, sans-serif;">
+            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="padding: 40px 0;">
+                <tr>
+                    <td align="center">
+                        <table width="500" border="0" cellspacing="0" cellpadding="0" style="background-color:#ffffff; border-radius:15px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                            <tr>
+                                <td align="center" style="padding: 30px 0;">
+                                    <img src="{LOGO_URL}" alt="Local" width="60">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0 40px 40px 40px; text-align: center;">
+                                    <h2 style="color:#ef4444;">Cita Cancelada</h2>
+                                    <p style="color:#475569;">Hola {agendamiento.nombre}, te informamos que tu cita para el <strong>{agendamiento.fecha_inicio.strftime('%d-%m-%Y')}</strong> a las <strong>{agendamiento.fecha_inicio.strftime('%H:%M')} hrs</strong> ha sido cancelada.</p>
+                                    <p style="color:#64748b; font-size:14px; margin-top:20px;">Si consideras que esto es un error o deseas reagendar, por favor contáctanos.</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+    </html>
+    """
+    return enviar_email_base(agendamiento.correo, asunto, contenido_html)
+
 def procesar_flujo_automatico():
     db = SessionLocal()
-    ahora = datetime.now() # Asegúrate que sea la misma zona horaria
+    ahora = get_now_chile() # Usamos la misma zona horaria que creado_en
     hace_5_min = ahora - timedelta(minutes=5)
     inicio_hoy = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
 

@@ -46,7 +46,7 @@ def get_db():
 @router.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
     # Cambia la línea 48 por esto:
-    return templates.TemplateResponse(request, "admin_login.html")
+    return templates.TemplateResponse("admin_login.html", {"request": request})
     
 @router.post("/login")
 def login(request: Request, username: str = Form(...), password: str = Form(...)):
@@ -98,10 +98,18 @@ def panel_agendamientos(
 ):
     query = db.query(models.Agendamiento)
 
+    print("=" * 80)
+    print(f"DEBUG PANEL: subtipo={subtipo}, tipo_servicio={tipo_servicio}, fecha={fecha}")
+
     if subtipo:
-        query = query.filter(models.Agendamiento.subtipo == subtipo)
+        filter_subtipo = subtipo.lower().strip()
+        if filter_subtipo == "local":
+            filter_subtipo = "taller"
+        query = query.filter(models.Agendamiento.subtipo == filter_subtipo)
+        print(f"  → Filtrando por subtipo: {filter_subtipo}")
     if tipo_servicio:
         query = query.filter(models.Agendamiento.tipo_servicio == tipo_servicio)
+        print(f"  → Filtrando por tipo_servicio: {tipo_servicio}")
     if fecha:
         try:
             fecha_inicio = datetime.strptime(fecha, "%Y-%m-%d")
@@ -110,10 +118,16 @@ def panel_agendamientos(
                 models.Agendamiento.fecha_inicio >= fecha_inicio,
                 models.Agendamiento.fecha_inicio < fecha_fin
             )
+            print(f"  → Filtrando por fecha: {fecha}")
         except ValueError:
             pass
 
     agendamientos = query.order_by(models.Agendamiento.id).all()
+    print(f"  → RESULTADO: {len(agendamientos)} agendamientos encontrados")
+    for ag in agendamientos:
+        print(f"    - ID {ag.id}: {ag.nombre} {ag.apellido} - {ag.fecha_inicio}")
+    print("=" * 80)
+    
     utm_registro = db.query(models.UTMRegistro).all()
 
     dias_bloqueados = db.query(models.DiaBloqueado).all()
@@ -167,20 +181,24 @@ def panel_agendamientos(
     base_url = str(request.base_url).rstrip("/")
     links_agenda = {
         "Domicilio": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio",
-        "Taller": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=taller",
+        "Local": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local",
         "Especializado": f"{base_url}/cliente/agendar_web?tipo=especializado",
     }
 
-    return templates.TemplateResponse(request,"admin_agendamientos.html", {
-        "agendamientos": agendamientos,
-        "dias_bloqueados": dias_bloqueados,
-        "tipo_servicio": tipo_servicio,
-        "subtipo": subtipo,
-        "eventos_json": eventos_json_str, # <--- IMPORTANTE: Nombre unificado
-        "fecha": fecha,
-        "utm_registro": utm_registro,
-        "links_agenda": links_agenda
-    })
+    return templates.TemplateResponse(
+        name="admin_agendamientos.html",
+        context={
+            "request": request,  # Aquí adentro sí va de nuevo si usas 'context='
+            "agendamientos": agendamientos,
+            "dias_bloqueados": dias_bloqueados,
+            "tipo_servicio": tipo_servicio,
+            "subtipo": subtipo,
+            "eventos_json": eventos_json_str,
+            "fecha": fecha,
+            "utm_registro": utm_registro,
+            "links_agenda": links_agenda
+        }
+    )
 
 
 @router.post("/actualizar_nota/{id}")
@@ -287,9 +305,9 @@ def obtener_links_agenda(request: Request, admin = Depends(verificar_login)):
             "label": "Servicio a Domicilio",
             "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio"
             },
-        "taller" : {
-            "label": "Sevicio en Taller",
-            "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=taller"
+        "local" : {
+            "label": "Servicio en Local",
+            "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local"
             },
         "especializado" : {
             "label": "Equipo Especializado",
@@ -307,18 +325,21 @@ def obtener_links_agenda(request: Request, admin = Depends(verificar_login)):
 @router.get("/configurar-formulario")
 def configurar_formulario(
     request: Request, 
-    subtipo: str = "taller", # Por defecto taller
+    subtipo: str = "local", # Por defecto local
     db: Session = Depends(get_db)
 ):
+    raw_subtipo = subtipo.lower().strip() if subtipo else "local"
+    db_subtipo = "taller" if raw_subtipo == "local" else raw_subtipo
+
     # Buscamos los campos que coincidan con el subtipo seleccionado
     campos = db.query(models.CampoFormulario).filter(
-        models.CampoFormulario.subtipo_servicio == subtipo
+        models.CampoFormulario.subtipo_servicio == db_subtipo
     ).order_by(models.CampoFormulario.orden.asc()).all()
 
     return templates.TemplateResponse("admin_config_form.html", {
         "request": request,
         "campos": campos,
-        "subtipo_actual": subtipo
+        "subtipo_actual": raw_subtipo
     })
 @router.post("/configurar-formulario/guardar")
 async def guardar_campo(
@@ -332,6 +353,8 @@ async def guardar_campo(
 ):
     # VALIDACIÓN: Si label es None, le damos un valor por defecto para que no explote
     texto_label = label if label else "Campo sin nombre"
+    raw_subtipo = subtipo_servicio.lower().strip()
+    db_subtipo = "taller" if raw_subtipo == "local" else raw_subtipo
     
     # Ahora procesamos el nombre técnico con seguridad
     nombre_tecnico = texto_label.lower().strip().replace(" ", "_")
@@ -363,6 +386,7 @@ async def guardar_campo(
     if campo_id:
         campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id).first()
         if campo:
+            campo.subtipo_servicio = db_subtipo
             campo.label = texto_label
             campo.tipo_campo = tipo_campo
             campo.opciones = opciones
@@ -370,7 +394,7 @@ async def guardar_campo(
             campo.nombre_tecnico = nombre_tecnico
     else:
         nuevo = models.CampoFormulario(
-            subtipo_servicio=subtipo_servicio,
+            subtipo_servicio=db_subtipo,
             label=texto_label,
             nombre_tecnico=nombre_tecnico,
             tipo_campo=tipo_campo,
@@ -380,7 +404,7 @@ async def guardar_campo(
         db.add(nuevo)
 
     db.commit()
-    return RedirectResponse(url=f"/admin/configurar-formulario?subtipo={subtipo_servicio}", status_code=303)
+    return RedirectResponse(url=f"/admin/configurar-formulario?subtipo={raw_subtipo}", status_code=303)
 
 @router.get("/configurar-formulario/eliminar/{campo_id}")
 async def eliminar_campo(campo_id: int, db: Session = Depends(get_db)):
@@ -392,7 +416,7 @@ async def eliminar_campo(campo_id: int, db: Session = Depends(get_db)):
         return RedirectResponse(url="/admin/configurar-formulario", status_code=303)
 
     # Guardamos el subtipo para poder redireccionar al mismo sitio después
-    subtipo_servicio = campo.subtipo_servicio
+    subtipo_servicio = "local" if campo.subtipo_servicio == "taller" else campo.subtipo_servicio
 
     # 2. Lo eliminamos
     db.delete(campo)
@@ -452,7 +476,8 @@ def editar_campo(
     campo.obligatorio = True if obligatorio == "on" else False
 
     db.commit()
-    return RedirectResponse(f"/admin/configurar-formulario?subtipo={campo.subtipo_servicio}", status_code=303)
+    subtipo_redirect = "local" if campo.subtipo_servicio == "taller" else campo.subtipo_servicio
+    return RedirectResponse(f"/admin/configurar-formulario?subtipo={subtipo_redirect}", status_code=303)
 
 
 
@@ -522,7 +547,7 @@ def desbloquear_dia(id: int, db: Session = Depends(get_db)):
 async def editar_cita_admin(id: int, db: Session = Depends(get_db), duracion_horas: int = Form(...)):
     cita = db.query(models.Agendamiento).get(id)
     
-    # Actualizamos la duración que puso Tommy
+    # Actualizamos la duración ingresada en el formulario
     cita.duracion_horas = duracion_horas
     
     # Recalculamos el término: Inicio + duracion_horas
@@ -554,7 +579,7 @@ async def admin_editar_cita(
     nueva_fecha_inicio = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
 
     # 3. RECALCULAR EL TÉRMINO (Aquí ocurre la magia del bloqueo)
-    # Sumamos la duración que puso Tommy al inicio
+    # Sumamos la duración ingresada al inicio
     nueva_fecha_termino = nueva_fecha_inicio + timedelta(hours=duracion_horas)
 
     # 4. Actualizar los campos en la base de datos
@@ -567,6 +592,63 @@ async def admin_editar_cita(
     # 5. Redirigir de vuelta al panel de configuración
     return RedirectResponse(url="/admin/configuracion", status_code=303)
 
+@router.get("/api/bloqueos")
+def obtener_bloqueos_json(db: Session = Depends(get_db)):
+    """API que devuelve bloqueos en formato JSON para FullCalendar"""
+    import json
+    dias_bloqueados = db.query(models.DiaBloqueado).all()
+    
+    bloqueos = []
+    for b in dias_bloqueados:
+        bloqueos.append({
+            "id": str(b.id),
+            "start": b.fecha.strftime("%Y-%m-%d"),
+            "display": "background",
+            "backgroundColor": "#FFDADA",
+            "extendedProps": { "tipo": "bloqueo", "motivo": b.motivo or "Día bloqueado" }
+        })
+    
+    return bloqueos
+
+@router.get("/api/debug/agendamientos")
+def debug_agendamientos(db: Session = Depends(get_db)):
+    """Endpoint de debugging para ver todos los agendamientos"""
+    agendamientos = db.query(models.Agendamiento).all()
+    
+    resultado = []
+    for ag in agendamientos:
+        resultado.append({
+            "id": ag.id,
+            "nombre": ag.nombre,
+            "apellido": ag.apellido,
+            "subtipo": ag.subtipo,
+            "tipo_servicio": ag.tipo_servicio,
+            "equipo": ag.equipo,
+            "fecha_inicio": ag.fecha_inicio.isoformat() if ag.fecha_inicio else None,
+            "estado": ag.estado,
+        })
+    
+    return {"total": len(resultado), "agendamientos": resultado}
+
+@router.get("/api/debug/ultimo-agendamiento")
+def debug_ultimo_agendamiento(db: Session = Depends(get_db)):
+    """Endpoint de debugging para ver el último agendamiento guardado"""
+    ultimo = db.query(models.Agendamiento).order_by(models.Agendamiento.id.desc()).first()
+    
+    if not ultimo:
+        return {"error": "No hay agendamientos"}
+    
+    return {
+        "id": ultimo.id,
+        "nombre": f"{ultimo.nombre} {ultimo.apellido}",
+        "subtipo": ultimo.subtipo,
+        "tipo_servicio": ultimo.tipo_servicio,
+        "equipo": ultimo.equipo,
+        "fecha_inicio": ultimo.fecha_inicio.isoformat() if ultimo.fecha_inicio else None,
+        "estado": ultimo.estado,
+        "creado_en": ultimo.creado_en.isoformat() if hasattr(ultimo, 'creado_en') and ultimo.creado_en else "N/A"
+    }
+
 @router.get("/agendar-emergencia-total")
 async def agendar_emergencia(request: Request):
     """
@@ -576,9 +658,9 @@ async def agendar_emergencia(request: Request):
     # Obtenemos la base de la URL (ej: http://127.0.0.1:8000)
     base_url = str(request.base_url).rstrip("/")
     
-    # Redirigimos al agendamiento de taller, pero puedes cambiar el 'tipo' 
+    # Redirigimos al agendamiento de local, pero puedes cambiar el 'tipo' 
     # o añadirle un parámetro 'emergencia=true' para tu lógica interna.
-    target_url = f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=taller&modo=emergencia"
+    target_url = f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local&modo=emergencia"
     
     print(f"DEBUG: Accediendo a Modo Emergencia -> {target_url}")
     return RedirectResponse(url=target_url)

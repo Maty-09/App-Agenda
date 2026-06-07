@@ -5,8 +5,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from app.database import SessionLocal , get_db
 from app.utils.email_utils import (
-    enviar_confirmacion_agendamiento, 
-    enviar_aviso_accion_al_dueno,  # <--- Nuevo nombre
+    enviar_confirmacion_agendamiento,
+    enviar_aviso_accion_al_dueno,
     enviar_solicitud_confirmacion,
     enviar_aviso_recibido_cliente
 )
@@ -505,15 +505,7 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
     
     return agendados_en_bloque < limite_equipos
 
-def enviar_correo_confirmacion(destino, asunto, contenido):
-    try:
-        # tu lógica SMTP o servicio externo aquí
-        print("📨 Correo enviado a:", destino)
-        return True
-    except Exception as e:
-        print("❌ Error enviando correo:", e)
-        return False
-        
+
 @router.get("/confirmar/{agendamiento_id}")
 async def confirmar_cita_endpoint(agendamiento_id: int, db: Session = Depends(get_db)):
     agendamiento = db.query(models.Agendamiento).filter(models.Agendamiento.id == agendamiento_id).first()

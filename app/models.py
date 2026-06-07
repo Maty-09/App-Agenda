@@ -52,6 +52,7 @@ class Agendamiento(Base):
     utm_link = Column(String, nullable=True)
     utm_source_real = Column(String, nullable=True)
     nota_interna = Column(String, nullable=True)
+    boton_enviado = Column(Boolean, default=False, server_default='0')
     nota_compartida = Column(String, nullable=True)
     estado = Column(String, default="pendiente") # activa | cancelada
     fecha_cancelacion = Column(DateTime, nullable= True)

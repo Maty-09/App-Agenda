@@ -4,21 +4,20 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from app.database import SessionLocal
 from app import models, schemas
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 import json
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasicCredentials
 import os
 from starlette.status import HTTP_303_SEE_OTHER
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dt_time, date as dt_date
+import pytz
 import sqlite3
 import openpyxl
 from io import BytesIO 
 from app.utils.email_utils import enviar_confirmacion_agendamiento, enviar_correo_cancelacion
-from datetime import datetime, timedelta
-
-# Templates
+from app.routes.cliente import Recursos, calcular_fin_especializado
 templates = Jinja2Templates(directory="templates")
 
 router = APIRouter()
@@ -480,6 +479,175 @@ def editar_campo(
     return RedirectResponse(f"/admin/configurar-formulario?subtipo={subtipo_redirect}", status_code=303)
 
 
+class ReprogramarCitaSchema(BaseModel):
+    fecha_inicio: datetime
+
+
+def verificar_disponibilidad_detalle(
+    db: Session, 
+    tipo_servicio: str, 
+    inicio: datetime, 
+    duracion_horas: int, 
+    excluir_id: Optional[int] = None
+) -> Tuple[bool, str]:
+    # 1. Chequear si el día está bloqueado por administración
+    dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == inicio.date()).first()
+    if dia_bloqueado:
+        return False, f"El día {inicio.strftime('%d/%m/%Y')} está bloqueado administrativamente ({dia_bloqueado.motivo or 'Cerrado'})."
+
+    tz_chile = pytz.timezone("America/Santiago")
+    if inicio.tzinfo is None:
+        inicio = tz_chile.localize(inicio)
+
+    # 2. Calcular fin
+    if tipo_servicio == "especializado":
+        fin = calcular_fin_especializado(inicio, duracion_horas)
+    else:
+        fin = inicio + timedelta(hours=duracion_horas)
+
+    h_inicio = inicio.time()
+    h_fin = fin.time()
+    
+    # 3. Horario de atención: 08:00 - 18:00
+    if h_inicio < dt_time(8, 0) or h_fin > dt_time(18, 0):
+        return False, "La cita debe estar dentro del horario de atención permitido (08:00 - 18:00)."
+
+    # 4. Horario de colación: No cruzar 12:00 a 13:00
+    if h_inicio < dt_time(13, 0) and h_fin > dt_time(12, 0):
+        return False, "La cita interfiere con el horario de colación obligatorio (12:00 - 13:00)."
+
+    # 5. Validación por tipo de servicio y días
+    dia_semana = inicio.weekday() # 0:Lunes, 2:Miércoles...
+    hora_str = inicio.strftime("%H:%M")
+
+    if tipo_servicio == "domicilio_taller":
+        if duracion_horas != 2:
+            return False, "La duración de este tipo de servicio debe ser de 2 horas."
+            
+        if dia_semana == 2: # Miércoles
+            if hora_str not in ["09:00", "13:00"]:
+                return False, "Los miércoles los servicios en local/domicilio solo pueden iniciar a las 09:00 o 13:00."
+        else:
+            if hora_str not in ["09:00", "13:00", "15:30"]:
+                return False, "Los servicios en local/domicilio solo pueden iniciar a las 09:00, 13:00 o 15:30."
+
+    elif tipo_servicio == "especializado":
+        if dia_semana == 2 and hora_str not in ["09:00", "13:00"]:
+            return False, "Los miércoles los servicios especializados solo pueden iniciar a las 09:00 o 13:00."
+    else:
+        return False, f"Tipo de servicio '{tipo_servicio}' no válido."
+
+    # 6. Validar traslapes/capacidad (excluyendo la misma cita)
+    query = db.query(models.Agendamiento).filter(
+        models.Agendamiento.fecha_inicio < fin,
+        models.Agendamiento.fecha_termino > inicio,
+        models.Agendamiento.estado != "cancelado"
+    )
+    if excluir_id is not None:
+        query = query.filter(models.Agendamiento.id != excluir_id)
+        
+    agendados_en_bloque = query.count()
+    limite_equipos = len(Recursos.get(tipo_servicio, []))
+    
+    if agendados_en_bloque >= limite_equipos:
+        return False, f"No hay equipos disponibles en este horario (máximo {limite_equipos} citas simultáneas)."
+
+    return True, ""
+
+
+@router.post("/reprogramar-cita/{id}")
+async def reprogramar_cita(
+    id: int,
+    payload: ReprogramarCitaSchema,
+    db: Session = Depends(get_db),
+    admin = Depends(verificar_login)
+):
+    ag = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
+    if not ag:
+        return {"status": "error", "message": "Cita no encontrada"}
+        
+    inicio_nueva = payload.fecha_inicio
+    
+    # Asegurar zona horaria de Chile
+    tz_chile = pytz.timezone("America/Santiago")
+    if inicio_nueva.tzinfo is None:
+        inicio_nueva = tz_chile.localize(inicio_nueva)
+    else:
+        inicio_nueva = inicio_nueva.astimezone(tz_chile)
+        
+    # Quitar tzinfo para guardar en sqlite
+    inicio_nueva_naive = inicio_nueva.replace(tzinfo=None)
+    
+    # Calcular fin
+    if ag.tipo_servicio.value == "especializado":
+        fin_nueva_naive = calcular_fin_especializado(inicio_nueva_naive, ag.duracion_horas)
+    else:
+        fin_nueva_naive = inicio_nueva_naive + timedelta(hours=ag.duracion_horas)
+        
+    # Verificar disponibilidad
+    disponible, msg_error = verificar_disponibilidad_detalle(
+        db=db,
+        tipo_servicio=ag.tipo_servicio.value,
+        inicio=inicio_nueva_naive,
+        duracion_horas=ag.duracion_horas,
+        excluir_id=ag.id
+    )
+    
+    if not disponible:
+        return {"status": "error", "message": msg_error}
+        
+    # Asignar equipo disponible
+    equipos_posibles = Recursos.get(ag.tipo_servicio.value, [])
+    equipo_asignado = None
+    
+    # 1. Intentar con el equipo actual
+    current_team = ag.equipo
+    if current_team in equipos_posibles:
+        ocupado = db.query(models.Agendamiento).filter(
+            models.Agendamiento.id != ag.id,
+            models.Agendamiento.equipo == current_team,
+            models.Agendamiento.fecha_inicio < fin_nueva_naive,
+            models.Agendamiento.fecha_termino > inicio_nueva_naive,
+            models.Agendamiento.estado != "cancelado"
+        ).first()
+        if not ocupado:
+            equipo_asignado = current_team
+            
+    # 2. Si el actual está ocupado, buscar otro
+    if not equipo_asignado:
+        for eq in equipos_posibles:
+            if eq == current_team:
+                continue
+            ocupado = db.query(models.Agendamiento).filter(
+                models.Agendamiento.id != ag.id,
+                models.Agendamiento.equipo == eq,
+                models.Agendamiento.fecha_inicio < fin_nueva_naive,
+                models.Agendamiento.fecha_termino > inicio_nueva_naive,
+                models.Agendamiento.estado != "cancelado"
+            ).first()
+            if not ocupado:
+                equipo_asignado = eq
+                break
+                
+    if not equipo_asignado:
+        return {"status": "error", "message": "No se encontró un equipo disponible para este horario."}
+        
+    # Guardar cambios
+    ahora_str = datetime.now(tz_chile).strftime("%H:%M")
+    log_reprogramacion = f"\n[REPROGRAMACIÓN {ahora_str}]: {ag.fecha_inicio.strftime('%d/%m %H:%M')} ({ag.equipo}) -> {inicio_nueva_naive.strftime('%d/%m %H:%M')} ({equipo_asignado})"
+    
+    ag.fecha_inicio = inicio_nueva_naive
+    ag.fecha_termino = fin_nueva_naive
+    ag.equipo = equipo_asignado
+    ag.nota_interna = (ag.nota_interna or "") + log_reprogramacion
+    
+    try:
+        db.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        db.rollback()
+        return {"status": "error", "message": f"Error al guardar en base de datos: {str(e)}"}
+
 
 @router.post("/reubicar-emergencia/{id}")
 async def reubicar_emergencia(
@@ -666,3 +834,96 @@ async def agendar_emergencia(request: Request):
     
     print(f"DEBUG: Accediendo a Modo Emergencia -> {target_url}")
     return RedirectResponse(url=target_url)
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+def get_dashboard(
+    request: Request,
+    db: Session = Depends(get_db),
+    cred: HTTPBasicCredentials = Depends(verificar_login)
+):
+    # Total de citas
+    total_citas = db.query(models.Agendamiento).count()
+    
+    # Citas por estado
+    confirmadas = db.query(models.Agendamiento).filter(models.Agendamiento.estado == "confirmado").count()
+    pendientes = db.query(models.Agendamiento).filter(models.Agendamiento.estado == "pendiente").count()
+    canceladas = db.query(models.Agendamiento).filter(models.Agendamiento.estado == "cancelado").count()
+    
+    # Tasa de confirmación
+    tasa_confirmacion = 0.0
+    if (confirmadas + pendientes) > 0:
+        tasa_confirmacion = round((confirmadas / (confirmadas + pendientes)) * 100, 1)
+        
+    # Distribución por subtipo (Taller/Local vs Domicilio)
+    servicios_raw = db.query(
+        models.Agendamiento.subtipo,
+        func.count(models.Agendamiento.id)
+    ).group_by(models.Agendamiento.subtipo).all()
+    
+    servicios_labels = []
+    servicios_valores = []
+    for sub, count in servicios_raw:
+        label = "🛠️ Local" if sub == "taller" else ("🏠 Domicilio" if sub == "domicilio" else str(sub).capitalize())
+        servicios_labels.append(label)
+        servicios_valores.append(count)
+        
+    # Carga de trabajo por equipo (excluyendo cancelados)
+    equipos_raw = db.query(
+        models.Agendamiento.equipo,
+        func.count(models.Agendamiento.id)
+    ).filter(models.Agendamiento.estado != "cancelado").group_by(models.Agendamiento.equipo).all()
+    
+    equipos_labels = [eq if eq else "Sin Equipo" for eq, _ in equipos_raw]
+    equipos_valores = [count for _, count in equipos_raw]
+    
+    # Top 5 marcas de vehículos
+    marcas_raw = db.query(
+        models.Agendamiento.marca,
+        func.count(models.Agendamiento.id)
+    ).filter(models.Agendamiento.marca != None, models.Agendamiento.marca != "").group_by(models.Agendamiento.marca).order_by(func.count(models.Agendamiento.id).desc()).limit(5).all()
+    
+    marcas_labels = [str(marca).upper().strip() for marca, _ in marcas_raw]
+    marcas_valores = [count for _, count in marcas_raw]
+    
+    # Canales UTM
+    utm_raw = db.query(
+        models.Agendamiento.utm_source_real,
+        func.count(models.Agendamiento.id)
+    ).group_by(models.Agendamiento.utm_source_real).order_by(func.count(models.Agendamiento.id).desc()).all()
+    
+    utm_stats = []
+    for utm, count in utm_raw:
+        source = utm if utm else "Directo (Sin UTM)"
+        utm_stats.append({"origen": source, "cantidad": count})
+        
+    # Datos mensuales para ver tendencia
+    tendencia_raw = db.query(
+        func.strftime("%Y-%m", models.Agendamiento.fecha_inicio),
+        func.count(models.Agendamiento.id)
+    ).group_by(func.strftime("%Y-%m", models.Agendamiento.fecha_inicio)).order_by(func.strftime("%Y-%m", models.Agendamiento.fecha_inicio).asc()).all()
+    
+    tendencia_labels = [str(mes) for mes, _ in tendencia_raw if mes]
+    tendencia_valores = [count for _, count in tendencia_raw if count]
+
+    stats = {
+        "total": total_citas,
+        "confirmadas": confirmadas,
+        "pendientes": pendientes,
+        "canceladas": canceladas,
+        "tasa_confirmacion": tasa_confirmacion,
+        "servicios_labels": json.dumps(servicios_labels),
+        "servicios_valores": json.dumps(servicios_valores),
+        "equipos_labels": json.dumps(equipos_labels),
+        "equipos_valores": json.dumps(equipos_valores),
+        "marcas_labels": json.dumps(marcas_labels),
+        "marcas_valores": json.dumps(marcas_valores),
+        "utm_stats": utm_stats,
+        "tendencia_labels": json.dumps(tendencia_labels),
+        "tendencia_valores": json.dumps(tendencia_valores)
+    }
+
+    return templates.TemplateResponse(
+        name="admin_dashboard.html",
+        context={"request": request, "stats": stats}
+    )

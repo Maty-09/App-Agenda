@@ -139,6 +139,9 @@
                 <h1 class="text-3xl font-extrabold tracking-tighter text-slate-950">App Agendamientos <span class="text-slate-400 font-medium">/ Agendamientos</span></h1>
             </div>
             <div class="flex items-center gap-3">
+                <a href="/admin/dashboard" class="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-semibold text-sm hover:bg-slate-800 transition flex items-center gap-2 shadow-sm shadow-slate-100">
+                    <i class="fas fa-chart-pie"></i> Ver Dashboard
+                </a>
                 <a href="/admin/export/utm" class="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm shadow-emerald-100">
                     <i class="fas fa-file-export"></i> Exportar UTM
                 </a>
@@ -383,7 +386,7 @@
                 console.error("Error al leer los eventos:", e);
             }
 
-            window.calendar = new FullCalendar.Calendar(calendarEl, {
+            window.calendar = new FullCalendar.Calendar(calendarEl, { editable: true, eventDurationEditable: false, snapDuration: '00:30:00', slotDuration: '01:00:00',
                 initialView: 'timeGridWeek',
                 locale: 'es',
                 height: 'auto',
@@ -456,8 +459,55 @@
                 },
 
                 eventConstraint: "businessHours",
-                events: datosEventos,
-                
+                eventDrop: function(info) {
+                    const eventObj = info.event;
+                    if (eventObj.display === 'background' || (eventObj.extendedProps && eventObj.extendedProps.tipo === 'bloqueo')) {
+                        info.revert();
+                        return;
+                    }
+                    Swal.fire({
+                        title: '¿Confirmar reprogramación?',
+                        text: `¿Deseas mover la cita de ${eventObj.title} a ${info.event.start.toLocaleString()}?`,
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonText: 'Sí, reprogramar',
+                        cancelButtonText: 'Cancelar',
+                        confirmButtonColor: '#1f2937',
+                        customClass: { popup: 'rounded-3xl', confirmButton: 'rounded-xl', cancelButton: 'rounded-xl' }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            fetch(`/admin/reprogramar-cita/${eventObj.id}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ fecha_inicio: eventObj.startStr })
+                            })
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data.status === 'ok') {
+                                    Swal.fire({
+                                        icon: 'success',
+                                        title: 'Cita reprogramada',
+                                        text: 'El horario ha sido actualizado con éxito.',
+                                        timer: 2000,
+                                        showConfirmButton: false
+                                    }).then(() => { location.reload(); });
+                                } else {
+                                    Swal.fire({ icon: 'error', title: 'No se pudo reprogramar', text: data.message || 'Error desconocido' });
+                                    info.revert();
+                                }
+                            })
+                            .catch(err => {
+                                console.error(err);
+                                Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo conectar con el servidor.' });
+                                info.revert();
+                            });
+                        } else {
+                            info.revert();
+                        }
+                    });
+                },
+
+
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',

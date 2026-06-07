@@ -256,27 +256,29 @@ def enviar_correo_cancelacion(agendamiento):
 
 def procesar_flujo_automatico():
     db = SessionLocal()
-    ahora = get_now_chile() # Usamos la misma zona horaria que creado_en
+    ahora = get_now_chile()
     hace_5_min = ahora - timedelta(minutes=5)
-    inicio_hoy = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # Solo buscamos citas de HOY, que sean PENDIENTES y tengan más de 5 min
+    # Buscamos citas PENDIENTES, creadas hace más de 5 min, a las que aún no se les envió el botón
     nuevas = db.query(Agendamiento).filter(
         Agendamiento.estado == "pendiente",
         Agendamiento.creado_en <= hace_5_min,
-        Agendamiento.creado_en >= inicio_hoy, # <--- Filtro para no ver lo de ayer
-        Agendamiento.nota_interna == None
+        Agendamiento.boton_enviado == False
     ).all()
 
-    print(f"DEBUG: Buscando entre {inicio_hoy} y {hace_5_min}. Encontradas: {len(nuevas)}")
+    print(f"DEBUG scheduler: ahora={ahora}, corte={hace_5_min}. Encontradas para enviar botón: {len(nuevas)}")
 
     for cita in nuevas:
+        print(f"  → Procesando cita ID {cita.id} ({cita.nombre}, creada: {cita.creado_en})")
         if enviar_solicitud_confirmacion(cita):
-            cita.nota_interna = "BOTON_ENVIADO"
+            cita.boton_enviado = True
             db.commit()
-            print(f"✅ Botón enviado para cita ID: {cita.id}")
-    
+            print(f"  ✅ Botón de confirmación enviado para cita ID: {cita.id}")
+        else:
+            print(f"  ❌ Falló el envío del botón para cita ID: {cita.id}")
+
     db.close()
+
 
 def enviar_aviso_recibido_cliente(agendamiento):
     contenido_html = f"""

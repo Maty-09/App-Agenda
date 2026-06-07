@@ -96,6 +96,15 @@ async def startup_event():
     finally:
         db.close()
 
+    # --- MIGRACIÓN SEGURA: agregar columna boton_enviado si no existe ---
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE agendamientos ADD COLUMN boton_enviado BOOLEAN DEFAULT 0"))
+        logger.info("✅ Migración: columna 'boton_enviado' agregada.")
+    except Exception:
+        pass  # La columna ya existe, no hacer nada
+
     # --- CONFIGURACIÓN DE PRUEBA (Cada 10 minutos) ---
     if not scheduler.get_job("recordatorios_test"):
         scheduler.add_job(

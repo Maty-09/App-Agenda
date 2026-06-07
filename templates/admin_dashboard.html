@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración | Dashboard</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Modern styles */
+        body {
+            background-color: #f8fafc;
+        }
+        .card-glow {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-glow:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 20px -8px rgba(0, 0, 0, 0.08), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
+        }
+    </style>
+</head>
+
+<body class="text-slate-900 antialiased font-sans min-h-screen p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row sm:items-center justify-between pb-8 mb-8 border-b border-slate-200 gap-4">
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-white rounded-2xl shadow-sm border border-slate-100 text-slate-500">
+                    <i class="fas fa-chart-pie text-2xl text-blue-600"></i>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-extrabold tracking-tighter text-slate-950">Panel de Control <span class="text-slate-400 font-medium">/ Estadísticas</span></h1>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Resumen de rendimiento y adquisición</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/admin/panel" class="px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:text-slate-900 transition flex items-center gap-2 shadow-sm">
+                    <i class="fas fa-calendar-alt"></i> Volver al Calendario
+                </a>
+            </div>
+        </header>
+
+        <!-- KPI Cards Grid -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+            
+            <!-- Card 1: Total -->
+            <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Agendados</span>
+                    <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <i class="fas fa-book-open text-sm"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-black text-slate-900 leading-none mb-1">{{ stats.total }}</h3>
+                    <span class="text-[10px] text-slate-400 font-semibold">Citas registradas</span>
+                </div>
+            </div>
+
+            <!-- Card 2: Confirmados -->
+            <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Confirmados</span>
+                    <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <i class="fas fa-check-circle text-sm"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-black text-emerald-600 leading-none mb-1">{{ stats.confirmadas }}</h3>
+                    <span class="text-[10px] text-emerald-500 font-semibold">Citas aseguradas</span>
+                </div>
+            </div>
+
+            <!-- Card 3: Pendientes -->
+            <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Pendientes</span>
+                    <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                        <i class="fas fa-clock text-sm"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-black text-amber-500 leading-none mb-1">{{ stats.pendientes }}</h3>
+                    <span class="text-[10px] text-amber-500 font-semibold">En espera de confirmación</span>
+                </div>
+            </div>
+
+            <!-- Card 4: Cancelados -->
+            <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cancelados</span>
+                    <div class="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
+                        <i class="fas fa-ban text-sm"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-black text-red-500 leading-none mb-1">{{ stats.canceladas }}</h3>
+                    <span class="text-[10px] text-red-400 font-semibold">Citas descartadas</span>
+                </div>
+            </div>
+
+            <!-- Card 5: Tasa de Confirmación -->
+            <div class="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-3xl text-white shadow-md card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Confirmaciones</span>
+                    <div class="w-8 h-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
+                        <i class="fas fa-percentage text-sm"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-black text-white leading-none mb-1">{{ stats.tasa_confirmacion }}%</h3>
+                    <span class="text-[10px] text-slate-300 font-semibold">Tasa de éxito de citas activas</span>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Charts Grid (2x2) -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            
+            <!-- Chart 1: Distribución por Servicio (Doughnut) -->
+            <div class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
+                <div class="flex items-center gap-3 mb-6">
+                    <i class="fas fa-tools text-slate-400 text-lg"></i>
+                    <h3 class="text-lg font-bold text-slate-900">Distribución de Servicios</h3>
+                </div>
+                <div class="relative w-full max-h-[300px] flex justify-center items-center">
+                    <canvas id="chartServicios"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 2: Carga de Trabajo por Equipo (Bar) -->
+            <div class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
+                <div class="flex items-center gap-3 mb-6">
+                    <i class="fas fa-users text-slate-400 text-lg"></i>
+                    <h3 class="text-lg font-bold text-slate-900">Carga de Trabajo por Equipo</h3>
+                </div>
+                <div class="relative w-full max-h-[300px] flex justify-center items-center">
+                    <canvas id="chartEquipos"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 3: Tendencia Mensual (Line) -->
+            <div class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
+                <div class="flex items-center gap-3 mb-6">
+                    <i class="fas fa-chart-line text-slate-400 text-lg"></i>
+                    <h3 class="text-lg font-bold text-slate-900">Tendencia Mensual de Agendamientos</h3>
+                </div>
+                <div class="relative w-full max-h-[300px] flex justify-center items-center">
+                    <canvas id="chartTendencia"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 4: Top Marcas de Vehículos (Horizontal Bar) -->
+            <div class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
+                <div class="flex items-center gap-3 mb-6">
+                    <i class="fas fa-car text-slate-400 text-lg"></i>
+                    <h3 class="text-lg font-bold text-slate-900">Top 5 Marcas de Vehículos</h3>
+                </div>
+                <div class="relative w-full max-h-[300px] flex justify-center items-center">
+                    <canvas id="chartMarcas"></canvas>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- UTM Statistics Section -->
+        <section class="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-bullhorn text-slate-400 text-xl"></i>
+                    <h3 class="text-xl font-bold text-slate-900">Estadísticas de Adquisición (UTM)</h3>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- UTM Table -->
+                <div class="overflow-x-auto border border-slate-100 rounded-2xl">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-100">
+                            <tr>
+                                <th class="p-4 font-bold">Origen / Canal (UTM Source)</th>
+                                <th class="p-4 font-bold text-right">Agendamientos</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for item in stats.utm_stats %}
+                            <tr class="bg-white hover:bg-slate-50/50 transition">
+                                <td class="p-4 font-semibold text-slate-800">
+                                    {% if 'whatsapp' in item.origen|lower %}
+                                        <i class="fab fa-whatsapp text-emerald-500 mr-2"></i>
+                                    {% elif 'facebook' in item.origen|lower %}
+                                        <i class="fab fa-facebook text-blue-500 mr-2"></i>
+                                    {% elif 'instagram' in item.origen|lower %}
+                                        <i class="fab fa-instagram text-pink-500 mr-2"></i>
+                                    {% elif 'google' in item.origen|lower %}
+                                        <i class="fab fa-google text-red-400 mr-2"></i>
+                                    {% else %}
+                                        <i class="fas fa-link text-slate-400 mr-2"></i>
+                                    {% endif %}
+                                    {{ item.origen }}
+                                </td>
+                                <td class="p-4 text-right font-bold text-slate-900 font-mono">{{ item.cantidad }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="2" class="p-8 text-center text-slate-400">Sin datos UTM disponibles</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Acquisition Insight card -->
+                <div class="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col justify-between">
+                    <div>
+                        <h4 class="font-bold text-slate-800 mb-2">💡 Análisis de Canales</h4>
+                        <p class="text-slate-500 text-xs leading-relaxed mb-4">
+                            Este listado te ayuda a medir cuál canal de publicidad (ej: redes sociales, links compartidos o campañas directas) es el que genera mayor cantidad de registros y conversiones en la agenda de tu taller.
+                        </p>
+                        <p class="text-slate-500 text-xs leading-relaxed">
+                            Asegúrate de incluir los parámetros <code>utm_source</code> en los links que compartes para mapear correctamente de dónde vienen tus clientes.
+                        </p>
+                    </div>
+                    
+                    <div class="mt-4 pt-4 border-t border-slate-200/50 flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-400 uppercase">Exportable de UTMs</span>
+                        <a href="/admin/export/utm" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm shadow-emerald-50">
+                            <i class="fas fa-file-export"></i> Descargar Datos UTM (.xlsx)
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Chart Configuration Script -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Options base
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            font: { family: 'Inter', size: 11, weight: '600' },
+                            padding: 16
+                        }
+                    }
+                }
+            };
+
+            // 1. Chart Servicios (Doughnut)
+            const ctxServicios = document.getElementById('chartServicios').getContext('2d');
+            const serviciosLabels = {{ stats.servicios_labels | safe }};
+            const serviciosValores = {{ stats.servicios_valores | safe }};
+
+            new Chart(ctxServicios, {
+                type: 'doughnut',
+                data: {
+                    labels: serviciosLabels,
+                    datasets: [{
+                        data: serviciosValores,
+                        backgroundColor: ['#3b82f6', '#10b981', '#a855f7', '#64748b'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    cutout: '65%'
+                }
+            });
+
+            // 2. Chart Equipos (Bar)
+            const ctxEquipos = document.getElementById('chartEquipos').getContext('2d');
+            const equiposLabels = {{ stats.equipos_labels | safe }};
+            const equiposValores = {{ stats.equipos_valores | safe }};
+
+            new Chart(ctxEquipos, {
+                type: 'bar',
+                data: {
+                    labels: equiposLabels,
+                    datasets: [{
+                        label: 'Servicios Asignados',
+                        data: equiposValores,
+                        backgroundColor: '#6366f1',
+                        borderRadius: 8,
+                        maxBarThickness: 40
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        }
+                    }
+                }
+            });
+
+            // 3. Chart Tendencia Mensual (Line)
+            const ctxTendencia = document.getElementById('chartTendencia').getContext('2d');
+            const tendenciaLabels = {{ stats.tendencia_labels | safe }};
+            const tendenciaValores = {{ stats.tendencia_valores | safe }};
+
+            new Chart(ctxTendencia, {
+                type: 'line',
+                data: {
+                    labels: tendenciaLabels,
+                    datasets: [{
+                        label: 'Agendamientos por Mes',
+                        data: tendenciaValores,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                        fill: true,
+                        tension: 0.3,
+                        borderWidth: 3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#10b981'
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        }
+                    }
+                }
+            });
+
+            // 4. Chart Marcas (Horizontal Bar)
+            const ctxMarcas = document.getElementById('chartMarcas').getContext('2d');
+            const marcasLabels = {{ stats.marcas_labels | safe }};
+            const marcasValores = {{ stats.marcas_valores | safe }};
+
+            new Chart(ctxMarcas, {
+                type: 'bar',
+                data: {
+                    labels: marcasLabels,
+                    datasets: [{
+                        label: 'Cantidad de Vehículos',
+                        data: marcasValores,
+                        backgroundColor: '#f59e0b',
+                        borderRadius: 8,
+                        maxBarThickness: 30
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    indexAxis: 'y',
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

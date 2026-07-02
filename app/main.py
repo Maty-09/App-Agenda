@@ -105,8 +105,7 @@ async def startup_event():
         if not tenant:
             nuevo_tenant = models.Tenant(
                 id="default",
-                nombre_empresa="Nexora Default",
-                dominio="default"
+                nombre_empresa="Nexora Default"
             )
             db.add(nuevo_tenant)
             db.commit()

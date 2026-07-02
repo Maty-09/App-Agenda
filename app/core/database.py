@@ -11,7 +11,8 @@ load_dotenv() # Load variables from .env
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Ajustamos path ya que ahora estamos en app/core/
 DB_PATH = BASE_DIR / "agendamientos.db"
 
-# Fallback to SQLite if DATABASE_URL is not set
+# Fallback to PostgreSQL (Supabase) if DATABASE_URL is not set in Render
+DEFAULT_PG_URL = "postgresql://***REMOVED***"
 SQLALCHEMY_DATABASE_URL = ***REMOVED***
 
 # Fix postgres:// to postgresql:// if needed for SQLAlchemy

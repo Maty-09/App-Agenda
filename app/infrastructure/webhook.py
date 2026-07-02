@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Form, Request, Response
-from app.infrastructure.bot_logic import procesar_mensaje
+from app.infrastructure.bot_logic import generar_respuesta_bot
 from app.infrastructure.twilio_service import generar_respuesta_twilio
 
 router = APIRouter()
@@ -18,9 +18,9 @@ async def webhook_whatsapp(
     numero_remitente = From.replace("whatsapp:", "")
     mensaje_texto = Body
 
-    # 2. Procesar la lógica del negocio (Máquina de estados y delay humano)
-    # Aquí es donde ocurre la magia: determinamos qué responder
-    respuesta_texto = await procesar_mensaje(numero_remitente, mensaje_texto)
+    # 2. Procesar la lógica del negocio con Inteligencia Artificial
+    # Aquí es donde ocurre la magia: la IA determina qué responder
+    respuesta_texto = await generar_respuesta_bot(texto=mensaje_texto, numero_remitente=numero_remitente)
 
     # 3. Formatear la respuesta para que Twilio la entienda
     # Twilio espera un XML (TwiML) en la respuesta HTTP

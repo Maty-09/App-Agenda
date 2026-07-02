@@ -12,11 +12,19 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger # Cambiamos a Interval para la prueba
 
 # Importaciones locales
-from .database import SessionLocal, engine, Base
-from . import models
-from app.routes import cliente, admin
+from app.core.database import SessionLocal, engine, Base
+from app.core import models
+from app.domain_agenda import router_cliente as cliente
+from app.domain_crm import router_admin as admin
+from app.domain_crm import router_clientes as admin_crm
+from app.domain_team import router_team as admin_team
+from app.domain_ai import router_ai as admin_ai
 # IMPORTANTE: Cambiamos el import para usar la función que está en email_utils
-from app.utils.email_utils import procesar_flujo_automatico 
+from app.infrastructure.email_utils import procesar_flujo_automatico 
+
+# Importaciones del Bot de WhatsApp
+from app.infrastructure.webhook import router as webhook_router
+from app.infrastructure.confirmation import router as confirmation_router
 
 # Configuración de logs
 logging.basicConfig(level=logging.INFO)
@@ -128,7 +136,14 @@ def shutdown_event():
 
 # Registro de rutas
 app.include_router(admin.router, prefix="/admin", tags=["Administrador"])
+app.include_router(admin_crm.router, tags=["CRM"])
+app.include_router(admin_team.router, tags=["Team"])
+app.include_router(admin_ai.router, tags=["AI"])
 app.include_router(cliente.router, prefix="/cliente", tags=["Cliente"])
+
+# Registro de rutas del Bot de WhatsApp
+app.include_router(webhook_router, prefix="/api", tags=["Webhook Twilio"])
+app.include_router(confirmation_router, prefix="/api", tags=["Confirmación Web"])
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Directorio de Clientes | Nexora CRM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans min-h-screen p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 border-b border-slate-200 gap-4">
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-white rounded-xl shadow-sm border border-slate-100 text-blue-600">
+                    <i class="fas fa-users text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-extrabold tracking-tight text-slate-900">Directorio de Clientes</h1>
+                    <p class="text-sm font-medium text-slate-500 mt-1">Gestión CRM y ficha única</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/admin/panel" class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:text-slate-900 transition flex items-center gap-2 shadow-sm">
+                    <i class="fas fa-calendar-alt"></i> Calendario
+                </a>
+                <a href="/admin/dashboard" class="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition flex items-center gap-2 shadow-sm">
+                    <i class="fas fa-chart-line"></i> Dashboard
+                </a>
+            </div>
+        </header>
+
+        <!-- Search Bar -->
+        <div class="mb-6">
+            <form method="GET" action="/admin/clientes" class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i class="fas fa-search text-slate-400"></i>
+                </div>
+                <input type="text" name="search" value="{{ search or '' }}" class="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm shadow-sm transition" placeholder="Buscar por Nombre, RUT, Correo, Teléfono...">
+            </form>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                            <th class="p-4">Cliente</th>
+                            <th class="p-4">RUT</th>
+                            <th class="p-4">Contacto</th>
+                            <th class="p-4 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for cliente in clientes %}
+                        <tr class="hover:bg-slate-50 transition cursor-default">
+                            <td class="p-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">
+                                        {{ cliente.nombre[0] }}{{ cliente.apellido[0] }}
+                                    </div>
+                                    <div>
+                                        <div class="font-bold text-slate-900">{{ cliente.nombre }} {{ cliente.apellido }}</div>
+                                        <div class="text-xs text-slate-500">Agregado desde: {{ cliente.etiquetas }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="p-4 text-sm font-medium text-slate-600">{{ cliente.rut }}</td>
+                            <td class="p-4">
+                                <div class="text-sm font-medium text-slate-900">{{ cliente.correo }}</div>
+                                <div class="text-xs text-slate-500">+56 {{ cliente.telefono }}</div>
+                            </td>
+                            <td class="p-4 text-center">
+                                <a href="/admin/clientes/{{ cliente.id }}" class="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 font-semibold text-sm rounded-lg transition">
+                                    <i class="fas fa-eye"></i> Ver Perfil
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="p-8 text-center text-slate-500">
+                                <div class="flex flex-col items-center justify-center">
+                                    <i class="fas fa-folder-open text-4xl mb-3 text-slate-300"></i>
+                                    <p>No se encontraron clientes.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

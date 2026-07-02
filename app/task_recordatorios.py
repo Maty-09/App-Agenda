@@ -1,7 +1,7 @@
 from datetime import timedelta
-from app.database import SessionLocal
+from app.core.database import SessionLocal
 from app.models import Agendamiento, get_now_chile
-from app.utils.email_utils import enviar_email_base
+from app.infrastructure.email_utils import enviar_email_base
 def enviar_correo_recordatorio(cliente_email, nombre, fecha, hora, patente):
     """Envía el recordatorio de cita para el día siguiente. Reutiliza enviar_email_base."""
     asunto = f"⏰ Recordatorio: Tu mantención es mañana ({patente})"

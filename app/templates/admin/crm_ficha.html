@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ficha: {{ cliente.nombre }} {{ cliente.apellido }} | Nexora CRM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans min-h-screen p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 border-b border-slate-200 gap-4">
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-white rounded-xl shadow-sm border border-slate-100 text-blue-600">
+                    <i class="fas fa-address-card text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-extrabold tracking-tight text-slate-900">Ficha del Cliente</h1>
+                    <p class="text-sm font-medium text-slate-500 mt-1">Perfil y Timeline</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/admin/clientes" class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:text-slate-900 transition flex items-center gap-2 shadow-sm">
+                    <i class="fas fa-arrow-left"></i> Volver al Directorio
+                </a>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Panel Izquierdo: Datos del Cliente -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Info Card -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="h-24 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+                    <div class="px-6 pb-6 relative">
+                        <div class="flex justify-center -mt-12 mb-4">
+                            <div class="w-24 h-24 rounded-full border-4 border-white bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-3xl shadow-sm">
+                                {{ cliente.nombre[0] }}{{ cliente.apellido[0] }}
+                            </div>
+                        </div>
+                        <div class="text-center mb-6">
+                            <h2 class="text-xl font-bold text-slate-900">{{ cliente.nombre }} {{ cliente.apellido }}</h2>
+                            <p class="text-sm text-slate-500 mt-1 font-mono">RUT: {{ cliente.rut }}</p>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <div class="flex items-start gap-3">
+                                <i class="fas fa-envelope text-slate-400 mt-1 w-5 text-center"></i>
+                                <div>
+                                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Correo</p>
+                                    <a href="mailto:{{ cliente.correo }}" class="text-sm font-medium text-blue-600 hover:underline">{{ cliente.correo }}</a>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <i class="fab fa-whatsapp text-green-500 mt-1 w-5 text-center text-lg"></i>
+                                <div>
+                                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Teléfono</p>
+                                    <a href="https://wa.me/56{{ cliente.telefono }}" target="_blank" class="text-sm font-medium text-slate-900 hover:text-green-600 transition">+56 {{ cliente.telefono }}</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Añadir Nota Form -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <i class="fas fa-sticky-note text-yellow-500"></i> Nueva Nota
+                    </h3>
+                    <form action="/admin/clientes/{{ cliente.id }}/notas" method="POST">
+                        <textarea name="texto_nota" rows="3" required class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-sm mb-4" placeholder="Escribe una nota interna para este cliente..."></textarea>
+                        <button type="submit" class="w-full py-2.5 bg-slate-900 text-white font-bold rounded-xl text-sm hover:bg-slate-800 transition shadow-sm">
+                            Guardar Nota
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Tareas Pendientes -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                            <i class="fas fa-tasks text-purple-500"></i> Tareas Activas
+                        </h3>
+                    </div>
+                    <div class="space-y-3">
+                        {% for tarea in cliente.tareas if tarea.estado == 'PENDIENTE' %}
+                        <div class="p-3 bg-purple-50 border border-purple-100 rounded-xl">
+                            <h4 class="text-sm font-bold text-slate-900">{{ tarea.titulo }}</h4>
+                            <div class="flex justify-between items-center mt-2">
+                                <span class="text-xs font-medium text-purple-700 bg-purple-100 px-2 py-1 rounded">PENDIENTE</span>
+                                <form action="/admin/tareas/{{ tarea.id }}/completar" method="POST">
+                                    <button type="submit" class="text-xs font-bold text-green-600 hover:text-green-700"><i class="fas fa-check"></i> Completar</button>
+                                </form>
+                            </div>
+                        </div>
+                        {% else %}
+                        <p class="text-sm text-slate-500 italic">No hay tareas pendientes.</p>
+                        {% endfor %}
+                    </div>
+                    
+                    <form action="/admin/tareas" method="POST" class="mt-4">
+                        <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
+                        <div class="flex gap-2">
+                            <input type="text" name="titulo" required class="flex-1 min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-purple-400" placeholder="Nueva tarea rápida...">
+                            <button type="submit" class="px-3 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition"><i class="fas fa-plus"></i></button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Panel Derecho: Timeline -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
+                    <h3 class="text-lg font-bold text-slate-900 mb-8 flex items-center gap-3">
+                        <div class="p-2 bg-blue-50 rounded-lg text-blue-600">
+                            <i class="fas fa-stream"></i>
+                        </div>
+                        Historial de Actividad
+                    </h3>
+
+                    <div class="relative border-l-2 border-slate-100 ml-3 md:ml-4 space-y-8 pb-4">
+                        {% for evento in timeline %}
+                        <div class="relative pl-8 md:pl-10">
+                            <!-- Icono Timeline -->
+                            <div class="absolute -left-[17px] top-1 w-8 h-8 rounded-full border-4 border-white flex items-center justify-center shadow-sm
+                                {% if evento.tipo == 'RESERVA' %}bg-blue-500 text-white
+                                {% elif evento.tipo == 'NOTA' %}bg-yellow-400 text-white
+                                {% else %}bg-green-500 text-white{% endif %}">
+                                <i class="fas text-xs
+                                    {% if evento.tipo == 'RESERVA' %}fa-calendar-check
+                                    {% elif evento.tipo == 'NOTA' %}fa-comment-alt
+                                    {% else %}fa-check{% endif %}"></i>
+                            </div>
+
+                            <!-- Contenido del Evento -->
+                            <div class="bg-slate-50 border border-slate-100 rounded-xl p-4 md:p-5 hover:bg-white hover:border-slate-200 transition shadow-sm">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                                    <span class="text-xs font-bold uppercase tracking-wider
+                                        {% if evento.tipo == 'RESERVA' %}text-blue-600
+                                        {% elif evento.tipo == 'NOTA' %}text-yellow-600
+                                        {% else %}text-green-600{% endif %}">
+                                        {{ evento.tipo }}
+                                    </span>
+                                    <span class="text-xs font-medium text-slate-400">{{ evento.fecha.strftime('%d %b %Y, %H:%M') }}</span>
+                                </div>
+                                <div class="text-slate-800 text-sm">
+                                    {% if evento.tipo == 'RESERVA' %}
+                                        <p class="font-semibold text-base mb-1">Agendamiento Confirmado</p>
+                                        <p class="text-slate-500 mt-1">ID de Reserva: #{{ evento.meta.agendamiento_id }}</p>
+                                        <p class="text-slate-500">Para la fecha: <span class="font-medium text-slate-700">{{ evento.meta.fecha }}</span></p>
+                                    {% elif evento.tipo == 'NOTA' %}
+                                        <p class="italic text-slate-700 whitespace-pre-wrap">"{{ evento.meta.texto }}"</p>
+                                    {% else %}
+                                        <p>Acción registrada en el sistema.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="pl-8 pt-4">
+                            <p class="text-slate-400 text-sm italic">No hay historial registrado para este cliente aún.</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>

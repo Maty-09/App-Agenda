@@ -16,3 +16,4 @@ pytz
 openpyxl
 apscheduler
 vobject
+email-validator

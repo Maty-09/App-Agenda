@@ -100,6 +100,17 @@ async def startup_event():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
+        # Asegurar que el tenant 'default' exista para evitar IntegrityError
+        tenant = db.query(models.Tenant).filter(models.Tenant.id == "default").first()
+        if not tenant:
+            nuevo_tenant = models.Tenant(
+                id="default",
+                nombre_empresa="Nexora Default",
+                dominio="default"
+            )
+            db.add(nuevo_tenant)
+            db.commit()
+            
         inicializar_campos_sistema(db)
     finally:
         db.close()

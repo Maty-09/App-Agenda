@@ -27,7 +27,7 @@ from app.infrastructure.webhook import router as webhook_router
 from app.infrastructure.confirmation import router as confirmation_router
 
 # Autenticación JWT API
-from app.api.routers import auth
+from app.api.routers import auth, tareas
 
 # Configuración de logs
 logging.basicConfig(level=logging.INFO)
@@ -160,6 +160,8 @@ app.include_router(confirmation_router, prefix="/api", tags=["Confirmación Web"
 
 # Autenticación API REST (Nuevo Frontend)
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
+app.include_router(tareas.router, prefix="/api/v1/tareas", tags=["Tareas Kanban"])
+app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard API"])
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 

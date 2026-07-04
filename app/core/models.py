@@ -81,8 +81,14 @@ class Tarea(Base):
     cliente_id = Column(Integer, ForeignKey("clientes.id", ondelete="CASCADE"), nullable=True)
     titulo = Column(String, nullable=False)
     descripcion = Column(String, nullable=True)
-    estado = Column(String, default="PENDIENTE") # PENDIENTE, COMPLETADA
+    estado = Column(String, default="Pendiente") # Pendiente, En progreso, En revisión, Completada, Cancelada
+    prioridad = Column(String, default="Media") # Baja, Media, Alta, Crítica
+    observaciones = Column(String, nullable=True)
+    comentarios = Column(String, nullable=True) # Podríamos usar JSON o texto largo
+    
     fecha_limite = Column(DateTime, nullable=True)
+    fecha_inicio = Column(DateTime, nullable=True)
+    fecha_cierre = Column(DateTime, nullable=True)
     creado_en = Column(DateTime, default=get_now_chile)
 
     asignado = relationship("Usuario", back_populates="tareas_asignadas")

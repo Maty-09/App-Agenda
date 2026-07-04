@@ -33,3 +33,42 @@ class AgendamientoOut(AgendamientoBase):
 
     class Config:
         from_attributes = True
+
+# --- Tareas (Kanban) ---
+from typing import Optional
+
+class TareaBase(BaseModel):
+    titulo: str
+    descripcion: Optional[str] = None
+    estado: str = "Pendiente"
+    prioridad: str = "Media"
+    observaciones: Optional[str] = None
+    comentarios: Optional[str] = None
+    fecha_limite: Optional[datetime] = None
+    fecha_inicio: Optional[datetime] = None
+    fecha_cierre: Optional[datetime] = None
+    asignado_a: Optional[int] = None
+    cliente_id: Optional[int] = None
+
+class TareaCreate(TareaBase):
+    pass
+
+class TareaUpdate(BaseModel):
+    titulo: Optional[str] = None
+    descripcion: Optional[str] = None
+    estado: Optional[str] = None
+    prioridad: Optional[str] = None
+    observaciones: Optional[str] = None
+    comentarios: Optional[str] = None
+    fecha_limite: Optional[datetime] = None
+    fecha_inicio: Optional[datetime] = None
+    fecha_cierre: Optional[datetime] = None
+    asignado_a: Optional[int] = None
+
+class TareaOut(TareaBase):
+    id: int
+    tenant_id: str
+    creado_en: datetime
+
+    class Config:
+        from_attributes = True

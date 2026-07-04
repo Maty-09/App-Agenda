@@ -26,6 +26,9 @@ from app.infrastructure.email_utils import procesar_flujo_automatico
 from app.infrastructure.webhook import router as webhook_router
 from app.infrastructure.confirmation import router as confirmation_router
 
+# Autenticación JWT API
+from app.api.routers import auth
+
 # Configuración de logs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -154,6 +157,9 @@ app.include_router(cliente.router, prefix="/cliente", tags=["Cliente"])
 # Registro de rutas del Bot de WhatsApp
 app.include_router(webhook_router, prefix="/api", tags=["Webhook Twilio"])
 app.include_router(confirmation_router, prefix="/api", tags=["Confirmación Web"])
+
+# Autenticación API REST (Nuevo Frontend)
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 

@@ -177,6 +177,13 @@ app.include_router(suscripcion.router, prefix="/api/v1/suscripcion", tags=["Mone
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
+from fastapi.responses import RedirectResponse
+
+@app.get("/")
+def read_root():
+    # Redirigir automáticamente a la pantalla de login del SaaS
+    return RedirectResponse(url="/admin/login")
+
 @app.on_event("startup")
 async def debug_routes():
     print("\n--- RUTAS CARGADAS ---")

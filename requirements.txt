@@ -17,3 +17,5 @@ openpyxl
 apscheduler
 vobject
 email-validator
+passlib[bcrypt]
+python-jose[cryptography]

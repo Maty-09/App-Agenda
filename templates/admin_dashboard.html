@@ -46,12 +46,12 @@
         <!-- Header -->
         <header class="flex flex-col sm:flex-row sm:items-center justify-between pb-8 mb-8 border-b border-slate-200 gap-4">
             <div class="flex items-center gap-4">
-                <div class="p-3 bg-white rounded-2xl shadow-sm border border-slate-100 text-slate-500">
-                    <i class="fas fa-chart-pie text-2xl text-blue-600"></i>
+                <div class="p-3 bg-blue-600 rounded-2xl shadow-md border border-blue-500 text-white flex items-center justify-center h-14 w-14">
+                    <i class="fas fa-calendar-check text-2xl"></i>
                 </div>
                 <div>
-                    <h1 class="text-3xl font-extrabold tracking-tighter text-slate-950">Panel de Control <span class="text-slate-400 font-medium">/ Estadísticas</span></h1>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Resumen de rendimiento y adquisición</p>
+                    <h1 class="text-3xl font-extrabold tracking-tighter text-slate-950">Nexora <span class="text-slate-400 font-medium">/ Dashboard</span></h1>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Centro de Control Operativo</p>
                 </div>
             </div>
             <div class="flex items-center gap-3">
@@ -67,76 +67,311 @@
             </div>
         </header>
 
-        <!-- KPI Cards Grid -->
-        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+        <!-- Filtros Globales (Mejora 5) -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-filter text-slate-400"></i>
+                <span class="text-sm font-bold text-slate-700">Filtros Globales:</span>
+            </div>
             
-            <!-- Card 1: Total -->
-            <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
-                <div class="flex items-center justify-between mb-4">
-                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Agendados</span>
-                    <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                        <i class="fas fa-book-open text-sm"></i>
+            <form method="GET" action="/admin/dashboard" class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-semibold text-slate-500">Desde</label>
+                    <input type="date" name="desde" value="{{ request.query_params.get('desde', '') }}" class="text-sm border-slate-200 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50">
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-semibold text-slate-500">Hasta</label>
+                    <input type="date" name="hasta" value="{{ request.query_params.get('hasta', '') }}" class="text-sm border-slate-200 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50">
+                </div>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-sm">
+                    Aplicar
+                </button>
+                <a href="/admin/dashboard" class="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-200 transition shadow-sm">
+                    Limpiar
+                </a>
+            </form>
+            
+            <div class="flex items-center gap-2 mt-2 md:mt-0">
+                <button onclick="setRangoFechas('hoy')" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition">Hoy</button>
+                <button onclick="setRangoFechas('semana')" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition">Semana</button>
+                <button onclick="setRangoFechas('mes')" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition">Mes</button>
+            </div>
+        </div>
+
+
+        <!-- KPI Cards Grid -->
+        <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+            
+            <!-- Card: Hoy -->
+            <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Agendas Hoy</span>
+                    <div class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <i class="fas fa-calendar-day text-xs"></i>
                     </div>
                 </div>
                 <div>
-                    <h3 class="text-3xl font-black text-slate-900 leading-none mb-1">{{ stats.total }}</h3>
-                    <span class="text-[10px] text-slate-400 font-semibold">Citas registradas</span>
+                    <h3 class="text-2xl font-black text-slate-900 leading-none mb-1">{{ stats.agendas_hoy }}</h3>
                 </div>
             </div>
 
-            <!-- Card 2: Confirmados -->
-            <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
-                <div class="flex items-center justify-between mb-4">
-                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Confirmados</span>
-                    <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                        <i class="fas fa-check-circle text-sm"></i>
+            <!-- Card: Semana -->
+            <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Esta Semana</span>
+                    <div class="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <i class="fas fa-calendar-week text-xs"></i>
                     </div>
                 </div>
                 <div>
-                    <h3 class="text-3xl font-black text-emerald-600 leading-none mb-1">{{ stats.confirmadas }}</h3>
-                    <span class="text-[10px] text-emerald-500 font-semibold">Citas aseguradas</span>
+                    <h3 class="text-2xl font-black text-slate-900 leading-none mb-1">{{ stats.agendas_semana }}</h3>
                 </div>
             </div>
 
-            <!-- Card 3: Pendientes -->
-            <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
-                <div class="flex items-center justify-between mb-4">
-                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Pendientes</span>
+            <!-- Card: Mes -->
+            <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Este Mes</span>
+                    <div class="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                        <i class="fas fa-calendar-alt text-xs"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-2xl font-black text-slate-900 leading-none mb-1">{{ stats.agendas_mes }}</h3>
+                </div>
+            </div>
+
+            <!-- Card: Confirmados -->
+            <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Confirmadas</span>
+                    <div class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <i class="fas fa-check-circle text-xs"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-2xl font-black text-emerald-600 leading-none mb-1">{{ stats.confirmadas }}</h3>
+                </div>
+            </div>
+
+            <!-- Card: Pendientes -->
+            <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pendientes</span>
+                    <div class="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                        <i class="fas fa-clock text-xs"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-2xl font-black text-amber-500 leading-none mb-1">{{ stats.pendientes }}</h3>
+                </div>
+            </div>
+
+            <!-- Card: Cancelados -->
+            <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Canceladas</span>
+                    <div class="w-7 h-7 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
+                        <i class="fas fa-ban text-xs"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-2xl font-black text-red-500 leading-none mb-1">{{ stats.canceladas }}</h3>
+                </div>
+            </div>
+
+            <!-- Card: Tareas Activas -->
+            <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tareas Activas</span>
+                    <div class="w-7 h-7 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center">
+                        <i class="fas fa-tasks text-xs"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-2xl font-black text-cyan-600 leading-none mb-1">{{ stats.tareas_activas }}</h3>
+                </div>
+            </div>
+
+            <!-- Card: Tareas Vencidas -->
+            <div class="bg-gradient-to-br from-red-600 to-rose-700 p-5 rounded-3xl text-white shadow-md card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[10px] font-bold text-red-100 uppercase tracking-wider">Tareas Vencidas</span>
+                    <div class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center">
+                        <i class="fas fa-exclamation-triangle text-xs"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-2xl font-black text-white leading-none mb-1">{{ stats.tareas_vencidas }}</h3>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Top 10 Tareas Urgentes (Fase 3: Prominencia) -->
+        <section class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm mb-8">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-inner">
+                    <i class="fas fa-tasks text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-slate-900">Tareas Urgentes</h3>
+                    <p class="text-xs text-slate-500 font-medium mt-0.5">Gestión operativa prioritaria (Top 10)</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {% for tarea in listas.top_tareas %}
+                <div class="p-4 bg-slate-50 rounded-2xl border {{ 'border-red-300 shadow-sm' if tarea.prioridad == 'Crítica' else ('border-amber-200' if tarea.prioridad == 'Alta' else 'border-slate-100') }} relative overflow-hidden group hover:shadow-md transition">
+                    {% if tarea.prioridad == 'Crítica' %}
+                        <div class="absolute top-0 right-0 w-16 h-16 bg-red-100 rounded-bl-full -mr-8 -mt-8 opacity-50"></div>
+                    {% endif %}
+                    <div class="relative z-10">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider
+                                {{ 'bg-red-500 text-white shadow-sm shadow-red-200' if tarea.prioridad == 'Crítica' 
+                                else ('bg-amber-100 text-amber-700' if tarea.prioridad == 'Alta' 
+                                else ('bg-blue-100 text-blue-700' if tarea.prioridad == 'Media' 
+                                else 'bg-slate-200 text-slate-700')) }}">
+                                {{ tarea.prioridad }}
+                            </span>
+                            <span class="text-[10px] font-bold uppercase text-slate-400">{{ tarea.estado }}</span>
+                        </div>
+                        <p class="text-sm font-bold text-slate-800 leading-snug mb-3 line-clamp-2" title="{{ tarea.titulo }}">{{ tarea.titulo }}</p>
+                        
+                        <div class="flex items-center gap-2 mt-auto">
+                            <i class="fas fa-calendar-times {{ 'text-red-500' if tarea.prioridad == 'Crítica' else 'text-slate-400' }} text-xs"></i>
+                            <p class="text-[11px] font-bold {{ 'text-red-600' if tarea.prioridad == 'Crítica' else 'text-slate-600' }}">
+                                {{ tarea.fecha_limite.strftime('%d-%m-%Y') if tarea.fecha_limite else 'Sin límite' }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="col-span-full p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl">
+                    <div class="w-16 h-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i class="fas fa-check-double text-2xl"></i>
+                    </div>
+                    <h4 class="text-slate-500 font-bold">¡Todo bajo control!</h4>
+                    <p class="text-sm text-slate-400">No hay tareas urgentes activas en este momento.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Control de Disponibilidad Futura (Mejora 7) -->
+        <section class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm mb-8">
+            <div class="flex items-center gap-3 mb-6">
+                <i class="fas fa-calendar-check text-slate-400 text-lg"></i>
+                <h3 class="text-lg font-bold text-slate-900">Disponibilidad Futura</h3>
+                <span class="ml-auto text-xs font-semibold bg-slate-100 text-slate-500 py-1 px-3 rounded-full">Capacidad Diaria: 8</span>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {% set rangos = [
+                    {'titulo': 'Próximos 7 días', 'datos': stats.capacidad.d7, 'color': 'blue'},
+                    {'titulo': 'Próximos 15 días', 'datos': stats.capacidad.d15, 'color': 'indigo'},
+                    {'titulo': 'Próximos 30 días', 'datos': stats.capacidad.d30, 'color': 'purple'},
+                    {'titulo': 'Próximos 60 días', 'datos': stats.capacidad.d60, 'color': 'emerald'}
+                ] %}
+                
+                {% for rango in rangos %}
+                <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <h4 class="text-sm font-bold text-slate-700 mb-4">{{ rango.titulo }}</h4>
+                    <div class="flex justify-between items-end mb-2">
+                        <div>
+                            <span class="text-2xl font-black text-slate-900">{{ rango.datos.disponible }}</span>
+                            <span class="text-xs text-slate-500 font-medium">cupos libres</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-sm font-bold {{ 'text-red-500' if rango.datos.porcentaje > 80 else 'text-emerald-500' }}">{{ rango.datos.porcentaje }}%</span>
+                        </div>
+                    </div>
+                    <!-- Barra de progreso -->
+                    <div class="w-full bg-slate-200 rounded-full h-2 mb-2">
+                        <div class="bg-{{ rango.color }}-500 h-2 rounded-full" style="width: {{ rango.datos.porcentaje }}%"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] font-semibold">
+                        <span class="text-slate-400">Ocupados: {{ rango.datos.ocupado }}</span>
+                        <span class="text-slate-400">Estado: {{ rango.datos.estado }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Agendas Panels Grid -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            
+            <!-- Pendientes -->
+            <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <div class="flex items-center gap-3 mb-4">
                     <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
                         <i class="fas fa-clock text-sm"></i>
                     </div>
+                    <h3 class="text-lg font-bold text-slate-900">Pendientes</h3>
                 </div>
-                <div>
-                    <h3 class="text-3xl font-black text-amber-500 leading-none mb-1">{{ stats.pendientes }}</h3>
-                    <span class="text-[10px] text-amber-500 font-semibold">En espera de confirmación</span>
+                <div class="space-y-3">
+                    {% for cita in listas.pendientes %}
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
+                        <div>
+                            <p class="text-sm font-bold text-slate-800">{{ cita.nombre }} {{ cita.apellido }}</p>
+                            <p class="text-xs text-slate-500">{{ cita.fecha_inicio.strftime('%d-%m-%Y %H:%M') if cita.fecha_inicio else 'Sin fecha' }}</p>
+                            <p class="text-[10px] text-slate-400 mt-1 italic bg-amber-50 p-1 rounded"><i class="fas fa-info-circle mr-1 text-amber-500"></i> Razón: {{ cita.razon_estado if cita.razon_estado else 'En espera de confirmación' }}</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-xs text-slate-400 italic">No hay citas pendientes recientes.</p>
+                    {% endfor %}
                 </div>
             </div>
 
-            <!-- Card 4: Cancelados -->
-            <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
-                <div class="flex items-center justify-between mb-4">
-                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cancelados</span>
+            <!-- Confirmadas -->
+            <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <i class="fas fa-check-circle text-sm"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900">Confirmadas</h3>
+                </div>
+                <div class="space-y-3">
+                    {% for cita in listas.confirmadas %}
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
+                        <div>
+                            {% if cita.cliente_id %}
+                                <a href="/admin/clientes/{{ cita.cliente_id }}" class="text-sm font-bold text-blue-600 hover:underline hover:text-blue-800 transition" title="Ver ficha e historial">{{ cita.nombre }} {{ cita.apellido }}</a>
+                            {% else %}
+                                <a href="/admin/clientes?search={{ cita.rut or cita.nombre }}" class="text-sm font-bold text-blue-600 hover:underline hover:text-blue-800 transition" title="Buscar cliente">{{ cita.nombre }} {{ cita.apellido }}</a>
+                            {% endif %}
+                            <p class="text-xs text-slate-500">{{ cita.fecha_inicio.strftime('%d-%m-%Y %H:%M') if cita.fecha_inicio else 'Sin fecha' }}</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-xs text-slate-400 italic">No hay citas confirmadas recientes.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Canceladas -->
+            <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <div class="flex items-center gap-3 mb-4">
                     <div class="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
                         <i class="fas fa-ban text-sm"></i>
                     </div>
+                    <h3 class="text-lg font-bold text-slate-900">Canceladas</h3>
                 </div>
-                <div>
-                    <h3 class="text-3xl font-black text-red-500 leading-none mb-1">{{ stats.canceladas }}</h3>
-                    <span class="text-[10px] text-red-400 font-semibold">Citas descartadas</span>
-                </div>
-            </div>
-
-            <!-- Card 5: Tasa de Confirmación -->
-            <div class="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-3xl text-white shadow-md card-glow flex flex-col justify-between">
-                <div class="flex items-center justify-between mb-4">
-                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Confirmaciones</span>
-                    <div class="w-8 h-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
-                        <i class="fas fa-percentage text-sm"></i>
+                <div class="space-y-3">
+                    {% for cita in listas.canceladas %}
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
+                        <div>
+                            <p class="text-sm font-bold text-slate-800">{{ cita.nombre }} {{ cita.apellido }}</p>
+                            <p class="text-xs text-slate-500">{{ cita.fecha_inicio.strftime('%d-%m-%Y %H:%M') if cita.fecha_inicio else 'Sin fecha' }}</p>
+                            <p class="text-[10px] text-slate-400 mt-1 italic bg-red-50 p-1 rounded"><i class="fas fa-exclamation-triangle mr-1 text-red-500"></i> Razón: {{ cita.razon_estado if cita.razon_estado else 'Cancelación no especificada' }}</p>
+                        </div>
                     </div>
-                </div>
-                <div>
-                    <h3 class="text-3xl font-black text-white leading-none mb-1">{{ stats.tasa_confirmacion }}%</h3>
-                    <span class="text-[10px] text-slate-300 font-semibold">Tasa de éxito de citas activas</span>
+                    {% else %}
+                    <p class="text-xs text-slate-400 italic">No hay citas canceladas recientes.</p>
+                    {% endfor %}
                 </div>
             </div>
 
@@ -374,6 +609,12 @@
                     document.getElementById(typingId).remove();
                     history.innerHTML += `<div class="bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-none self-start max-w-[85%] text-slate-700 shadow-sm">${data.reply}</div>`;
                     history.scrollTop = history.scrollHeight;
+                    
+                    if (data.agendado) {
+                        history.innerHTML += `<div class="text-center text-xs text-emerald-600 my-2"><i class="fas fa-check-circle"></i> Cita agendada, actualizando panel...</div>`;
+                        history.scrollTop = history.scrollHeight;
+                        setTimeout(() => window.location.reload(), 2000);
+                    }
                 });
         });
     </script>
@@ -506,7 +747,36 @@
                     }
                 }
             });
+            });
         });
+
+        // Lógica de Filtros por Fechas (Mejora 5)
+        function setRangoFechas(tipo) {
+            let hoy = new Date();
+            let desde = new Date();
+            let hasta = new Date();
+            
+            if (tipo === 'hoy') {
+                // Ya inicializadas en hoy
+            } else if (tipo === 'semana') {
+                let day = desde.getDay();
+                let diff = desde.getDate() - day + (day == 0 ? -6:1); // Ajustar si es domingo
+                desde = new Date(desde.setDate(diff));
+                hasta = new Date(desde);
+                hasta.setDate(hasta.getDate() + 6);
+            } else if (tipo === 'mes') {
+                desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+                hasta = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+            }
+            
+            // Format YYYY-MM-DD local timezone
+            const format = (d) => {
+                const z = (n) => ('0' + n).slice(-2);
+                return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
+            };
+            
+            window.location.href = `/admin/dashboard?desde=${format(desde)}&hasta=${format(hasta)}`;
+        }
     </script>
 </body>
 

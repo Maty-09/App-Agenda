@@ -37,6 +37,33 @@ def get_db():
     finally:
         db.close()
 
+# =============================
+#     SECURITY & JWT
+# =============================
+from jose import jwt, JWTError
+from datetime import datetime, timedelta
+from passlib.context import CryptContext
+from fastapi import HTTPException, status
+from app.core import models
+
+SECRET_KEY = ***REMOVED***
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 1 día
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
 
 # =============================
 #     LOGIN / LOGOUT
@@ -44,37 +71,60 @@ def get_db():
 
 @router.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
-    # Cambia la línea 48 por esto:
     return templates.TemplateResponse("admin_login.html", {"request": request})
     
 @router.post("/login")
-def login(request: Request, username: str = Form(...), password: str = Form(...)):
-    if username == ADMIN_USER and password == ADMIN_PASS:
-        response = RedirectResponse(url="/admin/panel", status_code=HTTP_303_SEE_OTHER)
-        response.set_cookie(key="admin_session", value="valid")
-        return response
-
-    return templates.TemplateResponse("admin_login.html", {
-        "request": request,
-        "error": "Credenciales inválidas"
-    })
+def login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    usuario = db.query(models.Usuario).filter(models.Usuario.email == username).first()
+    
+    if not usuario or not verify_password(password, usuario.password_hash):
+        return templates.TemplateResponse("admin_login.html", {
+            "request": request,
+            "error": "Correo o contraseña incorrectos"
+        })
+        
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": usuario.email, "tenant_id": usuario.tenant_id, "rol": usuario.rol},
+        expires_delta=access_token_expires
+    )
+    
+    response = RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    response.set_cookie(key="access_token", value=f"Bearer {access_token}", httponly=True)
+    return response
 
 
 # =============================
-#     VERIFICAR LOGIN
+#     VERIFICAR LOGIN (SaaS)
 # =============================
 
-def verificar_login(request: Request) -> HTTPBasicCredentials:
-    """
-    Esta función DEBE retornar ALGO, no None.
-    Antes no retornaba nada → FastAPI rompía e insertaba 'undefined' en JS.
-    """
-    if request.cookies.get("admin_session") != "valid":
-        # Esto se ejecuta ANTES de entrar al endpoint
-        raise HTTPException(status_code=401, detail="No autorizado")
+class CurrentUser:
+    def __init__(self, email: str, tenant_id: str, rol: str):
+        self.email = email
+        self.tenant_id = tenant_id
+        self.rol = rol
 
-    # FastAPI exige retornar un valor para que la dependencia sea válida
-    return HTTPBasicCredentials(username="admin", password="***")
+def verificar_login(request: Request) -> CurrentUser:
+    """Verifica el JWT y retorna el contexto Multi-Tenant del usuario."""
+    token = request.cookies.get("access_token")
+    if not token or not token.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="No autenticado")
+        
+    token = token.split(" ")[1]
+    
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        tenant_id: str = payload.get("tenant_id")
+        rol: str = payload.get("rol")
+        
+        if email is None or tenant_id is None:
+            raise HTTPException(status_code=401, detail="Token inválido")
+            
+        return CurrentUser(email=email, tenant_id=tenant_id, rol=rol)
+        
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token expirado o inválido")
 
 
 # =============================
@@ -117,12 +167,12 @@ def panel_agendamientos(
                 models.Agendamiento.fecha_inicio >= fecha_inicio,
                 models.Agendamiento.fecha_inicio < fecha_fin
             )
-            print(f"  → Filtrando por fecha: {fecha}")
+            print(f"  -> Filtrando por fecha: {fecha}")
         except ValueError:
             pass
 
     agendamientos = query.order_by(models.Agendamiento.id).all()
-    print(f"  → RESULTADO: {len(agendamientos)} agendamientos encontrados")
+    print(f"  -> RESULTADO: {len(agendamientos)} agendamientos encontrados")
     for ag in agendamientos:
         print(f"    - ID {ag.id}: {ag.nombre} {ag.apellido} - {ag.fecha_inicio}")
     print("=" * 80)
@@ -839,16 +889,90 @@ async def agendar_emergencia(request: Request):
 @router.get("/dashboard", response_class=HTMLResponse)
 def get_dashboard(
     request: Request,
+    desde: str = Query(None),
+    hasta: str = Query(None),
     db: Session = Depends(get_db),
-    cred: HTTPBasicCredentials = Depends(verificar_login)
+    cred: CurrentUser = Depends(verificar_login)
 ):
+    # Filtro global base (Aislamiento de Tenant)
+    query = db.query(models.Agendamiento).filter(models.Agendamiento.tenant_id == cred.tenant_id)
+    if desde:
+        try:
+            d_dt = datetime.strptime(desde, "%Y-%m-%d")
+            query = query.filter(models.Agendamiento.fecha_inicio >= d_dt)
+        except ValueError:
+            pass
+    if hasta:
+        try:
+            h_dt = datetime.strptime(hasta, "%Y-%m-%d")
+            query = query.filter(models.Agendamiento.fecha_inicio <= h_dt.replace(hour=23, minute=59, second=59))
+        except ValueError:
+            pass
+
     # Total de citas
-    total_citas = db.query(models.Agendamiento).count()
+    total_citas = query.count()
     
+    tz = pytz.timezone('America/Santiago')
+    ahora = datetime.now(tz)
+    hoy_dt = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
+    fin_hoy_dt = hoy_dt + timedelta(days=1)
+    inicio_semana = hoy_dt - timedelta(days=hoy_dt.weekday())
+    inicio_mes = hoy_dt.replace(day=1)
+    
+    agendas_hoy = db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == cred.tenant_id,
+        models.Agendamiento.fecha_inicio >= hoy_dt.replace(tzinfo=None), 
+        models.Agendamiento.fecha_inicio < fin_hoy_dt.replace(tzinfo=None)
+    ).count()
+    
+    agendas_semana = db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == cred.tenant_id,
+        models.Agendamiento.fecha_inicio >= inicio_semana.replace(tzinfo=None)
+    ).count()
+    
+    agendas_mes = db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == cred.tenant_id,
+        models.Agendamiento.fecha_inicio >= inicio_mes.replace(tzinfo=None)
+    ).count()
+    
+    tareas_activas = db.query(models.Tarea).filter(
+        models.Tarea.tenant_id == cred.tenant_id,
+        models.Tarea.estado.notin_(["Completada", "Cancelada"])
+    ).count()
+    
+    tareas_vencidas = db.query(models.Tarea).filter(
+        models.Tarea.tenant_id == cred.tenant_id,
+        models.Tarea.fecha_limite < ahora.replace(tzinfo=None), 
+        models.Tarea.estado.notin_(["Completada", "Cancelada"])
+    ).count()
+    
+    # Capacidad Futura (Mejora 7)
+    CAPACIDAD_DIARIA = 8
+    def get_capacidad_rango(dias: int):
+        fecha_fin = hoy_dt + timedelta(days=dias)
+        dias_habiles = sum(1 for i in range(dias) if (hoy_dt + timedelta(days=i)).weekday() != 6)
+        capacidad_total = dias_habiles * CAPACIDAD_DIARIA
+        ocupado = db.query(models.Agendamiento).filter(
+            models.Agendamiento.fecha_inicio >= hoy_dt.replace(tzinfo=None),
+            models.Agendamiento.fecha_inicio < fecha_fin.replace(tzinfo=None),
+            models.Agendamiento.estado != "cancelado"
+        ).count()
+        disponible = max(0, capacidad_total - ocupado)
+        porcentaje = round((ocupado / capacidad_total) * 100, 1) if capacidad_total > 0 else 0
+        estado = "Saturado" if porcentaje > 80 else ("Media" if porcentaje > 50 else "Libre")
+        return {"disponible": disponible, "total": capacidad_total, "porcentaje": porcentaje, "estado": estado, "ocupado": ocupado}
+        
+    capacidad = {
+        "d7": get_capacidad_rango(7),
+        "d15": get_capacidad_rango(15),
+        "d30": get_capacidad_rango(30),
+        "d60": get_capacidad_rango(60),
+    }
+
     # Citas por estado
-    confirmadas = db.query(models.Agendamiento).filter(models.Agendamiento.estado == "confirmado").count()
-    pendientes = db.query(models.Agendamiento).filter(models.Agendamiento.estado == "pendiente").count()
-    canceladas = db.query(models.Agendamiento).filter(models.Agendamiento.estado == "cancelado").count()
+    confirmadas = query.filter(models.Agendamiento.estado == "confirmado").count()
+    pendientes = query.filter(models.Agendamiento.estado == "pendiente").count()
+    canceladas = query.filter(models.Agendamiento.estado == "cancelado").count()
     
     # Tasa de confirmación
     tasa_confirmacion = 0.0
@@ -856,7 +980,7 @@ def get_dashboard(
         tasa_confirmacion = round((confirmadas / (confirmadas + pendientes)) * 100, 1)
         
     # Distribución por subtipo (Taller/Local vs Domicilio)
-    servicios_raw = db.query(
+    servicios_raw = query.with_entities(
         models.Agendamiento.subtipo,
         func.count(models.Agendamiento.id)
     ).group_by(models.Agendamiento.subtipo).all()
@@ -869,7 +993,7 @@ def get_dashboard(
         servicios_valores.append(count)
         
     # Carga de trabajo por equipo (excluyendo cancelados)
-    equipos_raw = db.query(
+    equipos_raw = query.with_entities(
         models.Agendamiento.equipo,
         func.count(models.Agendamiento.id)
     ).filter(models.Agendamiento.estado != "cancelado").group_by(models.Agendamiento.equipo).all()
@@ -878,16 +1002,16 @@ def get_dashboard(
     equipos_valores = [count for _, count in equipos_raw]
     
     # Top 5 marcas de vehículos
-    marcas_raw = db.query(
+    marcas_raw = query.with_entities(
         models.Agendamiento.marca,
         func.count(models.Agendamiento.id)
-    ).filter(models.Agendamiento.marca != None, models.Agendamiento.marca != "").group_by(models.Agendamiento.marca).order_by(func.count(models.Agendamiento.id).desc()).limit(5).all()
+    ).filter(models.Agendamiento.marca != None).group_by(models.Agendamiento.marca).order_by(func.count(models.Agendamiento.id).desc()).limit(5).all()
     
     marcas_labels = [str(marca).upper().strip() for marca, _ in marcas_raw]
     marcas_valores = [count for _, count in marcas_raw]
     
     # Canales UTM
-    utm_raw = db.query(
+    utm_raw = query.with_entities(
         models.Agendamiento.utm_source_real,
         func.count(models.Agendamiento.id)
     ).group_by(models.Agendamiento.utm_source_real).order_by(func.count(models.Agendamiento.id).desc()).all()
@@ -896,9 +1020,9 @@ def get_dashboard(
     for utm, count in utm_raw:
         source = utm if utm else "Directo (Sin UTM)"
         utm_stats.append({"origen": source, "cantidad": count})
-        
+    
     # Datos mensuales para ver tendencia (Ajustado para PostgreSQL)
-    tendencia_raw = db.query(
+    tendencia_raw = query.with_entities(
         func.to_char(models.Agendamiento.fecha_inicio, 'YYYY-MM'),
         func.count(models.Agendamiento.id)
     ).group_by(func.to_char(models.Agendamiento.fecha_inicio, 'YYYY-MM')).order_by(func.to_char(models.Agendamiento.fecha_inicio, 'YYYY-MM').asc()).all()
@@ -906,7 +1030,36 @@ def get_dashboard(
     tendencia_labels = [str(mes) for mes, _ in tendencia_raw if mes]
     tendencia_valores = [count for _, count in tendencia_raw if count]
 
+    # Listas recientes para paneles
+    lista_confirmadas = query.filter(models.Agendamiento.estado == "confirmado").order_by(models.Agendamiento.fecha_inicio.desc()).limit(10).all()
+    lista_pendientes = query.filter(models.Agendamiento.estado == "pendiente").order_by(models.Agendamiento.fecha_inicio.desc()).limit(10).all()
+    lista_canceladas = query.filter(models.Agendamiento.estado == "cancelado").order_by(models.Agendamiento.fecha_inicio.desc()).limit(10).all()
+
+    # Top 10 Tareas Urgentes (Mejora 8)
+    tareas_activas_list = db.query(models.Tarea).filter(models.Tarea.estado.notin_(["Completada", "Cancelada"])).all()
+    
+    def puntaje_tarea(t):
+        p_score = {"Crítica": 4, "Alta": 3, "Media": 2, "Baja": 1}.get(t.prioridad, 0)
+        v_score = 0
+        if t.fecha_limite:
+            dias_restantes = (t.fecha_limite.replace(tzinfo=None) - ahora.replace(tzinfo=None)).days
+            if dias_restantes < 0:
+                v_score = 10  # Vencida! muy urgente
+            elif dias_restantes <= 2:
+                v_score = 5
+            elif dias_restantes <= 7:
+                v_score = 2
+        return p_score + v_score
+        
+    top_tareas = sorted(tareas_activas_list, key=puntaje_tarea, reverse=True)[:10]
+
     stats = {
+        "agendas_hoy": agendas_hoy,
+        "agendas_semana": agendas_semana,
+        "agendas_mes": agendas_mes,
+        "tareas_activas": tareas_activas,
+        "tareas_vencidas": tareas_vencidas,
+        "capacidad": capacidad,
         "total": total_citas,
         "confirmadas": confirmadas,
         "pendientes": pendientes,
@@ -923,7 +1076,14 @@ def get_dashboard(
         "tendencia_valores": json.dumps(tendencia_valores)
     }
 
+    listas = {
+        "confirmadas": lista_confirmadas,
+        "pendientes": lista_pendientes,
+        "canceladas": lista_canceladas,
+        "top_tareas": top_tareas
+    }
+
     return templates.TemplateResponse(
         name="admin_dashboard.html",
-        context={"request": request, "stats": stats}
+        context={"request": request, "stats": stats, "listas": listas}
     )

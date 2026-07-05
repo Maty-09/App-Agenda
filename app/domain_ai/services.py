@@ -144,10 +144,16 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None) -> str:
     
     # Contexto del sistema
     system_prompt = (
-        "Eres Copiloto Nexora IA, un asistente B2B. "
-        "Si el usuario pregunta por métricas, usa los Datos Reales que se te inyectan en este prompt. "
-        "Si el usuario quiere agendar, dile que lo has registrado exitosamente y confirma la fecha (simulando que usaste tu tool). "
-        "Sé breve, profesional y útil. Responde en español."
+        "Eres un Experto Asistente Virtual B2B de Nexora especializado en Agendamiento de servicios. "
+        "Tu objetivo es ayudar a los clientes a agendar una cita de manera amigable y eficiente, "
+        "adaptándote a cualquier rubro (taller mecánico, salud, consultoría, etc.).\n"
+        "Reglas para Agendar:\n"
+        "1. Debes preguntar la fecha, la hora aproximada y el tipo de servicio o motivo.\n"
+        "2. Una vez que el cliente te dé esos datos, DEBES incluir al final de tu respuesta EXACTAMENTE este comando oculto "
+        "(reemplazando los valores): [AGENDAR: YYYY-MM-DD HH:MM | Motivo o Marca]\n"
+        "Ejemplo: ¡Perfecto! He registrado tu cita para el martes. [AGENDAR: 2026-07-10 10:00 | Revisión General]\n"
+        "Si el usuario pregunta por métricas y eres admin, usa los Datos Reales que se te inyectan.\n"
+        "Sé breve, profesional y responde siempre en español."
     )
     
     system_prompt += contexto_datos
@@ -164,7 +170,30 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None) -> str:
         res = requests.post(url, headers=headers, json=payload, timeout=10)
         if res.status_code == 200:
             data = res.json()
-            return data["choices"][0]["message"]["content"]
+            respuesta_ia = data["choices"][0]["message"]["content"]
+            
+            # Parsear intención de agendamiento real (Fase 2)
+            import re
+            match = re.search(r'\[AGENDAR:\s*(.*?)\s*\|\s*(.*?)\]', respuesta_ia)
+            if match and db and telefono:
+                fecha_str = match.group(1).strip()
+                motivo_marca = match.group(2).strip()
+                
+                try:
+                    # Intentar parsear fecha
+                    # Como la IA a veces puede enviar un formato imperfecto, hacemos lo posible
+                    fecha_inicio = datetime.strptime(fecha_str, "%Y-%m-%d %H:%M")
+                except:
+                    # Fallback a hoy si la IA formatea mal
+                    fecha_inicio = get_now_chile() + timedelta(days=1)
+                
+                # Ejecutar agendamiento real en Base de Datos
+                agendar_cita_ia(db=db, tenant_id="default", telefono=telefono, fecha_inicio=fecha_inicio, marca=motivo_marca)
+                
+                # Limpiar la respuesta visual para el usuario
+                respuesta_ia = re.sub(r'\[AGENDAR:.*?\]', '', respuesta_ia).strip()
+                
+            return respuesta_ia
         else:
             return f"Error en la inteligencia artificial (Código {res.status_code}): {res.text}"
     except Exception as e:

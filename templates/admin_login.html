@@ -1,18 +1,74 @@
 <!DOCTYPE html>
-<html>
-<head><title>Admin Login</title></head>
-<body>
-<h1>Login Administrador</h1>
-<!-- prueba-->
-{% if error %}
-<p style="color: red;">{{ error }}</p>
-{% endif %}
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexora - Iniciar Sesión</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-[#f8fafc] text-slate-900 antialiased font-sans min-h-screen flex items-center justify-center p-4">
 
-<form method="post" action="/admin/login">
-    <input name="username" placeholder="Usuario" required><br>
-    <input type="password" name="password" placeholder="Contraseña" required><br>
-    <button type="submit">Ingresar</button>
-</form>
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
+        
+        <div class="p-8 pb-6 border-b border-slate-100 flex flex-col items-center">
+            <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4 border border-blue-100 shadow-sm">
+                <i class="fas fa-calendar-check text-2xl"></i>
+            </div>
+            <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Nexora Admin</h2>
+            <p class="text-sm text-slate-500 mt-1">Ingresa a tu cuenta corporativa</p>
+        </div>
+
+        <div class="p-8 pt-6">
+            {% if error %}
+            <div class="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
+                <i class="fas fa-exclamation-circle text-red-500 mt-0.5"></i>
+                <p class="text-sm font-medium text-red-600">{{ error }}</p>
+            </div>
+            {% endif %}
+
+            <form method="post" action="/admin/login" class="space-y-5">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Usuario / Correo</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-user text-slate-400"></i>
+                        </div>
+                        <input type="text" name="username" placeholder="tu@correo.com" required
+                            class="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Contraseña</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-lock text-slate-400"></i>
+                        </div>
+                        <input type="password" name="password" placeholder="••••••••" required
+                            class="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" class="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-md text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all gap-2">
+                        Iniciar Sesión <i class="fas fa-arrow-right text-xs"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
 </body>
 </html>

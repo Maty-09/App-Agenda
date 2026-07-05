@@ -10,7 +10,7 @@ router = APIRouter()
 def create_checkout(
     plan: str,
     db: Session = Depends(deps.get_db),
-    current_user: models.Usuario = Depends(deps.get_current_admin_user)
+    current_user: models.Usuario = Depends(deps.get_admin_empresa)
 ):
     """Genera un link de pago en Stripe para la empresa actual."""
     if plan not in ["Starter", "Pro", "Business"]:

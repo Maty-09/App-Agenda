@@ -41,7 +41,9 @@ def get_current_active_user(
 ) -> models.Usuario:
     return current_user
 
-def require_role(allowed_roles: list[str]):
+from typing import List
+
+def require_role(allowed_roles: List[str]):
     def role_checker(current_user: models.Usuario = Depends(get_current_active_user)):
         if current_user.rol not in allowed_roles and current_user.rol != "superadmin":
             raise HTTPException(

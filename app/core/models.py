@@ -136,6 +136,7 @@ class Agendamiento(Base):
     boton_enviado = Column(Boolean, default=False, server_default='0')
     nota_compartida = Column(String, nullable=True)
     estado = Column(String, default="pendiente") # activa | cancelada
+    razon_estado = Column(String, nullable=True) # Para detallar motivo de pendiente o cancelación (Fase 1)
     fecha_cancelacion = Column(DateTime, nullable= True)
     respuestas_dinamicas = relationship("RespuestaCampo", back_populates="agendamiento")
     tenant = relationship("Tenant", back_populates="agendamientos")

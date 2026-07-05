@@ -136,19 +136,21 @@ async def startup_event():
         pass  # La columna ya existe, no hacer nada
 
     # --- CONFIGURACIÓN DE PRUEBA (Cada 10 minutos) ---
-    if not scheduler.get_job("recordatorios_test"):
-        scheduler.add_job(
-            procesar_flujo_automatico,
-            'interval',
-            minutes=1, 
-            id="recordatorios_test",
-            replace_existing=True
-        )
-        scheduler.start()
-    
-    if not scheduler.running:
-        scheduler.start()
-        logger.info("🚀 SISTEMA DE PRUEBA INICIADO: Revisión cada 1 minutos activada.")
+    if os.environ.get("VERCEL") != "1":
+        if not scheduler.get_job("recordatorios_test"):
+            scheduler.add_job(
+                procesar_flujo_automatico,
+                'interval',
+                minutes=1, 
+                id="recordatorios_test",
+                replace_existing=True
+            )
+        
+        if not scheduler.running:
+            scheduler.start()
+            logger.info("🚀 SISTEMA DE PRUEBA INICIADO: Revisión cada 1 minutos activada.")
+    else:
+        logger.info("⚡ Entorno Vercel detectado: BackgroundScheduler deshabilitado por completo.")
 
 @app.on_event("shutdown")
 def shutdown_event():

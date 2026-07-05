@@ -18,7 +18,10 @@ import openpyxl
 from io import BytesIO 
 from app.infrastructure.email_utils import enviar_confirmacion_agendamiento, enviar_correo_cancelacion
 from app.domain_agenda.router_cliente import Recursos, calcular_fin_especializado
-templates = Jinja2Templates(directory="templates")
+import os
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 router = APIRouter()
 

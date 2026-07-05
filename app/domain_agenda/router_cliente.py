@@ -27,7 +27,10 @@ def get_db():
 
 router = APIRouter()
 
-templates = Jinja2Templates(directory="templates")
+import os
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 @router.get("/agendar_web", response_class=HTMLResponse)

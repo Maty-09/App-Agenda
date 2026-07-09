@@ -632,7 +632,10 @@
             formData.append('mensaje', msg);
             
             fetch('/admin/ai/chat', { method: 'POST', body: formData })
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) throw new Error('Error en la respuesta del servidor');
+                    return res.json();
+                })
                 .then(data => {
                     document.getElementById(typingId).remove();
                     history.innerHTML += `<div class="bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-none self-start max-w-[85%] text-slate-700 shadow-sm">${data.reply}</div>`;
@@ -643,6 +646,11 @@
                         history.scrollTop = history.scrollHeight;
                         setTimeout(() => window.location.reload(), 2000);
                     }
+                })
+                .catch(err => {
+                    document.getElementById(typingId).remove();
+                    history.innerHTML += `<div class="bg-red-50 border border-red-200 p-3 rounded-2xl rounded-tl-none self-start max-w-[85%] text-red-600 shadow-sm"><i class="fas fa-exclamation-triangle"></i> Error de conexión, no se pudo contactar al Copiloto.</div>`;
+                    history.scrollTop = history.scrollHeight;
                 });
         });
     </script>

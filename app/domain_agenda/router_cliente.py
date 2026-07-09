@@ -99,11 +99,8 @@ def agendar_web(
 
 buffer_minutos = 10
 
-feriados = [
-    "2025-12-25","2026-01-01", "2026-04-02", "2026-04-03", "2026-05-01", "2026-05-21",
-    "2026-06-10", "2026-07-16", "2026-08-15", "2026-09-18", "2026-09-19",
-    "2026-10-12", "2026-11-02", "2026-12-25"
-]
+import holidays
+feriados_cl = holidays.country_holidays('CL')
 
 @router.post("/agendar_web", response_class=HTMLResponse)
 async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
@@ -490,6 +487,16 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
     dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == inicio.date()).first()
     if dia_bloqueado:
         return False  # Si el día está bloqueado, no hay disponibilidad para nadie
+
+    # REGLA: Excluir fines de semana (Lunes=0, Domingo=6)
+    if inicio.weekday() >= 5:
+        return False
+
+    # REGLA: Excluir feriados en Chile
+    import holidays
+    feriados_cl = holidays.country_holidays('CL')
+    if inicio.date() in feriados_cl:
+        return False
 
     tz_chile = pytz.timezone("America/Santiago")
     

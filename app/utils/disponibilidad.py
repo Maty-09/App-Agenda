@@ -4,6 +4,16 @@ from datetime import time
 
 def verificar_disponibilidad(db: Session, agendamiento: schemas.AgendamientoCreate) -> bool:
     inicio = agendamiento.fecha_inicio
+
+    # REGLA: Excluir fines de semana (Lunes=0, Domingo=6)
+    if inicio.weekday() >= 5:
+        return False
+
+    # REGLA: Excluir feriados en Chile
+    import holidays
+    if inicio.date() in holidays.country_holidays('CL'):
+        return False
+
     termino = agendamiento.fecha_termino
 
     # Verificar colación (solo para especializado)

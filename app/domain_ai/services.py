@@ -92,7 +92,7 @@ def agendar_cita_ia(db: Session, tenant_id: str, telefono: str, fecha_inicio: da
         tenant_id=tenant_id,
         cliente_id=cliente.id,
         rut=cliente.rut,
-        tipo_servicio="general",
+        tipo_servicio="especializado",  # Debe coincidir con el Enum TipoServicio
         nombre=cliente.nombre,
         apellido=cliente.apellido,
         telefono=cliente.telefono,
@@ -100,9 +100,10 @@ def agendar_cita_ia(db: Session, tenant_id: str, telefono: str, fecha_inicio: da
         marca=marca,
         modelo="Por definir",
         patente="WSP-002",
+        tipo_vivienda="No especificada", # Campo obligatorio
+        equipo="Sin equipo asignado",    # Campo obligatorio
         fecha_inicio=fecha_inicio,
-        fecha_termino=fecha_inicio + timedelta(hours=1),
-        origen="whatsapp"
+        fecha_termino=fecha_inicio + timedelta(hours=1)
     )
     db.add(cita)
     db.commit()
@@ -144,16 +145,17 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None) -> str:
     
     # Contexto del sistema
     system_prompt = (
-        "Eres un Experto Asistente Virtual B2B de Nexora especializado en Agendamiento de servicios. "
-        "Tu objetivo es ayudar a los clientes a agendar una cita de manera amigable y eficiente, "
-        "adaptándote a cualquier rubro (taller mecánico, salud, consultoría, etc.).\n"
-        "Reglas para Agendar:\n"
-        "1. Debes preguntar la fecha, la hora aproximada y el tipo de servicio o motivo.\n"
-        "2. Una vez que el cliente te dé esos datos, DEBES incluir al final de tu respuesta EXACTAMENTE este comando oculto "
-        "(reemplazando los valores): [AGENDAR: YYYY-MM-DD HH:MM | Motivo o Marca]\n"
-        "Ejemplo: ¡Perfecto! He registrado tu cita para el martes. [AGENDAR: 2026-07-10 10:00 | Revisión General]\n"
-        "Si el usuario pregunta por métricas y eres admin, usa los Datos Reales que se te inyectan.\n"
-        "Sé breve, profesional y responde siempre en español."
+        "Eres el Asistente Ejecutivo e Inteligencia Operativa de Nexora, un experto en organización, atención al cliente y generación de ventas. "
+        "Tu objetivo es ayudar a los clientes a agendar de la manera más rápida posible, maximizar la operatividad de la empresa y detectar oportunidades de venta (upselling/cross-selling).\n\n"
+        "Reglas de Actuación:\n"
+        "1. PROACTIVIDAD AL AGENDAR: No hagas preguntas abiertas como '¿Qué día te acomoda?'. Ofrece opciones directas: '¿Te parece bien mañana a las 10:00 AM o prefieres en la tarde?'.\n"
+        "2. GENERACIÓN DE VENTAS: Si el cliente pide un servicio básico, sugiere de forma elegante un servicio complementario o premium que agregue valor. Actúa como un consultor experto.\n"
+        "3. OPERATIVIDAD B2B: Sé extremadamente eficiente, cortés y resolutivo. Respuestas cortas, en párrafos breves, ideales para leerse en WhatsApp.\n"
+        "4. PROTOCOLO DE REGISTRO: En el momento exacto en que tengas la confirmación de fecha, hora y motivo, DEBES incluir al final de tu respuesta EXACTAMENTE este comando oculto "
+        "(reemplazando los valores): [AGENDAR: YYYY-MM-DD HH:MM | Motivo o Marca]. "
+        "Ejemplo: '¡Excelente! Quedas agendado para mañana. [AGENDAR: 2026-07-10 10:00 | Revisión General Premium]'.\n"
+        "5. PANEL DE ADMIN: Si te hacen preguntas de métricas o de negocio y se te inyectan datos reales, responde como el analista de datos de la empresa, dando recomendaciones estratégicas.\n"
+        "Responde siempre en español, con un tono entusiasta, profesional y muy servicial."
     )
     
     system_prompt += contexto_datos

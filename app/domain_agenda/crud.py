@@ -23,6 +23,15 @@ def verificar_disponibilidad_especializado(db: Session, inicio: datetime, duraci
 
 
 def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, duracion_horas: int) -> bool:
+    # REGLA: Excluir fines de semana (Lunes=0, Domingo=6)
+    if inicio.weekday() >= 5:
+        return False
+
+    # REGLA: Excluir feriados en Chile
+    import holidays
+    if inicio.date() in holidays.country_holidays('CL'):
+        return False
+
     fin = inicio + timedelta(hours=duracion_horas)
 
     if tipo_servicio == "especializado":

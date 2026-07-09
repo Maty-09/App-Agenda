@@ -8,7 +8,6 @@ from typing import List, Optional, Tuple
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 import json
 from fastapi.templating import Jinja2Templates
-from fastapi.security import HTTPBasicCredentials
 import os
 from starlette.status import HTTP_303_SEE_OTHER
 from datetime import datetime, timedelta, time as dt_time, date as dt_date
@@ -18,16 +17,13 @@ import openpyxl
 from io import BytesIO 
 from app.infrastructure.email_utils import enviar_confirmacion_agendamiento, enviar_correo_cancelacion
 from app.domain_agenda.router_cliente import Recursos, calcular_fin_especializado
+from app.domain_team import crud_team
 import os
 from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates = Jinja2Templates(directory=[str(BASE_DIR / "templates"), str(BASE_DIR / "app" / "templates")])
 
 router = APIRouter()
-
-# Configuración login admin
-ADMIN_USER = os.getenv("ADMIN_USER", "admin")
-ADMIN_PASS = os.getenv("ADMIN_PASS", "1234")
 
 
 # =============================
@@ -43,29 +39,11 @@ def get_db():
 # =============================
 #     SECURITY & JWT
 # =============================
-from jose import jwt, JWTError
-from datetime import datetime, timedelta
-from passlib.context import CryptContext
 from fastapi import HTTPException, status
-from app.core import models
+from app.core import models, security
+from app.core.auth_deps import CurrentUser, verificar_login
 
-SECRET_KEY = ***REMOVED***
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 1 día
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 días
 
 
 # =============================
@@ -75,59 +53,36 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 @router.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
     return templates.TemplateResponse("admin_login.html", {"request": request})
-    
+
 @router.post("/login")
 def login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     usuario = db.query(models.Usuario).filter(models.Usuario.email == username).first()
-    
-    if not usuario or not verify_password(password, usuario.password_hash):
+
+    if not usuario or not security.verify_password(password, usuario.password_hash):
         return templates.TemplateResponse("admin_login.html", {
             "request": request,
             "error": "Correo o contraseña incorrectos"
         })
-        
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": usuario.email, "tenant_id": usuario.tenant_id, "rol": usuario.rol},
+    access_token = security.create_access_token(
+        subject=usuario.id,
+        rol=usuario.rol,
+        tenant_id=usuario.tenant_id,
+        email=usuario.email,
         expires_delta=access_token_expires
     )
-    
+
     response = RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
     response.set_cookie(key="access_token", value=f"Bearer {access_token}", httponly=True)
     return response
 
 
-# =============================
-#     VERIFICAR LOGIN (SaaS)
-# =============================
-
-class CurrentUser:
-    def __init__(self, email: str, tenant_id: str, rol: str):
-        self.email = email
-        self.tenant_id = tenant_id
-        self.rol = rol
-
-def verificar_login(request: Request) -> CurrentUser:
-    """Verifica el JWT y retorna el contexto Multi-Tenant del usuario."""
-    token = request.cookies.get("access_token")
-    if not token or not token.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="No autenticado")
-        
-    token = token.split(" ")[1]
-    
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        tenant_id: str = payload.get("tenant_id")
-        rol: str = payload.get("rol")
-        
-        if email is None or tenant_id is None:
-            raise HTTPException(status_code=401, detail="Token inválido")
-            
-        return CurrentUser(email=email, tenant_id=tenant_id, rol=rol)
-        
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Token expirado o inválido")
+@router.get("/logout")
+def logout():
+    response = RedirectResponse(url="/admin/login", status_code=status.HTTP_303_SEE_OTHER)
+    response.delete_cookie("access_token")
+    return response
 
 
 # =============================
@@ -135,7 +90,7 @@ def verificar_login(request: Request) -> CurrentUser:
 # =============================
 
 @router.get("/agendamientos", response_model=List[schemas.AgendamientoOut])
-def listar_agendamientos(db: Session = Depends(get_db)):
+def listar_agendamientos(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     return db.query(models.Agendamiento).order_by(models.Agendamiento.fecha_inicio).all()
 
 
@@ -146,7 +101,7 @@ def panel_agendamientos(
     subtipo: str = Query(None),
     fecha: str = Query(None),
     db: Session = Depends(get_db),
-    cred: HTTPBasicCredentials = Depends(verificar_login)
+    cred: CurrentUser = Depends(verificar_login)
 ):
     query = db.query(models.Agendamiento)
 
@@ -248,16 +203,18 @@ def panel_agendamientos(
             "eventos_json": eventos_json_str,
             "fecha": fecha,
             "utm_registro": utm_registro,
-            "links_agenda": links_agenda
+            "links_agenda": links_agenda,
+            "current_user": cred
         }
     )
 
 
 @router.post("/actualizar_nota/{id}")
 def actualizar_nota(
-    id: int, 
-    nota: str = Form(...), 
-    db: Session = Depends(get_db)
+    id: int,
+    nota: str = Form(...),
+    db: Session = Depends(get_db),
+    cred: CurrentUser = Depends(verificar_login)
 ):
     # Buscamos el registro en la DB usando SQLAlchemy
     agendamiento = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
@@ -284,7 +241,7 @@ def actualizar_nota(
 @router.get("/export/utm")
 def export_utm(
     db: Session = Depends(get_db),
-    cred: HTTPBasicCredentials = Depends(verificar_login)
+    cred: CurrentUser = Depends(verificar_login)
 ):
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -376,9 +333,10 @@ def obtener_links_agenda(request: Request, admin = Depends(verificar_login)):
 
 @router.get("/configurar-formulario")
 def configurar_formulario(
-    request: Request, 
+    request: Request,
     subtipo: str = "local", # Por defecto local
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    cred: CurrentUser = Depends(verificar_login)
 ):
     raw_subtipo = subtipo.lower().strip() if subtipo else "local"
     db_subtipo = "taller" if raw_subtipo == "local" else raw_subtipo
@@ -391,7 +349,8 @@ def configurar_formulario(
     return templates.TemplateResponse("admin_config_form.html", {
         "request": request,
         "campos": campos,
-        "subtipo_actual": raw_subtipo
+        "subtipo_actual": raw_subtipo,
+        "current_user": cred
     })
 @router.post("/configurar-formulario/guardar")
 async def guardar_campo(
@@ -401,7 +360,8 @@ async def guardar_campo(
     tipo_campo: str = Form(...),
     opciones: Optional[str] = Form(None),
     obligatorio: bool = Form(False),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    cred: CurrentUser = Depends(verificar_login)
 ):
     # VALIDACIÓN: Si label es None, le damos un valor por defecto para que no explote
     texto_label = label if label else "Campo sin nombre"
@@ -459,7 +419,7 @@ async def guardar_campo(
     return RedirectResponse(url=f"/admin/configurar-formulario?subtipo={raw_subtipo}", status_code=303)
 
 @router.get("/configurar-formulario/eliminar/{campo_id}")
-async def eliminar_campo(campo_id: int, db: Session = Depends(get_db)):
+async def eliminar_campo(campo_id: int, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     # 1. Buscamos el campo en la base de datos
     campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id).first()
     
@@ -484,8 +444,9 @@ async def eliminar_campo(campo_id: int, db: Session = Depends(get_db)):
 
 @router.post("/configurar-formulario/reordenar")
 async def reordenar_campos(
-    payload: dict = Body(...), 
-    db: Session = Depends(get_db)
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    cred: CurrentUser = Depends(verificar_login)
 ):
     posiciones = payload.get("posiciones", [])
     
@@ -516,7 +477,7 @@ def editar_campo(
     opciones: str = Form(None),
     obligatorio: str = Form(None),
     db: Session = Depends(get_db),
-    cred: HTTPBasicCredentials = Depends(verificar_login)
+    cred: CurrentUser = Depends(verificar_login)
 ):
     campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id).first()
     if not campo:
@@ -732,7 +693,7 @@ class BloqueoDiaSchema(BaseModel):
     motivo: Optional[str] = None
 
 @router.post("/bloquear-dia-completo")
-def bloquear_dia(datos: BloqueoDiaSchema, db: Session = Depends(get_db)):
+def bloquear_dia(datos: BloqueoDiaSchema, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     # Ahora accedemos a datos.fecha en lugar de un Form
     try:
         fecha_dt = datetime.strptime(datos.fecha, "%Y-%m-%d").date()
@@ -772,8 +733,8 @@ def bloquear_dia_formulario(
     
     return RedirectResponse(url="/admin/panel", status_code=303)
 
-@router.post("/desbloquear-dia/{id}") 
-def desbloquear_dia(id: int, db: Session = Depends(get_db)):
+@router.post("/desbloquear-dia/{id}")
+def desbloquear_dia(id: int, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     dia = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.id == id).first()
     if dia:
         db.delete(dia)
@@ -816,7 +777,7 @@ async def editar_cita_admin(
     return RedirectResponse(url="/admin/panel", status_code=303)
 
 @router.get("/api/bloqueos")
-def obtener_bloqueos_json(db: Session = Depends(get_db)):
+def obtener_bloqueos_json(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     """API que devuelve bloqueos en formato JSON para FullCalendar"""
     import json
     dias_bloqueados = db.query(models.DiaBloqueado).all()
@@ -834,7 +795,7 @@ def obtener_bloqueos_json(db: Session = Depends(get_db)):
     return bloqueos
 
 @router.get("/api/debug/agendamientos")
-def debug_agendamientos(db: Session = Depends(get_db)):
+def debug_agendamientos(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     """Endpoint de debugging para ver todos los agendamientos"""
     agendamientos = db.query(models.Agendamiento).all()
     
@@ -854,7 +815,7 @@ def debug_agendamientos(db: Session = Depends(get_db)):
     return {"total": len(resultado), "agendamientos": resultado}
 
 @router.get("/api/debug/ultimo-agendamiento")
-def debug_ultimo_agendamiento(db: Session = Depends(get_db)):
+def debug_ultimo_agendamiento(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     """Endpoint de debugging para ver el último agendamiento guardado"""
     ultimo = db.query(models.Agendamiento).order_by(models.Agendamiento.id.desc()).first()
     
@@ -956,6 +917,7 @@ def get_dashboard(
         dias_habiles = sum(1 for i in range(dias) if (hoy_dt + timedelta(days=i)).weekday() != 6)
         capacidad_total = dias_habiles * CAPACIDAD_DIARIA
         ocupado = db.query(models.Agendamiento).filter(
+            models.Agendamiento.tenant_id == cred.tenant_id,
             models.Agendamiento.fecha_inicio >= hoy_dt.replace(tzinfo=None),
             models.Agendamiento.fecha_inicio < fecha_fin.replace(tzinfo=None),
             models.Agendamiento.estado != "cancelado"
@@ -964,13 +926,53 @@ def get_dashboard(
         porcentaje = round((ocupado / capacidad_total) * 100, 1) if capacidad_total > 0 else 0
         estado = "Saturado" if porcentaje > 80 else ("Media" if porcentaje > 50 else "Libre")
         return {"disponible": disponible, "total": capacidad_total, "porcentaje": porcentaje, "estado": estado, "ocupado": ocupado}
-        
+
     capacidad = {
         "d7": get_capacidad_rango(7),
         "d15": get_capacidad_rango(15),
         "d30": get_capacidad_rango(30),
         "d60": get_capacidad_rango(60),
     }
+
+    # Disponibilidad día a día de la semana (Mejora: vista semanal para el cliente interno)
+    DIAS_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+    def get_disponibilidad_dias(dias: int):
+        resultado = []
+        for i in range(dias):
+            dia = hoy_dt + timedelta(days=i)
+            es_domingo = dia.weekday() == 6
+            bloqueo = db.query(models.DiaBloqueado).filter(
+                models.DiaBloqueado.tenant_id == cred.tenant_id,
+                models.DiaBloqueado.fecha == dia.date()
+            ).first()
+            ocupado = db.query(models.Agendamiento).filter(
+                models.Agendamiento.tenant_id == cred.tenant_id,
+                models.Agendamiento.fecha_inicio >= dia.replace(tzinfo=None),
+                models.Agendamiento.fecha_inicio < (dia + timedelta(days=1)).replace(tzinfo=None),
+                models.Agendamiento.estado != "cancelado"
+            ).count()
+            capacidad_dia = 0 if (es_domingo or bloqueo) else CAPACIDAD_DIARIA
+            porcentaje = round((ocupado / capacidad_dia) * 100, 1) if capacidad_dia > 0 else 100
+            if es_domingo or bloqueo:
+                estado_dia = "Bloqueado"
+            elif porcentaje > 80:
+                estado_dia = "Saturado"
+            elif porcentaje > 50:
+                estado_dia = "Media"
+            else:
+                estado_dia = "Libre"
+            resultado.append({
+                "fecha": dia,
+                "dia_nombre": DIAS_ES[dia.weekday()],
+                "ocupado": ocupado,
+                "capacidad": capacidad_dia,
+                "porcentaje": porcentaje,
+                "estado": estado_dia,
+                "motivo_bloqueo": bloqueo.motivo if bloqueo else None
+            })
+        return resultado
+
+    disponibilidad_semana = get_disponibilidad_dias(7)
 
     # Citas por estado
     confirmadas = query.filter(models.Agendamiento.estado == "confirmado").count()
@@ -1056,6 +1058,8 @@ def get_dashboard(
         
     top_tareas = sorted(tareas_activas_list, key=puntaje_tarea, reverse=True)[:10]
 
+    resumen_kanban = {estado: len(tareas) for estado, tareas in crud_team.get_tareas_kanban(db, cred.tenant_id).items()}
+
     stats = {
         "agendas_hoy": agendas_hoy,
         "agendas_semana": agendas_semana,
@@ -1063,6 +1067,8 @@ def get_dashboard(
         "tareas_activas": tareas_activas,
         "tareas_vencidas": tareas_vencidas,
         "capacidad": capacidad,
+        "disponibilidad_semana": disponibilidad_semana,
+        "resumen_kanban": resumen_kanban,
         "total": total_citas,
         "confirmadas": confirmadas,
         "pendientes": pendientes,
@@ -1088,5 +1094,5 @@ def get_dashboard(
 
     return templates.TemplateResponse(
         name="admin_dashboard.html",
-        context={"request": request, "stats": stats, "listas": listas}
+        context={"request": request, "stats": stats, "listas": listas, "current_user": cred}
     )

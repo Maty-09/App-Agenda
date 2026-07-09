@@ -6,7 +6,7 @@ from app.domain_ai import services
 
 router = APIRouter(prefix="/admin/ai", tags=["ai_analytics"])
 
-from app.domain_crm.router_admin import verificar_login
+from app.core.auth_deps import verificar_login
 
 def verificar_sesion_admin(request: Request):
     try:

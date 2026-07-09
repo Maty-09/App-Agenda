@@ -1,0 +1,17 @@
+{% macro logo(size='md', variant='light') %}
+{% set sizes = {'sm': 'w-7 h-7', 'md': 'w-10 h-10', 'lg': 'w-16 h-16'} %}
+{% set text_sizes = {'sm': 'text-base', 'md': 'text-xl', 'lg': 'text-2xl'} %}
+{% set badge_bg = 'bg-white/15 text-white' if variant == 'dark' else 'bg-blue-600 text-white' %}
+{% set text_color = 'text-white' if variant == 'dark' else 'text-slate-900' %}
+<div class="flex items-center gap-2.5">
+    <div class="{{ sizes[size] }} rounded-xl {{ badge_bg }} flex items-center justify-center shadow-sm shrink-0">
+        <svg viewBox="0 0 24 24" fill="none" class="w-[60%] h-[60%]" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="4" width="18" height="17" rx="3" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M3 9h18" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M8 2.5v3M16 2.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M8.5 14.3l2.2 2.2 4.3-4.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </div>
+    <span class="{{ text_sizes[size] }} font-extrabold {{ text_color }} tracking-tight">Nexora</span>
+</div>
+{% endmacro %}

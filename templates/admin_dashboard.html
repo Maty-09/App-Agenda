@@ -39,33 +39,10 @@
     </style>
 </head>
 
-<body class="text-slate-900 antialiased font-sans min-h-screen p-4 md:p-8">
+<body class="text-slate-900 antialiased font-sans min-h-screen">
+    {% include "partials/_navbar.html" %}
 
-    <div class="max-w-7xl mx-auto">
-        
-        <!-- Header -->
-        <header class="flex flex-col sm:flex-row sm:items-center justify-between pb-8 mb-8 border-b border-slate-200 gap-4">
-            <div class="flex items-center gap-4">
-                <div class="p-3 bg-blue-600 rounded-2xl shadow-md border border-blue-500 text-white flex items-center justify-center h-14 w-14">
-                    <i class="fas fa-calendar-check text-2xl"></i>
-                </div>
-                <div>
-                    <h1 class="text-3xl font-extrabold tracking-tighter text-slate-950">Nexora <span class="text-slate-400 font-medium">/ Dashboard</span></h1>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Centro de Control Operativo</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-3">
-                <a href="/admin/tareas" class="px-5 py-2.5 rounded-xl bg-purple-600 text-white font-bold text-sm hover:bg-purple-700 transition flex items-center gap-2 shadow-sm shadow-purple-100">
-                    <i class="fas fa-tasks"></i> Tareas
-                </a>
-                <a href="/admin/clientes" class="px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:text-slate-900 transition flex items-center gap-2 shadow-sm">
-                    <i class="fas fa-users"></i> Directorio CRM
-                </a>
-                <a href="/admin/panel" class="px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:text-slate-900 transition flex items-center gap-2 shadow-sm">
-                    <i class="fas fa-calendar-alt"></i> Calendario
-                </a>
-            </div>
-        </header>
+    <div class="max-w-7xl mx-auto p-4 md:p-8">
 
         <!-- Filtros Globales (Mejora 5) -->
         <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -210,16 +187,28 @@
 
         <!-- Top 10 Tareas Urgentes (Fase 3: Prominencia) -->
         <section class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm mb-8">
-            <div class="flex items-center gap-3 mb-6">
-                <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-inner">
-                    <i class="fas fa-tasks text-lg"></i>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-4 justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-inner">
+                        <i class="fas fa-tasks text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-900">Tareas Urgentes</h3>
+                        <p class="text-xs text-slate-500 font-medium mt-0.5">Gestión operativa prioritaria (Top 10)</p>
+                    </div>
                 </div>
-                <div>
-                    <h3 class="text-xl font-bold text-slate-900">Tareas Urgentes</h3>
-                    <p class="text-xs text-slate-500 font-medium mt-0.5">Gestión operativa prioritaria (Top 10)</p>
+                <div class="flex items-center gap-4">
+                    <div class="hidden md:flex items-center gap-3 text-xs font-bold text-slate-500">
+                        {% for estado, cantidad in stats.resumen_kanban.items() %}
+                        <span>{{ estado }}: <span class="text-slate-800">{{ cantidad }}</span></span>
+                        {% endfor %}
+                    </div>
+                    <a href="/admin/tareas" class="shrink-0 px-4 py-2 rounded-xl bg-purple-600 text-white font-bold text-xs hover:bg-purple-700 transition flex items-center gap-2 shadow-sm">
+                        Ver Kanban completo <i class="fas fa-arrow-right"></i>
+                    </a>
                 </div>
             </div>
-            
+
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 {% for tarea in listas.top_tareas %}
                 <div class="p-4 bg-slate-50 rounded-2xl border {{ 'border-red-300 shadow-sm' if tarea.prioridad == 'Crítica' else ('border-amber-200' if tarea.prioridad == 'Alta' else 'border-slate-100') }} relative overflow-hidden group hover:shadow-md transition">
@@ -239,6 +228,12 @@
                         </div>
                         <p class="text-sm font-bold text-slate-800 leading-snug mb-3 line-clamp-2" title="{{ tarea.titulo }}">{{ tarea.titulo }}</p>
                         
+                        {% if tarea.fecha_inicio %}
+                        <div class="flex items-center gap-2 mb-1">
+                            <i class="fas fa-play text-slate-300 text-[10px]"></i>
+                            <p class="text-[11px] font-medium text-slate-500">Inicio: {{ tarea.fecha_inicio.strftime('%d-%m-%Y') }}</p>
+                        </div>
+                        {% endif %}
                         <div class="flex items-center gap-2 mt-auto">
                             <i class="fas fa-calendar-times {{ 'text-red-500' if tarea.prioridad == 'Crítica' else 'text-slate-400' }} text-xs"></i>
                             <p class="text-[11px] font-bold {{ 'text-red-600' if tarea.prioridad == 'Crítica' else 'text-slate-600' }}">
@@ -295,6 +290,39 @@
                         <span class="text-slate-400">Ocupados: {{ rango.datos.ocupado }}</span>
                         <span class="text-slate-400">Estado: {{ rango.datos.estado }}</span>
                     </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Disponibilidad Semanal (vista día a día) -->
+        <section class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm mb-8">
+            <div class="flex items-center gap-3 mb-6">
+                <i class="fas fa-calendar-week text-slate-400 text-lg"></i>
+                <h3 class="text-lg font-bold text-slate-900">Disponibilidad de la Semana</h3>
+                <span class="ml-auto text-xs font-semibold bg-slate-100 text-slate-500 py-1 px-3 rounded-full">Próximos 7 días</span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                {% set estado_estilo = {
+                    'Libre': {'bg': 'bg-emerald-50', 'border': 'border-emerald-200', 'text': 'text-emerald-700', 'bar': 'bg-emerald-500'},
+                    'Media': {'bg': 'bg-amber-50', 'border': 'border-amber-200', 'text': 'text-amber-700', 'bar': 'bg-amber-500'},
+                    'Saturado': {'bg': 'bg-red-50', 'border': 'border-red-200', 'text': 'text-red-700', 'bar': 'bg-red-500'},
+                    'Bloqueado': {'bg': 'bg-slate-100', 'border': 'border-slate-200', 'text': 'text-slate-500', 'bar': 'bg-slate-400'}
+                } %}
+                {% for dia in stats.disponibilidad_semana %}
+                {% set estilo = estado_estilo[dia.estado] %}
+                <div class="p-3 rounded-2xl border {{ estilo.border }} {{ estilo.bg }}" title="{{ dia.motivo_bloqueo or '' }}">
+                    <p class="text-xs font-bold text-slate-500 uppercase">{{ dia.dia_nombre }}</p>
+                    <p class="text-lg font-black text-slate-900 mb-2">{{ dia.fecha.strftime('%d-%m') }}</p>
+                    {% if dia.estado == 'Bloqueado' %}
+                    <p class="text-xs font-semibold {{ estilo.text }}">{{ 'Domingo' if dia.fecha.weekday() == 6 else 'Bloqueado' }}</p>
+                    {% else %}
+                    <div class="w-full bg-white rounded-full h-1.5 mb-1.5 border border-slate-100">
+                        <div class="{{ estilo.bar }} h-1.5 rounded-full" style="width: {{ dia.porcentaje }}%"></div>
+                    </div>
+                    <p class="text-xs font-bold {{ estilo.text }}">{{ dia.ocupado }}/{{ dia.capacidad }} cupos</p>
+                    <p class="text-[10px] font-semibold text-slate-400">{{ dia.estado }}</p>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>

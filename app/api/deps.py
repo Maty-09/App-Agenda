@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import jwt
@@ -6,7 +6,7 @@ from app.core import security, models, database
 from pydantic import ValidationError
 
 oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/api/v1/auth/login"
+    tokenUrl="/api/v1/auth/login", auto_error=False
 )
 
 def get_db():
@@ -17,8 +17,14 @@ def get_db():
         db.close()
 
 def get_current_user(
-    db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
+    request: Request, db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
 ) -> models.Usuario:
+    if not token:
+        cookie = request.cookies.get("access_token")
+        if cookie and cookie.startswith("Bearer "):
+            token = cookie.split(" ", 1)[1]
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado")
     try:
         payload = jwt.decode(
             token, security.SECRET_KEY, algorithms=[security.ALGORITHM]

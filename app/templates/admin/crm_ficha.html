@@ -1,25 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ficha: {{ cliente.nombre }} {{ cliente.apellido }} | Nexora CRM</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'], }
-                }
-            }
-        }
-    </script>
-</head>
-<body class="bg-slate-50 text-slate-900 font-sans min-h-screen p-4 md:p-8">
-    <div class="max-w-7xl mx-auto">
-        
+{% extends "base_admin.html" %}
+{% block title %}Ficha: {{ cliente.nombre }} {{ cliente.apellido }} | Nexora CRM{% endblock %}
+{% block content %}
         <!-- Header -->
         <header class="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 border-b border-slate-200 gap-4">
             <div class="flex items-center gap-4">
@@ -96,11 +77,11 @@
                         </h3>
                     </div>
                     <div class="space-y-3">
-                        {% for tarea in cliente.tareas if tarea.estado == 'PENDIENTE' %}
+                        {% for tarea in cliente.tareas if tarea.estado not in ['Completada', 'Cancelada'] %}
                         <div class="p-3 bg-purple-50 border border-purple-100 rounded-xl">
                             <h4 class="text-sm font-bold text-slate-900">{{ tarea.titulo }}</h4>
                             <div class="flex justify-between items-center mt-2">
-                                <span class="text-xs font-medium text-purple-700 bg-purple-100 px-2 py-1 rounded">PENDIENTE</span>
+                                <span class="text-xs font-medium text-purple-700 bg-purple-100 px-2 py-1 rounded">{{ tarea.estado }}</span>
                                 <form action="/admin/tareas/{{ tarea.id }}/completar" method="POST">
                                     <button type="submit" class="text-xs font-bold text-green-600 hover:text-green-700"><i class="fas fa-check"></i> Completar</button>
                                 </form>
@@ -180,6 +161,4 @@
             </div>
 
         </div>
-    </div>
-</body>
-</html>
+{% endblock %}

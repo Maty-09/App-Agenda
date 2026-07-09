@@ -1,144 +1,217 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestión de Tareas | Nexora CRM</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'], }
-                }
-            }
-        }
-    </script>
-</head>
-<body class="bg-slate-50 text-slate-900 font-sans min-h-screen p-4 md:p-8">
-    <div class="max-w-7xl mx-auto">
-        
-        <!-- Header -->
-        <header class="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 border-b border-slate-200 gap-4">
-            <div class="flex items-center gap-4">
-                <div class="p-3 bg-white rounded-xl shadow-sm border border-slate-100 text-purple-600">
-                    <i class="fas fa-tasks text-2xl"></i>
-                </div>
-                <div>
-                    <h1 class="text-3xl font-extrabold tracking-tight text-slate-900">Tareas Pendientes</h1>
-                    <p class="text-sm font-medium text-slate-500 mt-1">Gestión y seguimiento de equipo</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-3">
-                <a href="/admin/dashboard" class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:text-slate-900 transition flex items-center gap-2 shadow-sm">
-                    <i class="fas fa-chart-line"></i> Dashboard
-                </a>
-            </div>
-        </header>
+{% extends "base_admin.html" %}
+{% block title %}Tareas | Nexora{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+    .kanban-card.dragging { opacity: 0.4; }
+    .kanban-col.drag-over { background-color: #eff6ff; }
+</style>
+{% endblock %}
+{% block content %}
+{% set prioridad_estilo = {
+    'Crítica': 'bg-red-100 text-red-700 border-red-200',
+    'Alta': 'bg-amber-100 text-amber-700 border-amber-200',
+    'Media': 'bg-blue-100 text-blue-700 border-blue-200',
+    'Baja': 'bg-slate-100 text-slate-600 border-slate-200'
+} %}
+{% set columna_estilo = {
+    'Pendiente': 'border-t-slate-400',
+    'En progreso': 'border-t-blue-500',
+    'En revisión': 'border-t-amber-500',
+    'Completada': 'border-t-emerald-500'
+} %}
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            <!-- Panel Izquierdo: Formulario de Nueva Tarea -->
-            <div class="lg:col-span-1">
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sticky top-8">
-                    <h3 class="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                        <i class="fas fa-plus-circle text-purple-500"></i> Nueva Tarea
-                    </h3>
-                    <form action="/admin/tareas" method="POST" class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Título</label>
-                            <input type="text" name="titulo" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none text-sm font-medium transition shadow-sm" placeholder="Ej: Llamar cliente para confirmar">
-                        </div>
-                        
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Descripción (Opcional)</label>
-                            <textarea name="descripcion" rows="3" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none text-sm font-medium transition shadow-sm" placeholder="Detalles de la tarea..."></textarea>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Asignar a</label>
-                            <select name="asignado_a" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-200 outline-none text-sm font-medium shadow-sm">
-                                <option value="">Sin asignar (Global)</option>
-                                {% for u in usuarios %}
-                                    <option value="{{ u.id }}">{{ u.nombre }} ({{ u.rol }})</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Vincular a Cliente (Opcional)</label>
-                            <select name="cliente_id" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-200 outline-none text-sm font-medium shadow-sm">
-                                <option value="">Ninguno</option>
-                                {% for c in clientes %}
-                                    <option value="{{ c.id }}">{{ c.nombre }} {{ c.apellido }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        
-                        <button type="submit" class="w-full py-3 mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-sm transition shadow-sm flex items-center justify-center gap-2">
-                            <i class="fas fa-save"></i> Crear Tarea
-                        </button>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Panel Derecho: Lista de Tareas Pendientes -->
-            <div class="lg:col-span-2 space-y-4">
-                {% for tarea in tareas %}
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition">
-                    <div class="flex flex-col sm:flex-row gap-4 justify-between items-start">
-                        <div class="flex-1">
-                            <div class="flex items-center gap-3 mb-2">
-                                <span class="px-2.5 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold uppercase rounded-md tracking-wider">
-                                    PENDIENTE
-                                </span>
-                                <span class="text-xs font-medium text-slate-400"><i class="far fa-clock"></i> {{ tarea.creado_en.strftime('%d %b, %H:%M') }}</span>
-                            </div>
-                            <h4 class="text-lg font-bold text-slate-900 mb-1">{{ tarea.titulo }}</h4>
-                            {% if tarea.descripcion %}
-                            <p class="text-sm text-slate-600 mb-4">{{ tarea.descripcion }}</p>
-                            {% endif %}
-                            
-                            <div class="flex flex-wrap items-center gap-3 text-xs">
-                                {% if tarea.asignado %}
-                                <div class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg font-medium">
-                                    <i class="fas fa-user text-slate-400"></i>
-                                    {{ tarea.asignado.nombre }}
-                                </div>
-                                {% endif %}
-                                
-                                {% if tarea.cliente %}
-                                <a href="/admin/clientes/{{ tarea.cliente.id }}" class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg font-medium transition">
-                                    <i class="fas fa-address-card text-blue-400"></i>
-                                    {{ tarea.cliente.nombre }} {{ tarea.cliente.apellido }}
-                                </a>
-                                {% endif %}
-                            </div>
-                        </div>
-                        
-                        <div class="shrink-0 mt-4 sm:mt-0 w-full sm:w-auto">
-                            <form action="/admin/tareas/{{ tarea.id }}/completar" method="POST">
-                                <button type="submit" class="w-full sm:w-auto px-5 py-2.5 bg-green-50 text-green-600 hover:bg-green-100 border border-transparent hover:border-green-200 font-bold rounded-xl text-sm transition flex items-center justify-center gap-2">
-                                    <i class="fas fa-check"></i> Marcar Lista
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-                {% else %}
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center">
-                    <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <i class="fas fa-check-double text-3xl text-slate-300"></i>
-                    </div>
-                    <h4 class="text-xl font-bold text-slate-700 mb-2">¡Todo al día!</h4>
-                    <p class="text-slate-500">No hay tareas pendientes en este momento.</p>
-                </div>
-                {% endfor %}
-            </div>
-
+<header class="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 border-b border-slate-200 gap-4">
+    <div class="flex items-center gap-4">
+        <div class="p-3 bg-white rounded-xl shadow-sm border border-slate-100 text-purple-600">
+            <i class="fas fa-list-check text-2xl"></i>
+        </div>
+        <div>
+            <h1 class="text-3xl font-extrabold tracking-tight text-slate-900">Tareas</h1>
+            <p class="text-sm font-medium text-slate-500 mt-1">Ambiente operativo &mdash; fechas, plazos y prioridades</p>
         </div>
     </div>
-</body>
-</html>
+    <button onclick="document.getElementById('modal-nueva-tarea').classList.remove('hidden')"
+            class="px-5 py-2.5 rounded-xl bg-purple-600 text-white font-bold text-sm hover:bg-purple-700 transition flex items-center gap-2 shadow-sm">
+        <i class="fas fa-plus"></i> Nueva Tarea
+    </button>
+</header>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5" id="kanban-board">
+    {% for estado in estados %}
+    <div class="kanban-col bg-slate-50 rounded-2xl border border-slate-200 border-t-4 {{ columna_estilo[estado] }} flex flex-col"
+         data-estado="{{ estado }}">
+        <div class="px-4 py-3 flex items-center justify-between border-b border-slate-200">
+            <h3 class="font-bold text-sm text-slate-700">{{ estado }}</h3>
+            <span class="text-xs font-bold bg-white border border-slate-200 rounded-full px-2 py-0.5 text-slate-500">{{ columnas[estado]|length }}</span>
+        </div>
+        <div class="p-3 space-y-3 flex-1 min-h-[120px]">
+            {% for tarea in columnas[estado] %}
+            {% set vencida = tarea.fecha_limite and tarea.fecha_limite < hoy and estado != 'Completada' %}
+            {% set proxima = tarea.fecha_limite and not vencida and (tarea.fecha_limite - hoy).days <= 2 and estado != 'Completada' %}
+            <div class="kanban-card bg-white rounded-xl border border-slate-200 shadow-sm p-4 cursor-grab hover:shadow-md transition"
+                 draggable="true" data-tarea-id="{{ tarea.id }}">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                    <span class="text-xs font-bold px-2 py-0.5 rounded border {{ prioridad_estilo[tarea.prioridad] if tarea.prioridad in prioridad_estilo else prioridad_estilo['Media'] }}">
+                        {{ tarea.prioridad or 'Media' }}
+                    </span>
+                    {% if estado != 'Completada' %}
+                    <button onclick="cancelarTarea({{ tarea.id }})" title="Cancelar tarea" class="text-slate-300 hover:text-red-500 transition">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                    {% endif %}
+                </div>
+                <p class="text-sm font-bold text-slate-900 mb-1">{{ tarea.titulo }}</p>
+                {% if tarea.descripcion %}
+                <p class="text-xs text-slate-500 mb-2 line-clamp-2">{{ tarea.descripcion }}</p>
+                {% endif %}
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-2">
+                    {% if tarea.fecha_inicio %}
+                    <span><i class="fas fa-play text-slate-300 mr-1"></i>{{ tarea.fecha_inicio.strftime('%d-%m') }}</span>
+                    {% endif %}
+                    {% if tarea.fecha_limite %}
+                    <span class="font-semibold {% if vencida %}text-red-600{% elif proxima %}text-amber-600{% else %}text-slate-500{% endif %}">
+                        <i class="fas {% if vencida %}fa-triangle-exclamation{% else %}fa-flag-checkered{% endif %} mr-1"></i>{{ tarea.fecha_limite.strftime('%d-%m') }}
+                    </span>
+                    {% else %}
+                    <span class="text-slate-400">Sin límite</span>
+                    {% endif %}
+                </div>
+                {% if tarea.asignado or tarea.cliente %}
+                <div class="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
+                    {% if tarea.asignado %}
+                    <span class="text-xs font-medium text-slate-600"><i class="fas fa-user text-slate-300 mr-1"></i>{{ tarea.asignado.nombre }}</span>
+                    {% else %}<span></span>{% endif %}
+                    {% if tarea.cliente %}
+                    <a href="/admin/clientes/{{ tarea.cliente.id }}" class="text-xs font-bold text-blue-600 hover:underline">{{ tarea.cliente.nombre }}</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal Nueva Tarea -->
+<div id="modal-nueva-tarea" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-slate-900">Nueva Tarea</h3>
+            <button onclick="document.getElementById('modal-nueva-tarea').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                <i class="fas fa-xmark text-lg"></i>
+            </button>
+        </div>
+        <form method="POST" action="/admin/tareas" class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Título</label>
+                <input type="text" name="titulo" required class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Descripción</label>
+                <textarea name="descripcion" rows="2" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition text-sm"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Prioridad</label>
+                    <select name="prioridad" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition text-sm">
+                        <option value="Baja">Baja</option>
+                        <option value="Media" selected>Media</option>
+                        <option value="Alta">Alta</option>
+                        <option value="Crítica">Crítica</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Fecha límite</label>
+                    <input type="date" name="fecha_limite" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition text-sm">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Asignar a</label>
+                <select name="asignado_a" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition text-sm">
+                    <option value="">Sin asignar</option>
+                    {% for usuario in usuarios %}
+                    <option value="{{ usuario.id }}">{{ usuario.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Cliente (opcional)</label>
+                <select name="cliente_id" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition text-sm">
+                    <option value="">Ninguno</option>
+                    {% for cliente in clientes %}
+                    <option value="{{ cliente.id }}">{{ cliente.nombre }} {{ cliente.apellido }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="w-full py-2.5 bg-purple-600 text-white font-bold rounded-xl text-sm hover:bg-purple-700 transition shadow-sm">
+                Crear Tarea
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+let draggedId = null;
+
+document.querySelectorAll('.kanban-card').forEach(card => {
+    card.addEventListener('dragstart', () => {
+        draggedId = card.dataset.tareaId;
+        card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+});
+
+document.querySelectorAll('.kanban-col').forEach(col => {
+    col.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        col.classList.add('drag-over');
+    });
+    col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
+    col.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        col.classList.remove('drag-over');
+        if (!draggedId) return;
+        const nuevoEstado = col.dataset.estado;
+        const card = document.querySelector(`.kanban-card[data-tarea-id="${draggedId}"]`);
+        const colAnterior = card ? card.closest('.kanban-col') : null;
+
+        col.querySelector('.p-3').appendChild(card);
+
+        try {
+            const resp = await fetch(`/api/v1/tareas/${draggedId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estado: nuevoEstado })
+            });
+            if (!resp.ok) throw new Error('Error al actualizar');
+        } catch (err) {
+            if (colAnterior) colAnterior.querySelector('.p-3').appendChild(card);
+            Swal.fire({ icon: 'error', title: 'No se pudo mover la tarea', text: 'Intenta nuevamente.', timer: 2500, showConfirmButton: false });
+        }
+        draggedId = null;
+    });
+});
+
+async function cancelarTarea(id) {
+    const confirm = await Swal.fire({
+        title: '¿Cancelar tarea?', icon: 'warning', showCancelButton: true,
+        confirmButtonText: 'Sí, cancelar', cancelButtonText: 'Volver', confirmButtonColor: '#dc2626'
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+        const resp = await fetch(`/api/v1/tareas/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estado: 'Cancelada' })
+        });
+        if (!resp.ok) throw new Error();
+        document.querySelector(`.kanban-card[data-tarea-id="${id}"]`).remove();
+    } catch (err) {
+        Swal.fire({ icon: 'error', title: 'No se pudo cancelar la tarea', timer: 2000, showConfirmButton: false });
+    }
+}
+</script>
+{% endblock %}

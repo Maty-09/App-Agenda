@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <script>
         tailwind.config = {
             theme: {
@@ -18,16 +18,13 @@
         }
     </script>
 </head>
-<body class="bg-[#f8fafc] text-slate-900 antialiased font-sans min-h-screen flex items-center justify-center p-4">
-
+<body class="bg-gradient-to-br from-slate-50 to-blue-50 text-slate-900 antialiased font-sans min-h-screen flex items-center justify-center p-4">
+{% from "partials/_logo.html" import logo %}
     <div class="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
-        
+
         <div class="p-8 pb-6 border-b border-slate-100 flex flex-col items-center">
-            <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4 border border-blue-100 shadow-sm">
-                <i class="fas fa-calendar-check text-2xl"></i>
-            </div>
-            <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Nexora Admin</h2>
-            <p class="text-sm text-slate-500 mt-1">Ingresa a tu cuenta corporativa</p>
+            <div class="mb-4">{{ logo(size='lg') }}</div>
+            <p class="text-sm text-slate-500">Ingresa a tu cuenta corporativa</p>
         </div>
 
         <div class="p-8 pt-6">

@@ -14,6 +14,7 @@ from app.core.generar_utm import generar_utm
 from app.core import models
 from app.infrastructure.notifications import enviar_notificacion
 from sqlalchemy import func
+import json
 import pytz
 import traceback
 
@@ -109,6 +110,17 @@ buffer_minutos = 10
 import holidays
 feriados_cl = holidays.country_holidays('CL')
 
+
+def dias_habiles_tenant(db: Session, tenant_id: str) -> set[int]:
+    """Días permitidos por tenant (0=lunes … 6=domingo)."""
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+    try:
+        config = json.loads(tenant.config_json or "{}")
+        dias = config.get("reglas_negocio", {}).get("dias_habiles", [0, 1, 2, 3, 4])
+        return {int(dia) for dia in dias}
+    except (AttributeError, ValueError, TypeError, json.JSONDecodeError):
+        return {0, 1, 2, 3, 4}
+
 @router.post("/agendar_web", response_class=HTMLResponse)
 @router.post("/{tenant_id}/agendar_web", response_class=HTMLResponse)
 async def recibir_formulario(request: Request, db: Session = Depends(get_db), tenant_id: str = "default"):
@@ -136,14 +148,14 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         nota_interna = form_data.get("nota_interna", "")
 
         # Validación de 48h hábiles (Se salta si es el dueño)
-        fecha_minima = obtener_fecha_minima_habil()
+        fecha_minima = obtener_fecha_minima_habil(db, tenant_id)
         fecha_cliente = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
         fecha_cliente = pytz.timezone('America/Santiago').localize(fecha_cliente)
 
         # --- 2. VALIDACIONES DE FECHA (SE SALTAN SI ES DUEÑO) ---
         if not es_dueno:
             # Regla A: 48h hábiles
-            fecha_minima = obtener_fecha_minima_habil()
+            fecha_minima = obtener_fecha_minima_habil(db, tenant_id)
             if fecha_cliente < fecha_minima:
                 # En entornos de pruebas podemos permitir el agendamiento aun cuando
                 # no cumpla 48h hábiles. Registramos una nota interna y continuamos.
@@ -500,8 +512,7 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
     if dia_bloqueado:
         return False  # Si el día está bloqueado, no hay disponibilidad para nadie
 
-    # REGLA: Excluir fines de semana (Lunes=0, Domingo=6)
-    if inicio.weekday() >= 5:
+    if inicio.weekday() not in dias_habiles_tenant(db, tenant_id):
         return False
 
     # REGLA: Excluir feriados en Chile
@@ -614,7 +625,7 @@ async def confirmar_cita_endpoint(agendamiento_id: int, db: Session = Depends(ge
         </html>
     """)
 
-def obtener_fecha_minima_habil():
+def obtener_fecha_minima_habil(db: Session, tenant_id: str):
     tz_chile = pytz.timezone('America/Santiago')
     fecha_chequeo = datetime.now(tz_chile)
     horas_contadas = 0
@@ -622,7 +633,7 @@ def obtener_fecha_minima_habil():
     while horas_contadas < 48:
         fecha_chequeo += timedelta(hours=1)
         # 0=Lunes, 4=Viernes, 5=Sábado, 6=Domingo
-        if fecha_chequeo.weekday() < 5:
+        if fecha_chequeo.weekday() in dias_habiles_tenant(db, tenant_id):
             horas_contadas += 1
     return fecha_chequeo
 

@@ -91,7 +91,9 @@ def logout():
 
 @router.get("/agendamientos", response_model=List[schemas.AgendamientoOut])
 def listar_agendamientos(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
-    return db.query(models.Agendamiento).order_by(models.Agendamiento.fecha_inicio).all()
+    return db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == cred.tenant_id
+    ).order_by(models.Agendamiento.fecha_inicio).all()
 
 
 @router.get("/panel", response_class=HTMLResponse)
@@ -103,7 +105,7 @@ def panel_agendamientos(
     db: Session = Depends(get_db),
     cred: CurrentUser = Depends(verificar_login)
 ):
-    query = db.query(models.Agendamiento)
+    query = db.query(models.Agendamiento).filter(models.Agendamiento.tenant_id == cred.tenant_id)
 
     print("=" * 80)
     print(f"DEBUG PANEL: subtipo={subtipo}, tipo_servicio={tipo_servicio}, fecha={fecha}")

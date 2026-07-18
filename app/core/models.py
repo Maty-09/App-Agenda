@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum,Time, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum,Time, ForeignKey, Date, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -143,6 +143,22 @@ class Agendamiento(Base):
     cliente = relationship("Cliente", back_populates="agendamientos")
 
     utm = relationship("UTMRegistro", back_populates="agendamiento", uselist=False, cascade="all, delete-orphan")
+    notificaciones = relationship("NotificacionAgendamiento", back_populates="agendamiento", cascade="all, delete-orphan")
+
+
+class NotificacionAgendamiento(Base):
+    __tablename__ = "notificaciones_agendamiento"
+    __table_args__ = (UniqueConstraint("agendamiento_id", "tipo", "canal", name="uq_notificacion_agendamiento_tipo_canal"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    agendamiento_id = Column(Integer, ForeignKey("agendamientos.id", ondelete="CASCADE"), nullable=False, index=True)
+    tipo = Column(String, nullable=False)
+    canal = Column(String, nullable=False)
+    enviado_en = Column(DateTime, default=get_now_chile, nullable=False)
+    detalle_error = Column(String, nullable=True)
+
+    agendamiento = relationship("Agendamiento", back_populates="notificaciones")
 
 
 

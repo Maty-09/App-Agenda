@@ -1,0 +1,21 @@
+name: Ejecutar recordatorios
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  notificar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invocar el procesador de notificaciones
+        env:
+          NOTIFICATIONS_CRON_URL: ${{ secrets.NOTIFICATIONS_CRON_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$NOTIFICATIONS_CRON_URL"
+          test -n "$CRON_SECRET"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            "$NOTIFICATIONS_CRON_URL/api/v1/cron/notificaciones"

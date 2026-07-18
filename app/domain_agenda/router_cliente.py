@@ -12,6 +12,7 @@ from app.infrastructure.email_utils import (
 )
 from app.core.generar_utm import generar_utm 
 from app.core import models
+from app.infrastructure.notifications import enviar_notificacion
 from sqlalchemy import func
 import pytz
 import traceback
@@ -34,6 +35,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 @router.get("/agendar_web", response_class=HTMLResponse)
+@router.get("/{tenant_id}/agendar_web", response_class=HTMLResponse)
 def agendar_web(
     request: Request,
     tipo: str = Query(None),
@@ -41,8 +43,11 @@ def agendar_web(
     fecha: str = Query(None),
     hora: str = Query(None),
     duracion_horas: int = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    tenant_id: str = "default"
 ):
+    if not db.query(models.Tenant.id).filter(models.Tenant.id == tenant_id).first():
+        raise HTTPException(status_code=404, detail="Tenant no encontrado")
     # 1. NORMALIZACIÓN Y VALIDACIÓN INICIAL
     tipo = tipo.lower().strip() if tipo else "domicilio_taller"
     subtipo = subtipo.lower().strip() if subtipo else "local"
@@ -54,6 +59,7 @@ def agendar_web(
     # 2. OBTENER CAMPOS DINÁMICOS (Lo que configuraste en el Admin)
     # Filtramos por el subtipo para que si es Local salgan unos y si es Domicilio otros
     campos_dinamicos = db.query(models.CampoFormulario).filter(
+        models.CampoFormulario.tenant_id == tenant_id,
         models.CampoFormulario.subtipo_servicio == subtipo_db,
         models.CampoFormulario.activo == True
     ).order_by(models.CampoFormulario.orden.asc()).all()
@@ -72,7 +78,7 @@ def agendar_web(
             fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
             # ... (Aquí va toda tu lógica de validación de lunes a viernes, colación, etc.)
             # Asumamos que llamas a obtener_horas_disponibles() como ya lo tenías
-            horas_disponibles = obtener_horas_disponibles(tipo, fecha_obj, duracion_horas, db)
+            horas_disponibles = obtener_horas_disponibles(tipo, fecha_obj, duracion_horas, db, tenant_id)
             
             # Calcular término si hay hora seleccionada
             if hora:
@@ -95,6 +101,7 @@ def agendar_web(
         "campos_dinamicos": campos_dinamicos, # <--- ESTO ES LO QUE USA EL HTML
         "utm_source": "whatsapp",
         "utm_campaign": f"{tipo}_{subtipo}"
+        ,"booking_path": f"/cliente/{tenant_id}/agendar_web" if tenant_id != "default" else "/cliente/agendar_web"
     })
 
 buffer_minutos = 10
@@ -103,9 +110,12 @@ import holidays
 feriados_cl = holidays.country_holidays('CL')
 
 @router.post("/agendar_web", response_class=HTMLResponse)
-async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
+@router.post("/{tenant_id}/agendar_web", response_class=HTMLResponse)
+async def recibir_formulario(request: Request, db: Session = Depends(get_db), tenant_id: str = "default"):
     print("\n🚀 --- INICIO DE PROCESAMIENTO POST ---")
     try:
+        if not db.query(models.Tenant.id).filter(models.Tenant.id == tenant_id).first():
+            raise HTTPException(status_code=404, detail="Tenant no encontrado")
         form_data = await request.form()
         print(f"📦 Datos recibidos: {dict(form_data)}")
         
@@ -142,7 +152,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
                 nota_interna = (nota_interna or "") + " | EXCEPCION_48H"
             
             # Regla B: Verificar si el día está bloqueado manualmente
-            dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == fecha).first()
+            dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == tenant_id, models.DiaBloqueado.fecha == fecha).first()
             if dia_bloqueado:
                 return templates.TemplateResponse("agendar.html", {
                     "request": request,
@@ -158,7 +168,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
 
         # 3. MAPEO DE CAMPOS DINÁMICOS
         respuestas = {}
-        campos_db = db.query(models.CampoFormulario).all()
+        campos_db = db.query(models.CampoFormulario).filter(models.CampoFormulario.tenant_id == tenant_id).all()
         print("\n--- DEBUG: Mapeando datos desde el Formulario ---")
         
         # Crear mapa de mapeos de nombres técnicos a claves normalizadas
@@ -243,6 +253,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
         for eq in equipos_posibles:
             # ¿Este equipo específico está ocupado a esta hora?
             ocupado = db.query(models.Agendamiento).filter(
+                models.Agendamiento.tenant_id == tenant_id,
                 models.Agendamiento.equipo == eq,
                 models.Agendamiento.fecha_inicio < fecha_termino,
                 models.Agendamiento.fecha_termino > fecha_inicio,
@@ -267,12 +278,12 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
         import json
         cliente = db.query(models.Cliente).filter(
             models.Cliente.rut == rut,
-            models.Cliente.tenant_id == "default"
+            models.Cliente.tenant_id == tenant_id
         ).first()
 
         if not cliente:
             cliente = models.Cliente(
-                tenant_id="default",
+                tenant_id=tenant_id,
                 rut=rut,
                 nombre=nombre,
                 apellido=apellido,
@@ -291,7 +302,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
 
         # 7. GUARDAR EN BASE DE DATOS
         nueva = models.Agendamiento(
-            tenant_id="default",
+            tenant_id=tenant_id,
             cliente_id=cliente.id,
             rut=rut, 
             nombre=nombre, 
@@ -318,7 +329,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
         
         # 8. REGISTRAR TIMELINE EVENT
         evento = models.TimelineEvent(
-            tenant_id="default",
+            tenant_id=tenant_id,
             cliente_id=cliente.id,
             tipo_evento="RESERVA",
             metadata_json=json.dumps({
@@ -345,7 +356,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db)):
     # 7. ENVÍO DE AVISO INICIAL
         try:
         # 1. ESTO ES LO ÚNICO QUE LLEGA AL AGENDAR
-            enviar_aviso_recibido_cliente(nueva) 
+            enviar_notificacion(nueva.id, "creada")
             
             print(f"✅ Aviso de 'Solicitud Recibida' enviado a: {correo}")
 
@@ -428,9 +439,9 @@ def obtner_cupos_disponibles(tipo_servicio, fecha, duracion, db):
 
 
 
-def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db):
+def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_id="default"):
     # 1. Bloqueo manual (botón de administración)
-    bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == fecha).first()
+    bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == tenant_id, models.DiaBloqueado.fecha == fecha).first()
     if bloqueado:
         return []
 
@@ -451,7 +462,7 @@ def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db):
         inicio = datetime.combine(fecha, datetime.strptime(h, "%H:%M").time())
         
         # Validaciones de horario general (08:00-18:00) y feriados
-        if not verificar_disponibilidad(db, tipo_servicio, inicio, duracion_horas):
+        if not verificar_disponibilidad(db, tipo_servicio, inicio, duracion_horas, tenant_id):
             continue
 
         # --- CONTADOR DE CUPOS POR EQUIPO ---
@@ -459,6 +470,7 @@ def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db):
         
         # Contamos cuántos de tus 3 equipos ya están ocupados en este bloque exacto
         equipos_ocupados = db.query(models.Agendamiento).filter(
+            models.Agendamiento.tenant_id == tenant_id,
             models.Agendamiento.fecha_inicio < termino,
             models.Agendamiento.fecha_termino > inicio,
             models.Agendamiento.estado != "cancelado"
@@ -481,10 +493,10 @@ def carga_equipo_en_dia(db, equipo, fecha):
         models.Agendamiento.fecha_inicio <= fin
     ).count()
 
-def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, duracion_horas: int) -> bool:
+def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, duracion_horas: int, tenant_id: str = "default") -> bool:
 
     # 1. NUEVO: Chequear si el día está bloqueado por administración
-    dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == inicio.date()).first()
+    dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == tenant_id, models.DiaBloqueado.fecha == inicio.date()).first()
     if dia_bloqueado:
         return False  # Si el día está bloqueado, no hay disponibilidad para nadie
 
@@ -549,6 +561,7 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
     # 6. Validar traslapes en la DB
     # Contamos cuántos equipos están ocupados en este bloque
     agendados_en_bloque = db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == tenant_id,
         models.Agendamiento.fecha_inicio < fin,
         models.Agendamiento.fecha_termino > inicio,
         models.Agendamiento.estado != "cancelado"

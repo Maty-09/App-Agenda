@@ -44,7 +44,7 @@
         {% if not fecha_seleccionada %}
         <div class="space-y-6">
             <h2 class="text-lg font-semibold text-gray-700">1️⃣ Selecciona la fecha</h2>
-            <form method="get" action="/cliente/agendar_web" class="space-y-4">
+            <form method="get" action="{{ booking_path|default('/cliente/agendar_web') }}" class="space-y-4">
                 <input type="hidden" name="modo" value="{{ request.query_params.get('modo', 'normal') }}">
                 <input type="hidden" name="tipo" value="{{ tipo }}">
                 <input type="hidden" name="subtipo" value="{{ subtipo }}">
@@ -74,7 +74,7 @@
             </div>
             {% endif %}
 
-            <form id="form-hora" method="get" action="/cliente/agendar_web" class="space-y-4">
+            <form id="form-hora" method="get" action="{{ booking_path|default('/cliente/agendar_web') }}" class="space-y-4">
                 <input type="hidden" name="modo" value="{{ request.query_params.get('modo', 'normal') }}">
                 <input type="hidden" name="tipo" value="{{ tipo }}">
                 <input type="hidden" name="subtipo" value="{{ subtipo }}">
@@ -99,7 +99,7 @@
                 <span>⏰ {{ hora_confirmada }}</span>
             </div>
 
-            <form method="post" action="/cliente/agendar_web" class="space-y-5">
+            <form method="post" action="{{ booking_path|default('/cliente/agendar_web') }}" class="space-y-5">
                 <input type="hidden" name="modo" value="{{ request.query_params.get('modo', 'normal') }}">
                 <input type="hidden" name="modo_emergencia" value="{{ 'true' if es_admin else 'false' }}">
                 

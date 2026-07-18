@@ -6,7 +6,7 @@ from passlib.context import CryptContext
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app.core.database import SessionLocal
-from app.core.models import Tenant, Usuario
+from app.core.models import Tenant, Usuario, CampoFormulario
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -22,7 +22,19 @@ def seed_tenant(tenant_id: str, empresa: str, admin_email: str, admin_pass: str)
             tenant = Tenant(id=tenant_id, nombre_empresa=empresa)
             db.add(tenant)
             db.commit()
+            # Cada tenant parte con la misma estructura de formulario del tenant base.
+            campos_base = db.query(CampoFormulario).filter(CampoFormulario.tenant_id == "default").all()
+            for campo in campos_base:
+                db.add(CampoFormulario(
+                    tenant_id=tenant_id, label=campo.label, tipo_campo=campo.tipo_campo,
+                    opciones=campo.opciones, orden=campo.orden, activo=campo.activo,
+                    obligatorio=campo.obligatorio, tipo_servicio=campo.tipo_servicio,
+                    subtipo_servicio=campo.subtipo_servicio, es_sistema=campo.es_sistema,
+                    nombre_tecnico=campo.nombre_tecnico,
+                ))
+            db.commit()
             print(f"[OK] Tenant '{empresa}' (ID: {tenant_id}) creado exitosamente.")
+            print(f"[OK] Enlace público: /cliente/{tenant_id}/agendar_web")
         else:
             print(f"[WARN] Tenant '{tenant_id}' ya existe. Omitiendo creación.")
 

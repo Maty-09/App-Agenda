@@ -29,7 +29,8 @@ class DiaBloqueado(Base):
     __tablename__ = "dias_bloqueados"
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, default="default")
-    fecha = Column(Date, unique=True, nullable=False)
+    fecha = Column(Date, nullable=False)
+    __table_args__ = (UniqueConstraint("tenant_id", "fecha", name="uq_dias_bloqueados_tenant_fecha"),)
     motivo = Column(String, nullable=True)
 
 class TipoServicio(str, enum.Enum):
@@ -41,7 +42,7 @@ class Cliente(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, default="default")
-    rut = Column(String, nullable=False, unique=True, index=True)
+    rut = Column(String, nullable=False, index=True)
     nombre = Column(String, nullable=False)
     apellido = Column(String, nullable=False)
     telefono = Column(String, nullable=False)
@@ -52,6 +53,7 @@ class Cliente(Base):
     timeline = relationship("TimelineEvent", back_populates="cliente")
     tareas = relationship("Tarea", back_populates="cliente")
     tenant = relationship("Tenant")
+    __table_args__ = (UniqueConstraint("tenant_id", "rut", name="uq_clientes_tenant_rut"),)
 
 class TimelineEvent(Base):
     __tablename__ = "timeline_events"

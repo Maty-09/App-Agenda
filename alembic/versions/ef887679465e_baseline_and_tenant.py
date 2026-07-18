@@ -57,6 +57,7 @@ def upgrade() -> None:
     sa.Column('boton_enviado', sa.Boolean(), server_default='0', nullable=True),
     sa.Column('nota_compartida', sa.String(), nullable=True),
     sa.Column('estado', sa.String(), nullable=True),
+    sa.Column('razon_estado', sa.String(), nullable=True),
     sa.Column('fecha_cancelacion', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ),
     sa.PrimaryKeyConstraint('id')

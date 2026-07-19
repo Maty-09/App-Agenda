@@ -11,13 +11,13 @@ load_dotenv() # Load variables from .env
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Ajustamos path ya que ahora estamos en app/core/
 DB_PATH = BASE_DIR / "agendamientos.db"
 
-SQLALCHEMY_DATABASE_URL = ***REMOVED***
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 if not SQLALCHEMY_DATABASE_URL:
     raise RuntimeError("DATABASE_URL debe estar configurada")
 
 # Fix postgres:// to postgresql:// if needed for SQLAlchemy
 if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
-    SQLALCHEMY_DATABASE_URL = ***REMOVED***
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # Specific args for SQLite
 connect_args = {}

@@ -118,7 +118,7 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
     """
     Integración con la API de InceptionLabs. Contextualizada con base de datos si aplica.
     """
-    api_key = ***REMOVED***
+    api_key = os.getenv("INCEPTION_API_KEY")
     if not api_key:
         return "La inteligencia artificial no est\u00e1 configurada."
     url = "https://api.inceptionlabs.ai/v1/chat/completions"

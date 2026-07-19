@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # JWT Config
-SECRET_KEY = ***REMOVED***
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("JWT_SECRET_KEY debe estar configurada")
 ALGORITHM = "HS256"

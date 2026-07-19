@@ -109,6 +109,12 @@ def inicializar_campos_sistema(db: Session):
 
 @app.on_event("startup")
 async def startup_event():
+    if os.environ.get("VERCEL") == "1":
+        logger.info("Entorno Vercel: esquema gestionado por Alembic y scheduler deshabilitado.")
+        return
+
+    # Desarrollo local: conserva la compatibilidad con instalaciones antiguas.
+    # Producción nunca ejecuta DDL durante un cold start.
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:

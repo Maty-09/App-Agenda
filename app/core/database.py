@@ -11,9 +11,9 @@ load_dotenv() # Load variables from .env
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Ajustamos path ya que ahora estamos en app/core/
 DB_PATH = BASE_DIR / "agendamientos.db"
 
-# Fallback to PostgreSQL (Supabase) if DATABASE_URL is not set in Render
-DEFAULT_PG_URL = "postgresql://***REMOVED***"
 SQLALCHEMY_DATABASE_URL = ***REMOVED***
+if not SQLALCHEMY_DATABASE_URL:
+    raise RuntimeError("DATABASE_URL debe estar configurada")
 
 # Fix postgres:// to postgresql:// if needed for SQLAlchemy
 if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
@@ -25,7 +25,10 @@ if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False, "timeout": 15}
 
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args=connect_args
+    SQLALCHEMY_DATABASE_URL,
+    connect_args=connect_args,
+    pool_pre_ping=True,
+    pool_recycle=300,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

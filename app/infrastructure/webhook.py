@@ -5,9 +5,11 @@ from app.infrastructure.twilio_service import generar_respuesta_twilio
 router = APIRouter()
 
 @router.post("/whatsapp")
+@router.post("/{tenant_id}/whatsapp")
 async def webhook_whatsapp(
     From: str = Form(...),
-    Body: str = Form(...)
+    Body: str = Form(...),
+    tenant_id: str = "default",
 ):
     """
     Endpoint principal (Webhook) donde Twilio envía los mensajes entrantes de WhatsApp.
@@ -20,7 +22,11 @@ async def webhook_whatsapp(
 
     # 2. Procesar la lógica del negocio con Inteligencia Artificial
     # Aquí es donde ocurre la magia: la IA determina qué responder
-    respuesta_texto = await generar_respuesta_bot(texto=mensaje_texto, numero_remitente=numero_remitente)
+    respuesta_texto = await generar_respuesta_bot(
+        texto=mensaje_texto,
+        numero_remitente=numero_remitente,
+        tenant_id=tenant_id,
+    )
 
     # 3. Formatear la respuesta para que Twilio la entienda
     # Twilio espera un XML (TwiML) en la respuesta HTTP

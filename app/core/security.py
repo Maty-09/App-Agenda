@@ -9,6 +9,8 @@ load_dotenv()
 
 # JWT Config
 SECRET_KEY = ***REMOVED***
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET_KEY debe estar configurada")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 días para el SaaS
 

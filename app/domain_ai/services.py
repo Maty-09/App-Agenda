@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+import os
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from app.core import models
@@ -71,7 +72,10 @@ def agendar_cita_ia(db: Session, tenant_id: str, telefono: str, fecha_inicio: da
     Permite al Bot crear una cita basada en la intención de WhatsApp.
     """
     # Buscar si el cliente existe por teléfono
-    cliente = db.query(models.Cliente).filter(models.Cliente.telefono == telefono).first()
+    cliente = db.query(models.Cliente).filter(
+        models.Cliente.tenant_id == tenant_id,
+        models.Cliente.telefono == telefono,
+    ).first()
     
     if not cliente:
         # Crear cliente temporal
@@ -110,11 +114,13 @@ def agendar_cita_ia(db: Session, tenant_id: str, telefono: str, fecha_inicio: da
     db.refresh(cita)
     return cita
 
-def chat_ia(mensaje: str, db: Session = None, telefono: str = None) -> str:
+def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: str = None) -> str:
     """
     Integración con la API de InceptionLabs. Contextualizada con base de datos si aplica.
     """
     api_key = ***REMOVED***
+    if not api_key:
+        return "La inteligencia artificial no est\u00e1 configurada."
     url = "https://api.inceptionlabs.ai/v1/chat/completions"
     
     headers = {
@@ -129,7 +135,7 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None) -> str:
     if db:
         # Detectar si el usuario pregunta por marcas
         if "marcas" in mensaje.lower() or "top" in mensaje.lower():
-            top_marcas = obtener_top_marcas_agendadas(db, "default")
+            top_marcas = obtener_top_marcas_agendadas(db, tenant_id)
             contexto_datos = "\n\nDatos Reales de la Base de Datos:\n"
             contexto_datos += "Top Marcas Agendadas:\n"
             for i, m in enumerate(top_marcas):
@@ -190,7 +196,7 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None) -> str:
                     fecha_inicio = get_now_chile() + timedelta(days=1)
                 
                 # Ejecutar agendamiento real en Base de Datos
-                agendar_cita_ia(db=db, tenant_id="default", telefono=telefono, fecha_inicio=fecha_inicio, marca=motivo_marca)
+                agendar_cita_ia(db=db, tenant_id=tenant_id, telefono=telefono, fecha_inicio=fecha_inicio, marca=motivo_marca)
                 
                 # Limpiar la respuesta visual para el usuario
                 respuesta_ia = re.sub(r'\[AGENDAR:.*?\]', '', respuesta_ia).strip()

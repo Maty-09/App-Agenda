@@ -1056,7 +1056,10 @@ def get_dashboard(
     lista_canceladas = query.filter(models.Agendamiento.estado == "cancelado").order_by(models.Agendamiento.fecha_inicio.desc()).limit(10).all()
 
     # Top 10 Tareas Urgentes (Mejora 8)
-    tareas_activas_list = db.query(models.Tarea).filter(models.Tarea.estado.notin_(["Completada", "Cancelada"])).all()
+    tareas_activas_list = db.query(models.Tarea).filter(
+        models.Tarea.tenant_id == cred.tenant_id,
+        models.Tarea.estado.notin_(["Completada", "Cancelada"]),
+    ).all()
     
     def puntaje_tarea(t):
         p_score = {"Crítica": 4, "Alta": 3, "Media": 2, "Baja": 1}.get(t.prioridad, 0)

@@ -124,12 +124,12 @@ def dias_habiles_tenant(db: Session, tenant_id: str) -> set[int]:
 @router.post("/agendar_web", response_class=HTMLResponse)
 @router.post("/{tenant_id}/agendar_web", response_class=HTMLResponse)
 async def recibir_formulario(request: Request, db: Session = Depends(get_db), tenant_id: str = "default"):
-    print("\n🚀 --- INICIO DE PROCESAMIENTO POST ---")
+    print("\n--- INICIO DE PROCESAMIENTO POST ---")
     try:
         if not db.query(models.Tenant.id).filter(models.Tenant.id == tenant_id).first():
             raise HTTPException(status_code=404, detail="Tenant no encontrado")
         form_data = await request.form()
-        print(f"📦 Datos recibidos: {dict(form_data)}")
+        print(f"Datos recibidos: {dict(form_data)}")
         
         tipo_servicio = form_data.get("tipo_servicio")
         subtipo = form_data.get("subtipo")
@@ -143,7 +143,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         es_dueno = (request.query_params.get("modo") == "emergencia" or 
                     form_data.get("modo_emergencia") == "true" or
                     form_data.get("modo") == "emergencia")
-        print(f"👑 ¿Es dueño/admin?: {es_dueno}")
+        print(f"Es dueno/admin: {es_dueno}")
 
         nota_interna = form_data.get("nota_interna", "")
 
@@ -159,7 +159,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
             if fecha_cliente < fecha_minima:
                 # En entornos de pruebas podemos permitir el agendamiento aun cuando
                 # no cumpla 48h hábiles. Registramos una nota interna y continuamos.
-                print(f"⚠️ VALIDACIÓN 48H FALLIDA: fecha_cliente={fecha_cliente}, fecha_minima={fecha_minima} -- Se ignorará temporalmente para pruebas.")
+                print(f"Validacion 48H fallida: fecha_cliente={fecha_cliente}, fecha_minima={fecha_minima}; se permite para pruebas.")
                 # Añadir marca en la nota interna para identificar excepciones
                 nota_interna = (nota_interna or "") + " | EXCEPCION_48H"
             
@@ -215,9 +215,9 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
                     clave_final = nombre_tecnico_normalizado
                 
                 respuestas[clave_final] = valor
-                print(f"✅ {c.nombre_tecnico} (ID {c.id}) → {clave_final}: {valor}")
+                print(f"Campo {c.nombre_tecnico} (ID {c.id}) -> {clave_final}: {valor}")
         
-        print(f"🔍 Respuestas finales mapeadas: {respuestas}")
+        print(f"Respuestas finales mapeadas: {respuestas}")
 
         # 2. ASIGNACIÓN DE VARIABLES (Mejorado con fallbacks)
         rut = respuestas.get("rut")
@@ -257,7 +257,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         
         # Si no hay equipos definidos para este tipo, usamos los de domicilio_taller como fallback
         if not equipos_posibles:
-            print(f"⚠️ ALERTA: tipo_servicio '{tipo_servicio}' no definido en Recursos. Usando fallback.")
+            print(f"Alerta: tipo_servicio '{tipo_servicio}' no definido en Recursos. Usando fallback.")
             equipos_posibles = Recursos.get("domicilio_taller", ["Equipo Local"])
         
         equipo_asignado = None
@@ -279,12 +279,12 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         # Si no hay equipo libre pero es el DUEÑO, forzamos el primero de la lista (Sobrecupo)
         if not equipo_asignado and es_dueno:
             equipo_asignado = equipos_posibles[0] if equipos_posibles else "Equipo Local"
-            print(f"⚠️ MODO EMERGENCIA: Sobrecupo detectado. Asignando a {equipo_asignado}")
+            print(f"Modo emergencia: sobrecupo detectado. Asignando a {equipo_asignado}")
 
         if not equipo_asignado:
             # Fallback final: asignar equipo por defecto incluso si nada está libre
             equipo_asignado = equipos_posibles[0] if equipos_posibles else "Equipo Local"
-            print(f"⚠️ Fallback: Todos los equipos ocupados. Asignando {equipo_asignado}")
+            print(f"Fallback: todos los equipos ocupados. Asignando {equipo_asignado}")
             
         # 6. LÓGICA CRM: CREAR O BUSCAR CLIENTE
         import json
@@ -356,7 +356,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         db.refresh(nueva)
         
         print("=" * 80)
-        print(f"✅ GUARDADO EXITOSO EN DB")
+        print("GUARDADO EXITOSO EN DB")
         print(f"   ID: {nueva.id}")
         print(f"   Nombre: {nueva.nombre}")
         print(f"   Tipo Servicio: {nueva.tipo_servicio}")
@@ -370,12 +370,12 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         # 1. ESTO ES LO ÚNICO QUE LLEGA AL AGENDAR
             enviar_notificacion(nueva.id, "creada")
             
-            print(f"✅ Aviso de 'Solicitud Recibida' enviado a: {correo}")
+            print(f"Aviso de solicitud recibida enviado a: {correo}")
 
             # ❌ NO enviar nada más aquí. 
             # El botón verde llegará solo en 5 min gracias al Scheduler.
         except Exception as e:
-            print(f"⚠️ Error al enviar aviso inicial: {e}")
+            print(f"Error al enviar aviso inicial: {e}")
 
         return templates.TemplateResponse("agendar.html", {
             "request": request,
@@ -387,10 +387,10 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
 
     except Exception as e:
         db.rollback()
-        print(f"❌ ERROR EN AGENDAMIENTO: {e}")
+        print(f"ERROR EN AGENDAMIENTO: {e}")
         error_trace = traceback.format_exc()
-        print(f"🔥 ERROR CRÍTICO EN RENDER:\n{error_trace}")
-        print(f"❌ ERROR DETALLO: {traceback.format_exc()}")
+        print(f"ERROR CRITICO EN RENDER:\n{error_trace}")
+        print(f"ERROR DETALLE: {traceback.format_exc()}")
         return templates.TemplateResponse("agendar.html", {
             "request": request,
             "mensaje_error": str(e),

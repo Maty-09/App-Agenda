@@ -938,11 +938,23 @@ def get_dashboard(
 
     # Disponibilidad día a día de la semana (Mejora: vista semanal para el cliente interno)
     DIAS_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-    def get_disponibilidad_dias(dias: int):
+    try:
+        tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+        tenant_config = json.loads(tenant.config_json or "{}")
+        dias_habiles = {
+            int(dia)
+            for dia in tenant_config.get("reglas_negocio", {}).get("dias_habiles", [0, 1, 2, 3, 4])
+        }
+    except (AttributeError, ValueError, TypeError, json.JSONDecodeError):
+        dias_habiles = {0, 1, 2, 3, 4}
+
+    def get_disponibilidad_dias(cantidad_dias_habiles: int):
         resultado = []
-        for i in range(dias):
-            dia = hoy_dt + timedelta(days=i)
-            es_domingo = dia.weekday() == 6
+        dia = hoy_dt
+        while len(resultado) < cantidad_dias_habiles:
+            if dia.weekday() not in dias_habiles:
+                dia += timedelta(days=1)
+                continue
             bloqueo = db.query(models.DiaBloqueado).filter(
                 models.DiaBloqueado.tenant_id == cred.tenant_id,
                 models.DiaBloqueado.fecha == dia.date()
@@ -953,9 +965,9 @@ def get_dashboard(
                 models.Agendamiento.fecha_inicio < (dia + timedelta(days=1)).replace(tzinfo=None),
                 models.Agendamiento.estado != "cancelado"
             ).count()
-            capacidad_dia = 0 if (es_domingo or bloqueo) else CAPACIDAD_DIARIA
+            capacidad_dia = 0 if bloqueo else CAPACIDAD_DIARIA
             porcentaje = round((ocupado / capacidad_dia) * 100, 1) if capacidad_dia > 0 else 100
-            if es_domingo or bloqueo:
+            if bloqueo:
                 estado_dia = "Bloqueado"
             elif porcentaje > 80:
                 estado_dia = "Saturado"
@@ -972,9 +984,10 @@ def get_dashboard(
                 "estado": estado_dia,
                 "motivo_bloqueo": bloqueo.motivo if bloqueo else None
             })
+            dia += timedelta(days=1)
         return resultado
 
-    disponibilidad_semana = get_disponibilidad_dias(7)
+    disponibilidad_semana = get_disponibilidad_dias(len(dias_habiles))
 
     # Citas por estado
     confirmadas = query.filter(models.Agendamiento.estado == "confirmado").count()

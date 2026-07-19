@@ -115,10 +115,10 @@ def panel_agendamientos(
         if filter_subtipo == "local":
             filter_subtipo = "taller"
         query = query.filter(models.Agendamiento.subtipo == filter_subtipo)
-        print(f"  → Filtrando por subtipo: {filter_subtipo}")
+        print(f"  -> Filtrando por subtipo: {filter_subtipo}")
     if tipo_servicio:
         query = query.filter(models.Agendamiento.tipo_servicio == tipo_servicio)
-        print(f"  → Filtrando por tipo_servicio: {tipo_servicio}")
+        print(f"  -> Filtrando por tipo_servicio: {tipo_servicio}")
     if fecha:
         try:
             fecha_inicio = datetime.strptime(fecha, "%Y-%m-%d")

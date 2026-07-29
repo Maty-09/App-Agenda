@@ -1,4 +1,4 @@
--- Habilitar Row Level Security en las tablas principales de Nexora
+-- Habilitar Row Level Security en las tablas principales de Noren
 
 ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agendamientos ENABLE ROW LEVEL SECURITY;

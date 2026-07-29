@@ -23,12 +23,12 @@ def seed_usuarios():
     db = SessionLocal()
     try:
         # Verificar si ya existe
-        admin = db.query(models.Usuario).filter(models.Usuario.email == "admin@nexora.cl").first()
+        admin = db.query(models.Usuario).filter(models.Usuario.email == "admin@noren.cl").first()
         if not admin:
             admin = models.Usuario(
                 tenant_id="default",
                 nombre="Administrador Principal",
-                email="admin@nexora.cl",
+                email="admin@noren.cl",
                 password_hash="hashed_1234", # Simulado por ahora
                 rol="admin"
             )
@@ -37,7 +37,7 @@ def seed_usuarios():
             tecnico = models.Usuario(
                 tenant_id="default",
                 nombre="Técnico Cristhian",
-                email="cristhian@nexora.cl",
+                email="cristhian@noren.cl",
                 password_hash="hashed_1234",
                 rol="tecnico"
             )

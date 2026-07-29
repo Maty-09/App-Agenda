@@ -123,7 +123,7 @@ async def startup_event():
         if not tenant:
             nuevo_tenant = models.Tenant(
                 id="default",
-                nombre_empresa="Nexora Default"
+                nombre_empresa="Noren Default"
             )
             db.add(nuevo_tenant)
             db.commit()

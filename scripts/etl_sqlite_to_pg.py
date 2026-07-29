@@ -42,7 +42,7 @@ def migrar_datos():
         # Migrar Tenants (si no existe el default)
         tenant_default = pg_db.query(models.Tenant).filter(models.Tenant.id == "default").first()
         if not tenant_default:
-            tenant_default = models.Tenant(id="default", nombre_empresa="Nexora Principal")
+            tenant_default = models.Tenant(id="default", nombre_empresa="Noren Principal")
             pg_db.add(tenant_default)
             pg_db.commit()
 

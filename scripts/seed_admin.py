@@ -11,18 +11,18 @@ def seed_admin():
         tenant = db.query(models.Tenant).filter(models.Tenant.id == "default").first()
         if not tenant:
             print("Creando Tenant por defecto...")
-            tenant = models.Tenant(id="default", nombre_empresa="Nexora Principal")
+            tenant = models.Tenant(id="default", nombre_empresa="Noren Principal")
             db.add(tenant)
             db.commit()
 
         # Revisar si existe el admin
-        email_admin = "admin@nexora.com"
+        email_admin = "admin@noren.com"
         admin = db.query(models.Usuario).filter(models.Usuario.email == email_admin).first()
         if not admin:
             print(f"Creando usuario Super Admin: {email_admin}...")
             nuevo_admin = models.Usuario(
                 tenant_id="default",
-                nombre="Admin Nexora",
+                nombre="Admin Noren",
                 email=email_admin,
                 password_hash=security.get_password_hash("admin123"),
                 rol="superadmin"
@@ -30,7 +30,7 @@ def seed_admin():
             db.add(nuevo_admin)
             db.commit()
             print("¡Super Admin creado exitosamente!")
-            print("Email: admin@nexora.com")
+            print("Email: admin@noren.com")
             print("Pass: admin123")
         else:
             print("El usuario Super Admin ya existe. Forzando actualización de contraseña a 'admin123' para pruebas.")

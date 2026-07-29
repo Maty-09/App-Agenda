@@ -7,6 +7,9 @@ import pytz
 import requests
 import json
 
+# Memoria conversacional en RAM (Dicc global)
+historial_global = {}
+
 def get_now_chile():
     tz = pytz.timezone('America/Santiago')
     return datetime.now(tz)
@@ -148,19 +151,51 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
             ).first()
             if usuario and usuario.rol == "admin":
                 es_admin = True
+                
+            # Agregar información de citas del cliente al contexto
+            cliente = db.query(models.Cliente).filter(models.Cliente.telefono == telefono).first()
+            citas_futuras = []
+            if cliente:
+                citas_futuras = db.query(models.Agendamiento).filter(
+                    models.Agendamiento.cliente_id == cliente.id,
+                    models.Agendamiento.fecha_inicio >= get_now_chile().replace(tzinfo=None),
+                    models.Agendamiento.estado != "cancelado"
+                ).order_by(models.Agendamiento.fecha_inicio.asc()).all()
+            else:
+                citas_futuras = db.query(models.Agendamiento).filter(
+                    models.Agendamiento.telefono == telefono,
+                    models.Agendamiento.fecha_inicio >= get_now_chile().replace(tzinfo=None),
+                    models.Agendamiento.estado != "cancelado"
+                ).order_by(models.Agendamiento.fecha_inicio.asc()).all()
+
+            contexto_datos += "\n\n--- MEMORIA SOBRE EL CLIENTE ACTUAL ---\n"
+            if citas_futuras:
+                contexto_datos += "El cliente con el que hablas tiene las siguientes citas programadas a futuro:\n"
+                for cita in citas_futuras:
+                    contexto_datos += f"- Fecha y hora: {cita.fecha_inicio.strftime('%Y-%m-%d %H:%M')}, Servicio: {cita.tipo_servicio}, Marca: {cita.marca}, Estado: {cita.estado}\n"
+                contexto_datos += "Usa esta información si el cliente pregunta por sus citas agendadas o confirmaciones.\n"
+            else:
+                contexto_datos += "El cliente NO tiene ninguna cita agendada a futuro. Si pregunta por sus horas, confírmale que no tiene nada programado y ofrécele agendar.\n"
     
+    # Generar lista de feriados para inyectar en el contexto
+    import holidays
+    year_actual = get_now_chile().year
+    feriados_cl = holidays.country_holidays('CL', years=year_actual)
+    feriados_str = ", ".join([f"{fecha.strftime('%Y-%m-%d')} ({nombre})" for fecha, nombre in sorted(feriados_cl.items())])
+
     # Contexto del sistema
     system_prompt = (
         "Eres el Asistente Ejecutivo e Inteligencia Operativa de Nexora, un experto en organización, atención al cliente y generación de ventas. "
         "Tu objetivo es ayudar a los clientes a agendar de la manera más rápida posible, maximizar la operatividad de la empresa y detectar oportunidades de venta (upselling/cross-selling).\n\n"
         "Reglas de Actuación:\n"
-        "1. PROACTIVIDAD AL AGENDAR: No hagas preguntas abiertas como '¿Qué día te acomoda?'. Ofrece opciones directas: '¿Te parece bien mañana a las 10:00 AM o prefieres en la tarde?'.\n"
-        "2. GENERACIÓN DE VENTAS: Si el cliente pide un servicio básico, sugiere de forma elegante un servicio complementario o premium que agregue valor. Actúa como un consultor experto.\n"
-        "3. OPERATIVIDAD B2B: Sé extremadamente eficiente, cortés y resolutivo. Respuestas cortas, en párrafos breves, ideales para leerse en WhatsApp.\n"
-        "4. PROTOCOLO DE REGISTRO: En el momento exacto en que tengas la confirmación de fecha, hora y motivo, DEBES incluir al final de tu respuesta EXACTAMENTE este comando oculto "
-        "(reemplazando los valores): [AGENDAR: YYYY-MM-DD HH:MM | Motivo o Marca]. "
-        "Ejemplo: '¡Excelente! Quedas agendado para mañana. [AGENDAR: 2026-07-10 10:00 | Revisión General Premium]'.\n"
-        "5. PANEL DE ADMIN: Si te hacen preguntas de métricas o de negocio y se te inyectan datos reales, responde como el analista de datos de la empresa, dando recomendaciones estratégicas.\n"
+        "1. PROACTIVIDAD AL AGENDAR: No hagas preguntas abiertas. Ofrece opciones directas (ej: '¿Te parece bien mañana a las 10:00 AM?').\n"
+        "2. GENERACIÓN DE VENTAS: Sugiere de forma elegante un servicio complementario o premium que agregue valor.\n"
+        "3. OPERATIVIDAD B2B: Sé extremadamente eficiente, cortés y resolutivo. Respuestas cortas, ideales para leerse en WhatsApp.\n"
+        "4. PROTOCOLO DE REGISTRO: Cuando tengas confirmación de fecha y motivo, incluye al final EXACTAMENTE: [AGENDAR: YYYY-MM-DD HH:MM | Motivo].\n"
+        "5. PANEL DE ADMIN: Si te inyectan datos de negocio, responde como un analista experto dando recomendaciones.\n"
+        f"6. REGLA DE DISPONIBILIDAD: Solo se agenda de Lunes a Viernes. No agendes en fin de semana ni feriados: {feriados_str}.\n"
+        "7. FORMATO DE TEXTO ESTRICTO: ESTÁ TOTALMENTE PROHIBIDO usar Markdown. Jamás uses asteriscos (*) ni símbolos raros para negritas o cursivas. Escribe 100% en texto plano.\n"
+        "8. ESTILO, CONCISIÓN Y TONO: Sé extremadamente cálido, encantador ('lindo') y directo. Resume la información de las citas en una sola oración fluida y natural. Omite cálculos robóticos innecesarios (como 'asumiendo una duración... el total es'). Ve directo al punto con amabilidad.\n"
         "Responde siempre en español, con un tono entusiasta, profesional y muy servicial."
     )
     
@@ -169,16 +204,28 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
     payload = {
         "model": "mercury-2",
         "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": mensaje}
+            {"role": "system", "content": system_prompt}
         ]
     }
+    
+    # Inyectar historial si existe
+    if telefono:
+        if telefono not in historial_global:
+            historial_global[telefono] = []
+        payload["messages"].extend(historial_global[telefono][-6:])
+        
+    payload["messages"].append({"role": "user", "content": mensaje})
     
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=10)
         if res.status_code == 200:
             data = res.json()
             respuesta_ia = data["choices"][0]["message"]["content"]
+            
+            # Guardar en el historial
+            if telefono:
+                historial_global[telefono].append({"role": "user", "content": mensaje})
+                historial_global[telefono].append({"role": "assistant", "content": respuesta_ia})
             
             # Parsear intención de agendamiento real (Fase 2)
             import re
@@ -195,11 +242,17 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
                     # Fallback a hoy si la IA formatea mal
                     fecha_inicio = get_now_chile() + timedelta(days=1)
                 
-                # Ejecutar agendamiento real en Base de Datos
-                agendar_cita_ia(db=db, tenant_id=tenant_id, telefono=telefono, fecha_inicio=fecha_inicio, marca=motivo_marca)
-                
-                # Limpiar la respuesta visual para el usuario
-                respuesta_ia = re.sub(r'\[AGENDAR:.*?\]', '', respuesta_ia).strip()
+                # Validar doblemente en backend si es fin de semana o feriado
+                import holidays
+                if fecha_inicio.weekday() >= 5 or fecha_inicio.date() in holidays.country_holidays('CL'):
+                    # En lugar de guardar en BD, corregimos la respuesta de la IA
+                    respuesta_ia = "Lo siento, acabo de notar que ese día es fin de semana o feriado. Por favor, indícame otro día hábil (lunes a viernes) para agendar tu cita."
+                else:
+                    # Ejecutar agendamiento real en Base de Datos
+                    agendar_cita_ia(db=db, tenant_id=tenant_id, telefono=telefono, fecha_inicio=fecha_inicio, marca=motivo_marca)
+                    
+                    # Limpiar la respuesta visual para el usuario
+                    respuesta_ia = re.sub(r'\[AGENDAR:.*?\]', '', respuesta_ia).strip()
                 
             return respuesta_ia
         else:

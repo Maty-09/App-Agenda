@@ -949,12 +949,18 @@ def get_dashboard(
         dias_habiles = {0, 1, 2, 3, 4}
 
     def get_disponibilidad_dias(cantidad_dias_habiles: int):
+        import holidays
+        feriados_cl = holidays.country_holidays('CL')
         resultado = []
         dia = hoy_dt
         while len(resultado) < cantidad_dias_habiles:
             if dia.weekday() not in dias_habiles:
                 dia += timedelta(days=1)
                 continue
+
+            es_feriado = dia.date() in feriados_cl
+            nombre_feriado = feriados_cl.get(dia.date()) if es_feriado else None
+
             bloqueo = db.query(models.DiaBloqueado).filter(
                 models.DiaBloqueado.tenant_id == cred.tenant_id,
                 models.DiaBloqueado.fecha == dia.date()
@@ -965,16 +971,19 @@ def get_dashboard(
                 models.Agendamiento.fecha_inicio < (dia + timedelta(days=1)).replace(tzinfo=None),
                 models.Agendamiento.estado != "cancelado"
             ).count()
-            capacidad_dia = 0 if bloqueo else CAPACIDAD_DIARIA
+
+            capacidad_dia = 0 if (bloqueo or es_feriado) else CAPACIDAD_DIARIA
             porcentaje = round((ocupado / capacidad_dia) * 100, 1) if capacidad_dia > 0 else 100
-            if bloqueo:
-                estado_dia = "Bloqueado"
+
+            if bloqueo or es_feriado:
+                estado_dia = "Feriado" if es_feriado and not bloqueo else "Bloqueado"
             elif porcentaje > 80:
                 estado_dia = "Saturado"
             elif porcentaje > 50:
                 estado_dia = "Media"
             else:
                 estado_dia = "Libre"
+
             resultado.append({
                 "fecha": dia,
                 "dia_nombre": DIAS_ES[dia.weekday()],
@@ -982,9 +991,10 @@ def get_dashboard(
                 "capacidad": capacidad_dia,
                 "porcentaje": porcentaje,
                 "estado": estado_dia,
-                "motivo_bloqueo": bloqueo.motivo if bloqueo else None
+                "motivo_bloqueo": nombre_feriado if es_feriado else (bloqueo.motivo if bloqueo else None)
             })
             dia += timedelta(days=1)
+        return resultado
         return resultado
 
     disponibilidad_semana = get_disponibilidad_dias(len(dias_habiles))

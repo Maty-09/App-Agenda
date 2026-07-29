@@ -307,15 +307,16 @@
                     'Libre': {'bg': 'bg-emerald-50', 'border': 'border-emerald-200', 'text': 'text-emerald-700', 'bar': 'bg-emerald-500'},
                     'Media': {'bg': 'bg-amber-50', 'border': 'border-amber-200', 'text': 'text-amber-700', 'bar': 'bg-amber-500'},
                     'Saturado': {'bg': 'bg-red-50', 'border': 'border-red-200', 'text': 'text-red-700', 'bar': 'bg-red-500'},
-                    'Bloqueado': {'bg': 'bg-slate-100', 'border': 'border-slate-200', 'text': 'text-slate-500', 'bar': 'bg-slate-400'}
+                    'Bloqueado': {'bg': 'bg-slate-100', 'border': 'border-slate-200', 'text': 'text-slate-500', 'bar': 'bg-slate-400'},
+                    'Feriado': {'bg': 'bg-red-100', 'border': 'border-red-200', 'text': 'text-red-600', 'bar': 'bg-red-400'}
                 } %}
                 {% for dia in stats.disponibilidad_semana %}
                 {% set estilo = estado_estilo[dia.estado] %}
                 <div class="p-3 rounded-2xl border {{ estilo.border }} {{ estilo.bg }}" title="{{ dia.motivo_bloqueo or '' }}">
                     <p class="text-xs font-bold text-slate-500 uppercase">{{ dia.dia_nombre }}</p>
                     <p class="text-lg font-black text-slate-900 mb-2">{{ dia.fecha.strftime('%d-%m') }}</p>
-                    {% if dia.estado == 'Bloqueado' %}
-                    <p class="text-xs font-semibold {{ estilo.text }}">{{ 'Domingo' if dia.fecha.weekday() == 6 else 'Bloqueado' }}</p>
+                    {% if dia.estado == 'Bloqueado' or dia.estado == 'Feriado' %}
+                    <p class="text-[11px] leading-tight font-semibold {{ estilo.text }}">{{ dia.estado }}</p>
                     {% else %}
                     <div class="w-full bg-white rounded-full h-1.5 mb-1.5 border border-slate-100">
                         <div class="{{ estilo.bar }} h-1.5 rounded-full" style="width: {{ dia.porcentaje }}%"></div>

@@ -123,7 +123,17 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
     """
     api_key = os.getenv("INCEPTION_API_KEY")
     if not api_key:
-        return "La inteligencia artificial no est\u00e1 configurada."
+        msg_lower = mensaje.lower().strip()
+        if any(w in msg_lower for w in ["hola", "buenas", "saludos", "que tal", "quien eres"]):
+            return "¡Hola! Soy el Copiloto IA de Noren. ¿En qué puedo ayudarte a organizar o agendar las citas de tu negocio hoy?"
+        elif "marcas" in msg_lower or "top" in msg_lower:
+            if db:
+                top_marcas = obtener_top_marcas_agendadas(db, tenant_id)
+                if top_marcas:
+                    return "Top Marcas Agendadas:\n" + "\n".join([f"{i+1}. {m['marca']} - {m['citas']} citas" for i, m in enumerate(top_marcas)])
+            return "Actualmente no hay datos de marcas agendadas registrados."
+        else:
+            return "¡Hola! Soy tu asistente Noren. Para respuestas predictivas avanzadas con IA, recuerda agregar tu INCEPTION_API_KEY en las variables de entorno de Vercel."
     url = "https://api.inceptionlabs.ai/v1/chat/completions"
     
     headers = {

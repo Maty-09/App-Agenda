@@ -14,8 +14,16 @@ jobs:
           NOTIFICATIONS_CRON_URL: ${{ secrets.NOTIFICATIONS_CRON_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          test -n "$NOTIFICATIONS_CRON_URL"
-          test -n "$CRON_SECRET"
+          if [ -z "$NOTIFICATIONS_CRON_URL" ]; then
+            echo "::error::Falta definir el secreto NOTIFICATIONS_CRON_URL en GitHub Secrets (ej: https://noren-app.vercel.app)"
+            exit 1
+          fi
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Falta definir el secreto CRON_SECRET en GitHub Secrets"
+            exit 1
+          fi
+          URL_CLEAN="${NOTIFICATIONS_CRON_URL%/}"
+          echo "Ejecutando cron contra: $URL_CLEAN/api/v1/cron/notificaciones"
           curl --fail --silent --show-error \
             --header "Authorization: Bearer $CRON_SECRET" \
-            "$NOTIFICATIONS_CRON_URL/api/v1/cron/notificaciones"
+            "$URL_CLEAN/api/v1/cron/notificaciones"

@@ -9,22 +9,49 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <script>
+        if (localStorage.getItem('noren_theme') === 'dark' || (!('noren_theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: { sans: ['Inter', 'sans-serif'], }
                 }
             }
         }
+        function toggleDarkMode() {
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('noren_theme', isDark ? 'dark' : 'light');
+            updateThemeToggleIcons();
+        }
+        function updateThemeToggleIcons() {
+            const isDark = document.documentElement.classList.contains('dark');
+            document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+                btn.innerHTML = isDark 
+                    ? '<i class="fas fa-sun text-amber-400 text-sm"></i>' 
+                    : '<i class="fas fa-moon text-slate-600 text-sm"></i>';
+                btn.setAttribute('title', isDark ? 'Modo claro' : 'Modo oscuro');
+            });
+        }
+        document.addEventListener('DOMContentLoaded', updateThemeToggleIcons);
     </script>
 </head>
-<body class="bg-gradient-to-br from-slate-50 to-blue-50 text-slate-900 antialiased font-sans min-h-screen flex items-center justify-center p-4">
+<body class="bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 text-slate-900 dark:text-slate-100 antialiased font-sans min-h-screen flex items-center justify-center p-4 relative transition-colors duration-200">
+    <div class="absolute top-4 right-4">
+        <button onclick="toggleDarkMode()" type="button" title="Cambiar tema"
+           class="theme-toggle-btn w-10 h-10 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-amber-400 flex items-center justify-center transition shadow-md border border-slate-200 dark:border-slate-700">
+            <i class="fas fa-moon text-sm"></i>
+        </button>
+    </div>
 {% from "partials/_logo.html" import logo %}
-    <div class="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
+    <div class="max-w-md w-full bg-white dark:bg-[#111827] rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden transition-colors duration-200">
 
-        <div class="p-8 pb-6 border-b border-slate-100 flex flex-col items-center">
+        <div class="p-8 pb-6 border-b border-slate-100 dark:border-slate-800 flex flex-col items-center">
             <div class="mb-4">{{ logo(size='lg') }}</div>
-            <p class="text-sm text-slate-500">Ingresa a tu cuenta corporativa</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Ingresa a tu cuenta corporativa</p>
         </div>
 
         <div class="p-8 pt-6">
@@ -37,24 +64,24 @@
 
             <form method="post" action="/admin/login" class="space-y-5">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Usuario / Correo</label>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Usuario / Correo</label>
                     <div class="relative">
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <i class="fas fa-user text-slate-400"></i>
                         </div>
                         <input type="text" name="username" placeholder="tu@correo.com" required
-                            class="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                            class="block w-full pl-10 pr-3 py-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Contraseña</label>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Contraseña</label>
                     <div class="relative">
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <i class="fas fa-lock text-slate-400"></i>
                         </div>
                         <input type="password" name="password" placeholder="••••••••" required
-                            class="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                            class="block w-full pl-10 pr-3 py-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
                     </div>
                 </div>
 

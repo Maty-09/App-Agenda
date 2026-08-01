@@ -693,8 +693,12 @@
 
             // 1. Chart Servicios (Doughnut)
             const ctxServicios = document.getElementById('chartServicios').getContext('2d');
-            const serviciosLabels = {{ stats.servicios_labels | safe }};
-            const serviciosValores = {{ stats.servicios_valores | safe }};
+            let serviciosLabels = {{ stats.servicios_labels | safe }};
+            let serviciosValores = {{ stats.servicios_valores | safe }};
+            if (!serviciosLabels || serviciosLabels.length === 0 || serviciosValores.every(v => v === 0)) {
+                serviciosLabels = ['🛠️ Local', '🏠 Domicilio'];
+                serviciosValores = [1, 1];
+            }
 
             new Chart(ctxServicios, {
                 type: 'doughnut',
@@ -715,8 +719,12 @@
 
             // 2. Chart Equipos (Bar)
             const ctxEquipos = document.getElementById('chartEquipos').getContext('2d');
-            const equiposLabels = {{ stats.equipos_labels | safe }};
-            const equiposValores = {{ stats.equipos_valores | safe }};
+            let equiposLabels = {{ stats.equipos_labels | safe }};
+            let equiposValores = {{ stats.equipos_valores | safe }};
+            if (!equiposLabels || equiposLabels.length === 0) {
+                equiposLabels = ['Equipo Alfa', 'Equipo Beta', 'Taller Central'];
+                equiposValores = [0, 0, 0];
+            }
 
             new Chart(ctxEquipos, {
                 type: 'bar',
@@ -743,8 +751,12 @@
 
             // 3. Chart Tendencia Mensual (Line)
             const ctxTendencia = document.getElementById('chartTendencia').getContext('2d');
-            const tendenciaLabels = {{ stats.tendencia_labels | safe }};
-            const tendenciaValores = {{ stats.tendencia_valores | safe }};
+            let tendenciaLabels = {{ stats.tendencia_labels | safe }};
+            let tendenciaValores = {{ stats.tendencia_valores | safe }};
+            if (!tendenciaLabels || tendenciaLabels.length === 0) {
+                tendenciaLabels = ['Mayo', 'Junio', 'Julio', 'Agosto'];
+                tendenciaValores = [0, 0, 0, 0];
+            }
 
             new Chart(ctxTendencia, {
                 type: 'line',
@@ -775,8 +787,12 @@
 
             // 4. Chart Marcas (Horizontal Bar)
             const ctxMarcas = document.getElementById('chartMarcas').getContext('2d');
-            const marcasLabels = {{ stats.marcas_labels | safe }};
-            const marcasValores = {{ stats.marcas_valores | safe }};
+            let marcasLabels = {{ stats.marcas_labels | safe }};
+            let marcasValores = {{ stats.marcas_valores | safe }};
+            if (!marcasLabels || marcasLabels.length === 0) {
+                marcasLabels = ['TOYOTA', 'HYUNDAI', 'CHEVROLET', 'NISSAN', 'HONDA'];
+                marcasValores = [0, 0, 0, 0, 0];
+            }
 
             new Chart(ctxMarcas, {
                 type: 'bar',

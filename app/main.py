@@ -129,6 +129,13 @@ async def startup_event():
             db.commit()
             
         inicializar_campos_sistema(db)
+        
+        # Inicializar datos demo si no existen
+        try:
+            from scripts.seed_demo import seed_demo
+            seed_demo()
+        except Exception as e_demo:
+            logger.warning(f"Error sembrando datos demo: {e_demo}")
     finally:
         db.close()
 

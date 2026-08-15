@@ -1,0 +1,20 @@
+load("//project/bazel/rules:python.bzl", "oai_py_library")
+
+oai_py_library(
+    name = "documents",
+    data = ["skills/documents/agents/openai.yaml"],
+    imports = ["."],
+    src_excludes = [
+        "**/*_test.py",
+        "**/__main__.py",
+        "**/conftest.py",
+        "**/test_*.py",
+        "manage/applied_spec.py",
+        "manage/helm/**",
+        "manage/kube/**",
+        "setup.py",
+    ],
+    src_includes = ["**/*.py"],
+    visibility = ["//visibility:public"],
+    deps = ["@pypi//pdf2image"],
+)

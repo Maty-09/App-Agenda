@@ -1,0 +1,6 @@
+# BEGIN AUTODEP GENERATED CONTENTS #
+# These files are stored in blob storage, see `blob_data` and `testing_blob_data` under `[tool.applied_manage]` in the project's `pyproject.toml` file
+assets/icon.png
+assets/logo.png
+skills/template-creator/assets/site-preview.png
+# END AUTODEP GENERATED CONTENTS #

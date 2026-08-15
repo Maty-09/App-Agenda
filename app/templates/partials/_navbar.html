@@ -21,6 +21,13 @@
                     {{ label }}
                 </a>
                 {% endfor %}
+                {% if current_user and current_user.rol == 'admin' and current_user.tenant_id == 'default' %}
+                <a href="/admin/tenants"
+                   class="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+                    <i class="fas fa-building text-xs"></i>
+                    Tenants
+                </a>
+                {% endif %}
             </nav>
             <div class="flex items-center gap-3">
                 {% if current_user %}
@@ -46,6 +53,13 @@
                 {{ label }}
             </a>
             {% endfor %}
+            {% if current_user and current_user.rol == 'admin' and current_user.tenant_id == 'default' %}
+            <a href="/admin/tenants"
+               class="px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition text-slate-600 hover:bg-slate-50">
+                <i class="fas fa-building text-xs"></i>
+                Tenants
+            </a>
+            {% endif %}
         </nav>
     </div>
 </header>

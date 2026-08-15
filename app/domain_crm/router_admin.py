@@ -43,7 +43,7 @@ from fastapi import HTTPException, status
 from app.core import models, security
 from app.core.auth_deps import CurrentUser, verificar_login
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 días
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 dÃ­as
 
 
 # =============================
@@ -61,7 +61,7 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     if not usuario or not security.verify_password(password, usuario.password_hash):
         return templates.TemplateResponse("admin_login.html", {
             "request": request,
-            "error": "Correo o contraseña incorrectos"
+            "error": "Correo o contraseÃ±a incorrectos"
         })
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -153,7 +153,7 @@ def panel_agendamientos(
         start_iso = item.fecha_inicio.strftime("%Y-%m-%dT%H:%M:%S")
         end_iso = item.fecha_termino.strftime("%Y-%m-%dT%H:%M:%S") if item.fecha_termino else start_iso
 
-        # LIMPIEZA CLAVE: Evita que comillas o saltos de línea rompan el JS
+        # LIMPIEZA CLAVE: Evita que comillas o saltos de lÃ­nea rompan el JS
         nota_limpia = (item.nota_interna or "").replace('"', '\\"').replace('\n', ' ').replace('\r', '')
 
         eventos_lista.append({
@@ -174,11 +174,11 @@ def panel_agendamientos(
             }
         })
 
-    # --- NUEVA LÍNEA 2: Agregamos los bloqueos al calendario ---
+    # --- NUEVA LÃNEA 2: Agregamos los bloqueos al calendario ---
     for b in dias_bloqueados:
         eventos_lista.append({
             "id": str(b.id),
-            "start": b.fecha.strftime("%Y-%m-%d"), # Solo fecha para que sea todo el día
+            "start": b.fecha.strftime("%Y-%m-%d"), # Solo fecha para que sea todo el dÃ­a
             "display": "background",              # Pinta el fondo del calendario
             "backgroundColor": "#FFDADA",         # Color rojo suave
             "extendedProps": { "tipo": "bloqueo" } # Identificador para JS
@@ -197,7 +197,7 @@ def panel_agendamientos(
     return templates.TemplateResponse(
         name="admin_agendamientos.html",
         context={
-            "request": request,  # Aquí adentro sí va de nuevo si usas 'context='
+            "request": request,  # AquÃ­ adentro sÃ­ va de nuevo si usas 'context='
             "agendamientos": agendamientos,
             "dias_bloqueados": dias_bloqueados,
             "tipo_servicio": tipo_servicio,
@@ -222,7 +222,7 @@ def actualizar_nota(
     agendamiento = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
     
     if not agendamiento:
-        print(f"Error: No se encontró el agendamiento ID {id}")
+        print(f"Error: No se encontrÃ³ el agendamiento ID {id}")
         return RedirectResponse("/admin/panel", status_code=303)
 
     # Actualizamos la nota interna
@@ -230,7 +230,7 @@ def actualizar_nota(
     
     try:
         db.commit()
-        print(f"Nota del agendamiento {id} actualizada con éxito.")
+        print(f"Nota del agendamiento {id} actualizada con Ã©xito.")
     except Exception as e:
         db.rollback()
         print(f"Error al guardar: {e}")
@@ -330,7 +330,7 @@ def obtener_links_agenda(request: Request, admin = Depends(verificar_login)):
 
     return links
 # ==========================================
-#   GESTIÓN DE FORMULARIO DINÁMICO
+#   GESTIÃN DE FORMULARIO DINÃMICO
 # ==========================================
 
 @router.get("/configurar-formulario")
@@ -365,15 +365,15 @@ async def guardar_campo(
     db: Session = Depends(get_db),
     cred: CurrentUser = Depends(verificar_login)
 ):
-    # VALIDACIÓN: Si label es None, le damos un valor por defecto para que no explote
+    # VALIDACIÃN: Si label es None, le damos un valor por defecto para que no explote
     texto_label = label if label else "Campo sin nombre"
     raw_subtipo = subtipo_servicio.lower().strip()
     db_subtipo = "taller" if raw_subtipo == "local" else raw_subtipo
     
-    # Ahora procesamos el nombre técnico con seguridad
+    # Ahora procesamos el nombre tÃ©cnico con seguridad
     nombre_tecnico = texto_label.lower().strip().replace(" ", "_")
 
-    # Mapeo inteligente para campos críticos de la tabla Agendamiento
+    # Mapeo inteligente para campos crÃ­ticos de la tabla Agendamiento
     if any(x in nombre_tecnico for x in ["correo", "email", "mail"]):
         nombre_tecnico = "correo"
     elif any(x in nombre_tecnico for x in ["rut", "identificacion", "dni"]):
@@ -426,10 +426,10 @@ async def eliminar_campo(campo_id: int, db: Session = Depends(get_db), cred: Cur
     campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id).first()
     
     if not campo:
-        print(f"No se encontró el campo con ID {campo_id}")
+        print(f"No se encontrÃ³ el campo con ID {campo_id}")
         return RedirectResponse(url="/admin/configurar-formulario", status_code=303)
 
-    # Guardamos el subtipo para poder redireccionar al mismo sitio después
+    # Guardamos el subtipo para poder redireccionar al mismo sitio despuÃ©s
     subtipo_servicio = "local" if campo.subtipo_servicio == "taller" else campo.subtipo_servicio
 
     # 2. Lo eliminamos
@@ -438,7 +438,7 @@ async def eliminar_campo(campo_id: int, db: Session = Depends(get_db), cred: Cur
 
     print(f"Campo {campo_id} eliminado correctamente")
     
-    # 3. Redirigimos de vuelta a la configuración de ese subtipo
+    # 3. Redirigimos de vuelta a la configuraciÃ³n de ese subtipo
     return RedirectResponse(
         url=f"/admin/configurar-formulario?subtipo={subtipo_servicio}", 
         status_code=303
@@ -506,10 +506,10 @@ def verificar_disponibilidad_detalle(
     duracion_horas: int, 
     excluir_id: Optional[int] = None
 ) -> Tuple[bool, str]:
-    # 1. Chequear si el día está bloqueado por administración
+    # 1. Chequear si el dÃ­a estÃ¡ bloqueado por administraciÃ³n
     dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == inicio.date()).first()
     if dia_bloqueado:
-        return False, f"El día {inicio.strftime('%d/%m/%Y')} está bloqueado administrativamente ({dia_bloqueado.motivo or 'Cerrado'})."
+        return False, f"El dÃ­a {inicio.strftime('%d/%m/%Y')} estÃ¡ bloqueado administrativamente ({dia_bloqueado.motivo or 'Cerrado'})."
 
     tz_chile = pytz.timezone("America/Santiago")
     if inicio.tzinfo is None:
@@ -524,34 +524,34 @@ def verificar_disponibilidad_detalle(
     h_inicio = inicio.time()
     h_fin = fin.time()
     
-    # 3. Horario de atención: 08:00 - 18:00
+    # 3. Horario de atenciÃ³n: 08:00 - 18:00
     if h_inicio < dt_time(8, 0) or h_fin > dt_time(18, 0):
-        return False, "La cita debe estar dentro del horario de atención permitido (08:00 - 18:00)."
+        return False, "La cita debe estar dentro del horario de atenciÃ³n permitido (08:00 - 18:00)."
 
-    # 4. Horario de colación: No cruzar 12:00 a 13:00
+    # 4. Horario de colaciÃ³n: No cruzar 12:00 a 13:00
     if h_inicio < dt_time(13, 0) and h_fin > dt_time(12, 0):
-        return False, "La cita interfiere con el horario de colación obligatorio (12:00 - 13:00)."
+        return False, "La cita interfiere con el horario de colaciÃ³n obligatorio (12:00 - 13:00)."
 
-    # 5. Validación por tipo de servicio y días
-    dia_semana = inicio.weekday() # 0:Lunes, 2:Miércoles...
+    # 5. ValidaciÃ³n por tipo de servicio y dÃ­as
+    dia_semana = inicio.weekday() # 0:Lunes, 2:MiÃ©rcoles...
     hora_str = inicio.strftime("%H:%M")
 
     if tipo_servicio == "domicilio_taller":
         if duracion_horas != 2:
-            return False, "La duración de este tipo de servicio debe ser de 2 horas."
+            return False, "La duraciÃ³n de este tipo de servicio debe ser de 2 horas."
             
-        if dia_semana == 2: # Miércoles
+        if dia_semana == 2: # MiÃ©rcoles
             if hora_str not in ["09:00", "13:00"]:
-                return False, "Los miércoles los servicios en local/domicilio solo pueden iniciar a las 09:00 o 13:00."
+                return False, "Los miÃ©rcoles los servicios en local/domicilio solo pueden iniciar a las 09:00 o 13:00."
         else:
             if hora_str not in ["09:00", "13:00", "15:30"]:
                 return False, "Los servicios en local/domicilio solo pueden iniciar a las 09:00, 13:00 o 15:30."
 
     elif tipo_servicio == "especializado":
         if dia_semana == 2 and hora_str not in ["09:00", "13:00"]:
-            return False, "Los miércoles los servicios especializados solo pueden iniciar a las 09:00 o 13:00."
+            return False, "Los miÃ©rcoles los servicios especializados solo pueden iniciar a las 09:00 o 13:00."
     else:
-        return False, f"Tipo de servicio '{tipo_servicio}' no válido."
+        return False, f"Tipo de servicio '{tipo_servicio}' no vÃ¡lido."
 
     # 6. Validar traslapes/capacidad (excluyendo la misma cita)
     query = db.query(models.Agendamiento).filter(
@@ -566,7 +566,7 @@ def verificar_disponibilidad_detalle(
     limite_equipos = len(Recursos.get(tipo_servicio, []))
     
     if agendados_en_bloque >= limite_equipos:
-        return False, f"No hay equipos disponibles en este horario (máximo {limite_equipos} citas simultáneas)."
+        return False, f"No hay equipos disponibles en este horario (mÃ¡ximo {limite_equipos} citas simultÃ¡neas)."
 
     return True, ""
 
@@ -629,7 +629,7 @@ async def reprogramar_cita(
         if not ocupado:
             equipo_asignado = current_team
             
-    # 2. Si el actual está ocupado, buscar otro
+    # 2. Si el actual estÃ¡ ocupado, buscar otro
     if not equipo_asignado:
         for eq in equipos_posibles:
             if eq == current_team:
@@ -646,11 +646,11 @@ async def reprogramar_cita(
                 break
                 
     if not equipo_asignado:
-        return {"status": "error", "message": "No se encontró un equipo disponible para este horario."}
+        return {"status": "error", "message": "No se encontrÃ³ un equipo disponible para este horario."}
         
     # Guardar cambios
     ahora_str = datetime.now(tz_chile).strftime("%H:%M")
-    log_reprogramacion = f"\n[REPROGRAMACIÓN {ahora_str}]: {ag.fecha_inicio.strftime('%d/%m %H:%M')} ({ag.equipo}) -> {inicio_nueva_naive.strftime('%d/%m %H:%M')} ({equipo_asignado})"
+    log_reprogramacion = f"\n[REPROGRAMACIÃN {ahora_str}]: {ag.fecha_inicio.strftime('%d/%m %H:%M')} ({ag.equipo}) -> {inicio_nueva_naive.strftime('%d/%m %H:%M')} ({equipo_asignado})"
     
     ag.fecha_inicio = inicio_nueva_naive
     ag.fecha_termino = fin_nueva_naive
@@ -679,11 +679,11 @@ async def reubicar_emergencia(
         return {"status": "error", "message": "No encontrado"}
 
     ahora = datetime.now().strftime("%H:%M")
-    log = f"\n[REUBICACIÓN {ahora}]: {ag.direccion} -> {nueva_direccion}"
+    log = f"\n[REUBICACIÃN {ahora}]: {ag.direccion} -> {nueva_direccion}"
     
     ag.direccion = nueva_direccion
     ag.nota_interna = (ag.nota_interna or "") + log
-    # Guardamos una marca de modificación para el estilo visual
+    # Guardamos una marca de modificaciÃ³n para el estilo visual
     ag.modificado = True 
     
     db.commit()
@@ -700,7 +700,7 @@ def bloquear_dia(datos: BloqueoDiaSchema, db: Session = Depends(get_db), cred: C
     try:
         fecha_dt = datetime.strptime(datos.fecha, "%Y-%m-%d").date()
     except ValueError:
-        return {"error": "Formato de fecha inválido"}, 400
+        return {"error": "Formato de fecha invÃ¡lido"}, 400
     
     # Verificamos que no exista ya
     existe = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == fecha_dt).first()
@@ -711,9 +711,9 @@ def bloquear_dia(datos: BloqueoDiaSchema, db: Session = Depends(get_db), cred: C
         db.commit()
     
     
-    # Como es una petición AJAX (fetch), es mejor devolver un JSON de éxito 
+    # Como es una peticiÃ³n AJAX (fetch), es mejor devolver un JSON de Ã©xito 
     # en lugar de un RedirectResponse, para que el JS haga el reload.
-    return {"status": "success", "message": "Día bloqueado correctamente"}
+    return {"status": "success", "message": "DÃ­a bloqueado correctamente"}
 
 @router.post("/bloquear-dia")
 def bloquear_dia_formulario(
@@ -725,7 +725,7 @@ def bloquear_dia_formulario(
     try:
         fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
     except ValueError:
-        raise HTTPException(status_code=400, detail="Formato de fecha inválido")
+        raise HTTPException(status_code=400, detail="Formato de fecha invÃ¡lido")
     
     existe = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == fecha_dt).first()
     if not existe:
@@ -741,10 +741,10 @@ def desbloquear_dia(id: int, db: Session = Depends(get_db), cred: CurrentUser = 
     if dia:
         db.delete(dia)
         db.commit()
-        print(f"DEBUG: Día {id} desbloqueado con éxito")
-        return {"status": "ok", "message": "Día eliminado"} # Cambiamos la redirección por JSON
+        print(f"DEBUG: DÃ­a {id} desbloqueado con Ã©xito")
+        return {"status": "ok", "message": "DÃ­a eliminado"} # Cambiamos la redirecciÃ³n por JSON
     
-    return {"status": "error", "message": "No se encontró el registro"}, 404
+    return {"status": "error", "message": "No se encontrÃ³ el registro"}, 404
 
 
 @router.post("/editar-cita/{id}")
@@ -770,10 +770,10 @@ async def editar_cita_admin(
         cita.duracion_horas = duracion_horas
         
         db.commit()
-        print(f"✅ Cita ID {id} modificada con éxito: {nueva_fecha_inicio} ({duracion_horas} hrs)")
+        print(f"â Cita ID {id} modificada con Ã©xito: {nueva_fecha_inicio} ({duracion_horas} hrs)")
     except Exception as e:
         db.rollback()
-        print(f"❌ Error al editar cita: {e}")
+        print(f"â Error al editar cita: {e}")
         raise HTTPException(status_code=500, detail=str(e))
         
     return RedirectResponse(url="/admin/panel", status_code=303)
@@ -791,7 +791,7 @@ def obtener_bloqueos_json(db: Session = Depends(get_db), cred: CurrentUser = Dep
             "start": b.fecha.strftime("%Y-%m-%d"),
             "display": "background",
             "backgroundColor": "#FFDADA",
-            "extendedProps": { "tipo": "bloqueo", "motivo": b.motivo or "Día bloqueado" }
+            "extendedProps": { "tipo": "bloqueo", "motivo": b.motivo or "DÃ­a bloqueado" }
         })
     
     return bloqueos
@@ -818,7 +818,7 @@ def debug_agendamientos(db: Session = Depends(get_db), cred: CurrentUser = Depen
 
 @router.get("/api/debug/ultimo-agendamiento")
 def debug_ultimo_agendamiento(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
-    """Endpoint de debugging para ver el último agendamiento guardado"""
+    """Endpoint de debugging para ver el Ãºltimo agendamiento guardado"""
     ultimo = db.query(models.Agendamiento).order_by(models.Agendamiento.id.desc()).first()
     
     if not ultimo:
@@ -845,7 +845,7 @@ async def agendar_emergencia(request: Request):
     base_url = str(request.base_url).rstrip("/")
     
     # Redirigimos al agendamiento de local, pero puedes cambiar el 'tipo' 
-    # o añadirle un parámetro 'emergencia=true' para tu lógica interna.
+    # o aÃ±adirle un parÃ¡metro 'emergencia=true' para tu lÃ³gica interna.
     target_url = f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local&modo=emergencia"
     
     print(f"DEBUG: Accediendo a Modo Emergencia -> {target_url}")
@@ -936,8 +936,8 @@ def get_dashboard(
         "d60": get_capacidad_rango(60),
     }
 
-    # Disponibilidad día a día de la semana (Mejora: vista semanal para el cliente interno)
-    DIAS_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+    # Disponibilidad dÃ­a a dÃ­a de la semana (Mejora: vista semanal para el cliente interno)
+    DIAS_ES = ["Lun", "Mar", "MiÃ©", "Jue", "Vie", "SÃ¡b", "Dom"]
     try:
         tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
         tenant_config = json.loads(tenant.config_json or "{}")
@@ -1004,12 +1004,12 @@ def get_dashboard(
     pendientes = query.filter(models.Agendamiento.estado == "pendiente").count()
     canceladas = query.filter(models.Agendamiento.estado == "cancelado").count()
     
-    # Tasa de confirmación
+    # Tasa de confirmaciÃ³n
     tasa_confirmacion = 0.0
     if (confirmadas + pendientes) > 0:
         tasa_confirmacion = round((confirmadas / (confirmadas + pendientes)) * 100, 1)
         
-    # Distribución por subtipo (Taller/Local vs Domicilio)
+    # DistribuciÃ³n por subtipo (Taller/Local vs Domicilio)
     servicios_raw = query.with_entities(
         models.Agendamiento.subtipo,
         func.count(models.Agendamiento.id)
@@ -1018,7 +1018,7 @@ def get_dashboard(
     servicios_labels = []
     servicios_valores = []
     for sub, count in servicios_raw:
-        label = "🛠️ Local" if sub == "taller" else ("🏠 Domicilio" if sub == "domicilio" else str(sub).capitalize())
+        label = "ð ï¸ Local" if sub == "taller" else ("ð  Domicilio" if sub == "domicilio" else str(sub).capitalize())
         servicios_labels.append(label)
         servicios_valores.append(count)
         
@@ -1031,7 +1031,7 @@ def get_dashboard(
     equipos_labels = [eq if eq else "Sin Equipo" for eq, _ in equipos_raw]
     equipos_valores = [count for _, count in equipos_raw]
     
-    # Top 5 marcas de vehículos
+    # Top 5 marcas de vehÃ­culos
     marcas_raw = query.with_entities(
         models.Agendamiento.marca,
         func.count(models.Agendamiento.id)
@@ -1072,7 +1072,7 @@ def get_dashboard(
     ).all()
     
     def puntaje_tarea(t):
-        p_score = {"Crítica": 4, "Alta": 3, "Media": 2, "Baja": 1}.get(t.prioridad, 0)
+        p_score = {"CrÃ­tica": 4, "Alta": 3, "Media": 2, "Baja": 1}.get(t.prioridad, 0)
         v_score = 0
         if t.fecha_limite:
             dias_restantes = (t.fecha_limite.replace(tzinfo=None) - ahora.replace(tzinfo=None)).days
@@ -1124,3 +1124,48 @@ def get_dashboard(
         name="admin_dashboard.html",
         context={"request": request, "stats": stats, "listas": listas, "current_user": cred}
     )
+
+# ==========================================
+#   GESTIÓN DE TENANTS (SUPERADMIN)
+# ==========================================
+
+@router.get("/tenants", response_class=HTMLResponse)
+def listar_tenants(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    # Validar que sea superadmin (tenant default y rol admin)
+    if cred.tenant_id != "default" or cred.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de SuperAdmin.")
+        
+    tenants = db.query(models.Tenant).all()
+    
+    return templates.TemplateResponse("admin_tenants.html", {
+        "request": request,
+        "tenants": tenants,
+        "current_user": cred
+    })
+
+@router.post("/tenants/crear")
+def crear_tenant(
+    id_tenant: str = Form(...),
+    nombre_empresa: str = Form(...),
+    plan_actual: str = Form("Starter"),
+    db: Session = Depends(get_db),
+    cred: CurrentUser = Depends(verificar_login)
+):
+    if cred.tenant_id != "default" or cred.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de SuperAdmin.")
+        
+    # Validar si ya existe
+    existe = db.query(models.Tenant).filter(models.Tenant.id == id_tenant).first()
+    if existe:
+        raise HTTPException(status_code=400, detail="El ID del Tenant ya está en uso.")
+        
+    nuevo = models.Tenant(
+        id=id_tenant,
+        nombre_empresa=nombre_empresa,
+        plan_actual=plan_actual,
+        estado_suscripcion="activa"
+    )
+    db.add(nuevo)
+    db.commit()
+    
+    return RedirectResponse(url="/admin/tenants", status_code=303)

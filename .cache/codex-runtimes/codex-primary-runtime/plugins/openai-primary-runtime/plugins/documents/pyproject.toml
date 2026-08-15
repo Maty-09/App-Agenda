@@ -1,0 +1,22 @@
+[project]
+name = "documents"
+version = "0.1.11"
+dependencies = [
+  "pdf2image",
+]
+
+[tool.oaipkg]
+disallow-dependents = true
+ruff_full_check = false
+unsafe-provides-packages = []
+
+[tool.applied_manage]
+blob_data = [
+  "assets/icon.png",
+  "assets/logo.png",
+]
+blob_data_bazel_support = false
+
+[tool.setuptools]
+packages = []
+py-modules = []

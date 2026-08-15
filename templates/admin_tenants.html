@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Tenants | SuperAdmin</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #f8fafc;
+        }
+    </style>
+</head>
+
+<body class="text-slate-900 antialiased font-sans min-h-screen">
+    {% include "partials/_navbar.html" %}
+
+    <div class="max-w-7xl mx-auto p-4 md:p-8">
+        
+        <!-- Cabecera -->
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-slate-900 tracking-tight">Gestión de Tenants</h1>
+                <p class="text-sm font-medium text-slate-500 mt-1">Supervisión y creación de instancias (Empresas)</p>
+            </div>
+            
+            <button onclick="document.getElementById('modal-crear').classList.remove('hidden')" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-xl shadow-sm transition flex items-center gap-2 text-sm">
+                <i class="fas fa-plus"></i>
+                Crear Nuevo Tenant
+            </button>
+        </div>
+
+        <!-- Tabla de Tenants -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200">
+                            <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">ID Tenant</th>
+                            <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Nombre Empresa</th>
+                            <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Plan</th>
+                            <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Estado Suscripción</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for t in tenants %}
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="py-4 px-6">
+                                <span class="text-sm font-bold text-slate-700">{{ t.id }}</span>
+                                {% if t.id == 'default' %}
+                                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                                    Principal
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="py-4 px-6">
+                                <span class="text-sm font-medium text-slate-900">{{ t.nombre_empresa }}</span>
+                            </td>
+                            <td class="py-4 px-6">
+                                <span class="text-sm font-medium text-slate-600">{{ t.plan_actual }}</span>
+                            </td>
+                            <td class="py-4 px-6">
+                                {% set status_class = 'bg-emerald-100 text-emerald-700' %}
+                                {% if t.estado_suscripcion == 'cancelada' %}
+                                    {% set status_class = 'bg-red-100 text-red-700' %}
+                                {% elif t.estado_suscripcion == 'impaga' %}
+                                    {% set status_class = 'bg-amber-100 text-amber-700' %}
+                                {% endif %}
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider {{ status_class }}">
+                                    {{ t.estado_suscripcion }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="py-12 text-center text-slate-500 font-medium">
+                                No hay tenants registrados en el sistema.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Modal Crear Tenant -->
+    <div id="modal-crear" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm hidden">
+        <div class="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden relative"
+             onclick="event.stopPropagation()">
+            <!-- Botón cerrar -->
+            <button onclick="document.getElementById('modal-crear').classList.add('hidden')" 
+                    class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <div class="p-6 md:p-8">
+                <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl mb-6 shadow-inner">
+                    <i class="fas fa-building"></i>
+                </div>
+                
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Crear Nuevo Tenant</h3>
+                <p class="text-sm text-slate-500 mb-6">Registra una nueva instancia de empresa en el sistema.</p>
+                
+                <form action="/admin/tenants/crear" method="POST" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-700 mb-1.5">ID del Tenant (slug)</label>
+                        <input type="text" name="id_tenant" required placeholder="ej: mi-empresa" pattern="[a-z0-9-]+" title="Solo minúsculas, números y guiones"
+                               class="w-full rounded-xl border-slate-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                        <p class="text-[11px] text-slate-400 mt-1">Identificador único, sin espacios. Usado para URLs y BBDD.</p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-bold text-slate-700 mb-1.5">Nombre de la Empresa</label>
+                        <input type="text" name="nombre_empresa" required placeholder="Ej: Talleres Mecánicos SPA"
+                               class="w-full rounded-xl border-slate-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-bold text-slate-700 mb-1.5">Plan Inicial</label>
+                        <select name="plan_actual" class="w-full rounded-xl border-slate-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                            <option value="Starter">Starter</option>
+                            <option value="Pro">Pro</option>
+                            <option value="Business">Business</option>
+                        </select>
+                    </div>
+                    
+                    <div class="pt-4 flex gap-3">
+                        <button type="button" onclick="document.getElementById('modal-crear').classList.add('hidden')"
+                                class="w-1/2 px-4 py-3 font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                            Cancelar
+                        </button>
+                        <button type="submit" 
+                                class="w-1/2 px-4 py-3 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition">
+                            Registrar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Cerrar modal con ESC
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                document.getElementById('modal-crear').classList.add('hidden');
+            }
+        });
+        
+        // Cerrar haciendo clic afuera
+        document.getElementById('modal-crear').addEventListener('click', function() {
+            this.classList.add('hidden');
+        });
+    </script>
+</body>
+</html>

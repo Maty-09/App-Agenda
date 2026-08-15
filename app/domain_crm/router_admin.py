@@ -1135,11 +1135,21 @@ def listar_tenants(request: Request, db: Session = Depends(get_db), cred: Curren
     if cred.tenant_id != "default" or cred.rol != "admin":
         raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de SuperAdmin.")
         
-    tenants = db.query(models.Tenant).all()
+    tenants_raw = db.query(models.Tenant).all()
+    tenants_data = []
+    for t in tenants_raw:
+        admin_user = db.query(models.Usuario).filter(models.Usuario.tenant_id == t.id, models.Usuario.rol == "admin").first()
+        tenants_data.append({
+            "id": t.id,
+            "nombre_empresa": t.nombre_empresa,
+            "plan_actual": t.plan_actual,
+            "estado_suscripcion": t.estado_suscripcion,
+            "admin_email": admin_user.email if admin_user else "Sin Admin"
+        })
     
     return templates.TemplateResponse("admin_tenants.html", {
         "request": request,
-        "tenants": tenants,
+        "tenants": tenants_data,
         "current_user": cred
     })
 
@@ -1148,6 +1158,8 @@ def crear_tenant(
     id_tenant: str = Form(...),
     nombre_empresa: str = Form(...),
     plan_actual: str = Form("Starter"),
+    email_admin: str = Form(...),
+    password_admin: str = Form(...),
     db: Session = Depends(get_db),
     cred: CurrentUser = Depends(verificar_login)
 ):
@@ -1159,13 +1171,28 @@ def crear_tenant(
     if existe:
         raise HTTPException(status_code=400, detail="El ID del Tenant ya está en uso.")
         
-    nuevo = models.Tenant(
+    existe_correo = db.query(models.Usuario).filter(models.Usuario.email == email_admin).first()
+    if existe_correo:
+        raise HTTPException(status_code=400, detail="El correo del administrador ya está en uso.")
+        
+    nuevo_tenant = models.Tenant(
         id=id_tenant,
         nombre_empresa=nombre_empresa,
         plan_actual=plan_actual,
         estado_suscripcion="activa"
     )
-    db.add(nuevo)
+    db.add(nuevo_tenant)
+    db.flush()
+    
+    from app.core.security import get_password_hash
+    nuevo_admin = models.Usuario(
+        tenant_id=id_tenant,
+        nombre="Administrador",
+        email=email_admin,
+        password_hash=get_password_hash(password_admin),
+        rol="admin"
+    )
+    db.add(nuevo_admin)
     db.commit()
     
     return RedirectResponse(url="/admin/tenants", status_code=303)

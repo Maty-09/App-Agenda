@@ -56,6 +56,7 @@
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">ID Tenant</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Nombre Empresa</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Plan</th>
+                            <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Administrador</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Estado Suscripción</th>
                         </tr>
                     </thead>
@@ -75,6 +76,14 @@
                             </td>
                             <td class="py-4 px-6">
                                 <span class="text-sm font-medium text-slate-600">{{ t.plan_actual }}</span>
+                            </td>
+                            <td class="py-4 px-6">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center">
+                                        <i class="fas fa-user text-[10px] text-slate-400"></i>
+                                    </div>
+                                    <span class="text-sm font-medium text-slate-600">{{ t.admin_email }}</span>
+                                </div>
                             </td>
                             <td class="py-4 px-6">
                                 {% set status_class = 'bg-emerald-100 text-emerald-700' %}
@@ -141,6 +150,23 @@
                             <option value="Pro">Pro</option>
                             <option value="Business">Business</option>
                         </select>
+                    </div>
+                    
+                    <div class="pt-2 border-t border-slate-100">
+                        <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Cuenta Administrativa</h4>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-bold text-slate-700 mb-1.5">Correo del Administrador</label>
+                                <input type="email" name="email_admin" required placeholder="admin@empresa.com"
+                                       class="w-full rounded-xl border-slate-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-slate-700 mb-1.5">Contraseña Inicial</label>
+                                <input type="password" name="password_admin" required placeholder="••••••••"
+                                       class="w-full rounded-xl border-slate-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                                <p class="text-[11px] text-slate-400 mt-1">El cliente usará esto para su primer inicio de sesión.</p>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="pt-4 flex gap-3">

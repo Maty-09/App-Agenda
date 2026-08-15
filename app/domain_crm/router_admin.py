@@ -1169,3 +1169,63 @@ def crear_tenant(
     db.commit()
     
     return RedirectResponse(url="/admin/tenants", status_code=303)
+
+
+# ==========================================
+#   RUTA TEMPORAL: CREAR SUPERADMIN
+# ==========================================
+from app.core.security import get_password_hash
+
+@router.get('/setup-superadmin', response_class=HTMLResponse)
+def get_setup_superadmin():
+    html = '''
+    <html><body style="font-family: sans-serif; padding: 40px; background: #f0f4f8;">
+    <div style="max-w-md; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <h2>Crear Cuenta SuperAdmin</h2>
+        <form action="/admin/setup-superadmin" method="POST">
+            <label>Nombre:</label><br>
+            <input type="text" name="nombre" required style="width: 100%; padding: 8px; margin-bottom: 15px;"><br>
+            <label>Correo Electrónico:</label><br>
+            <input type="email" name="email" required style="width: 100%; padding: 8px; margin-bottom: 15px;"><br>
+            <label>Contraseña:</label><br>
+            <input type="password" name="password" required style="width: 100%; padding: 8px; margin-bottom: 20px;"><br>
+            <button type="submit" style="background: #2563eb; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; width: 100%;">Crear Súper Administrador</button>
+        </form>
+    </div>
+    </body></html>
+    '''
+    return HTMLResponse(content=html)
+
+@router.post('/setup-superadmin')
+def post_setup_superadmin(
+    nombre: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    # Verificamos si ya existe el correo
+    existe = db.query(models.Usuario).filter(models.Usuario.email == email).first()
+    if existe:
+        return HTMLResponse('Error: El correo ya existe en el sistema.')
+        
+    nuevo_admin = models.Usuario(
+        tenant_id='default',
+        nombre=nombre,
+        email=email,
+        password_hash=get_password_hash(password),
+        rol='admin'
+    )
+    db.add(nuevo_admin)
+    db.commit()
+    
+    html_success = '''
+    <html><body style="font-family: sans-serif; padding: 40px; background: #f0f4f8; text-align: center;">
+    <h2>¡SuperAdmin Creado Exitosamente!</h2>
+    <p>Correo: <b>{}</b></p>
+    <p>Ya puedes iniciar sesión y verás el panel de Tenants.</p>
+    <br>
+    <a href="/admin/login" style="background: #10b981; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Ir al Login</a>
+    </body></html>
+    '''.format(email)
+    
+    return HTMLResponse(content=html_success)

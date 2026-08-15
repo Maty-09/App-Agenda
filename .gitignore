@@ -18,3 +18,9 @@ __pycache__/
 .env*
 server.log
 server-error.log
+
+.cache/
+.tmp_eliora_pitch/
+*.pptx
+*.ndjson
+*.png

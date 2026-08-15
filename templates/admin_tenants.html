@@ -58,6 +58,7 @@
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Plan</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Administrador</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Estado Suscripción</th>
+                            <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Acciones</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
@@ -96,10 +97,19 @@
                                     {{ t.estado_suscripcion }}
                                 </span>
                             </td>
+                            <td class="py-4 px-6 text-right">
+                                {% if t.id != 'default' %}
+                                <button onclick="confirmarEliminar('{{ t.id }}', '{{ t.nombre_empresa }}')" 
+                                        class="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition" title="Eliminar Tenant">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                                <form id="form-eliminar-{{ t.id }}" action="/admin/tenants/{{ t.id }}/eliminar" method="POST" class="hidden"></form>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="4" class="py-12 text-center text-slate-500 font-medium">
+                            <td colspan="5" class="py-12 text-center text-slate-500 font-medium">
                                 No hay tenants registrados en el sistema.
                             </td>
                         </tr>
@@ -196,6 +206,23 @@
         document.getElementById('modal-crear').addEventListener('click', function() {
             this.classList.add('hidden');
         });
+
+        function confirmarEliminar(tenantId, nombreEmpresa) {
+            Swal.fire({
+                title: '¿Estás absolutamente seguro?',
+                html: `Esta acción destruirá <b>todas las citas, tareas y clientes</b> de la empresa <span class="text-red-600 font-bold">${nombreEmpresa}</span> para siempre.<br><br>No se puede deshacer.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#94a3b8',
+                confirmButtonText: 'Sí, eliminar empresa',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('form-eliminar-' + tenantId).submit();
+                }
+            })
+        }
     </script>
 </body>
 </html>

@@ -1197,6 +1197,35 @@ def crear_tenant(
     
     return RedirectResponse(url="/admin/tenants", status_code=303)
 
+@router.post("/tenants/{id_tenant}/eliminar")
+def eliminar_tenant(id_tenant: str, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    if cred.tenant_id != "default" or cred.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de SuperAdmin.")
+        
+    if id_tenant == "default":
+        raise HTTPException(status_code=400, detail="No se puede eliminar el Tenant principal.")
+        
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == id_tenant).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant no encontrado.")
+        
+    # Eliminación en cascada manual
+    db.query(models.RespuestaCampo).filter(models.RespuestaCampo.tenant_id == id_tenant).delete(synchronize_session=False)
+    db.query(models.CampoFormulario).filter(models.CampoFormulario.tenant_id == id_tenant).delete(synchronize_session=False)
+    db.query(models.UTMRegistro).filter(models.UTMRegistro.tenant_id == id_tenant).delete(synchronize_session=False)
+    db.query(models.NotificacionAgendamiento).filter(models.NotificacionAgendamiento.tenant_id == id_tenant).delete(synchronize_session=False)
+    db.query(models.Agendamiento).filter(models.Agendamiento.tenant_id == id_tenant).delete(synchronize_session=False)
+    db.query(models.Tarea).filter(models.Tarea.tenant_id == id_tenant).delete(synchronize_session=False)
+    db.query(models.Usuario).filter(models.Usuario.tenant_id == id_tenant).delete(synchronize_session=False)
+    db.query(models.TimelineEvent).filter(models.TimelineEvent.tenant_id == id_tenant).delete(synchronize_session=False)
+    db.query(models.Cliente).filter(models.Cliente.tenant_id == id_tenant).delete(synchronize_session=False)
+    db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == id_tenant).delete(synchronize_session=False)
+    
+    db.delete(tenant)
+    db.commit()
+    
+    return RedirectResponse(url="/admin/tenants", status_code=303)
+
 
 # ==========================================
 #   RUTA TEMPORAL: CREAR SUPERADMIN

@@ -334,8 +334,15 @@
                                 <div class="text-xs text-slate-500">{{ item.rut }}</div>
                             </td>
                             <td class="p-4">
+                                {% if item.patente and item.patente != 'S/P' %}
                                 <div class="font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-xs inline-block">{{ item.patente }}</div>
+                                {% endif %}
+                                {% if item.marca and item.marca != 'N/A' %}
                                 <div class="text-xs text-slate-600 mt-1">{{ item.marca }}</div>
+                                {% endif %}
+                                {% if (not item.patente or item.patente == 'S/P') and (not item.marca or item.marca == 'N/A') %}
+                                <div class="text-xs text-slate-400 italic">No aplica</div>
+                                {% endif %}
                             </td>
                             <td class="p-4 text-xs text-slate-600 max-w-[150px] truncate tippy-cls" data-tippy-content="{{ item.direccion or '-' }}">{{ item.direccion or "-" }}</td>
                             <td class="p-4 ">
@@ -469,7 +476,7 @@
                         <div class="h-full w-full flex flex-col justify-between p-1.5 rounded-md" style="${borderStyle}">
                             <div>
                                 <div class="font-bold text-[11px] leading-tight truncate">${arg.event.title}</div>
-                                <div class="text-[10px] mt-1 flex items-center gap-1"><i class="fas fa-car opacity-70"></i> ${data.patente || 'S/P'}</div>
+                                ${data.patente && data.patente !== 'S/P' ? `<div class="text-[10px] mt-1 flex items-center gap-1"><i class="fas fa-car opacity-70"></i> ${data.patente}</div>` : ''}
                             </div>
                             <div class="text-[9px] font-medium self-end bg-white/50 px-1 py-0.5 rounded">
                                 ${arg.timeText}
@@ -755,10 +762,10 @@
                 preConfirm: () => {
                     const fecha = document.getElementById('em_fecha').value;
                     const rut = document.getElementById('em_rut').value;
-                    const patente = document.getElementById('em_patente').value;
+                    const patente = document.getElementById('em_patente').value || 'S/P';
                     
-                    if (!fecha || !rut || !patente) {
-                        return Swal.showValidationMessage('Todos los campos son obligatorios');
+                    if (!fecha || !rut) {
+                        return Swal.showValidationMessage('Fecha y RUT son obligatorios');
                     }
                     return { fecha, rut, patente };
                 }

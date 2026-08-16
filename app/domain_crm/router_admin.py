@@ -504,10 +504,14 @@ def verificar_disponibilidad_detalle(
     tipo_servicio: str, 
     inicio: datetime, 
     duracion_horas: int, 
-    excluir_id: Optional[int] = None
+    excluir_id: Optional[int] = None,
+    tenant_id: str = "default"
 ) -> Tuple[bool, str]:
-    # 1. Chequear si el dÃ­a estÃ¡ bloqueado por administraciÃ³n
-    dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == inicio.date()).first()
+    # 1. Chequear si el día está bloqueado por administración
+    dia_bloqueado = db.query(models.DiaBloqueado).filter(
+        models.DiaBloqueado.fecha == inicio.date(),
+        models.DiaBloqueado.tenant_id == tenant_id
+    ).first()
     if dia_bloqueado:
         return False, f"El dÃ­a {inicio.strftime('%d/%m/%Y')} estÃ¡ bloqueado administrativamente ({dia_bloqueado.motivo or 'Cerrado'})."
 
@@ -557,7 +561,8 @@ def verificar_disponibilidad_detalle(
     query = db.query(models.Agendamiento).filter(
         models.Agendamiento.fecha_inicio < fin,
         models.Agendamiento.fecha_termino > inicio,
-        models.Agendamiento.estado != "cancelado"
+        models.Agendamiento.estado != "cancelado",
+        models.Agendamiento.tenant_id == tenant_id
     )
     if excluir_id is not None:
         query = query.filter(models.Agendamiento.id != excluir_id)
@@ -606,7 +611,8 @@ async def reprogramar_cita(
         tipo_servicio=ag.tipo_servicio.value,
         inicio=inicio_nueva_naive,
         duracion_horas=ag.duracion_horas,
-        excluir_id=ag.id
+        excluir_id=ag.id,
+        tenant_id=admin.tenant_id
     )
     
     if not disponible:
@@ -703,10 +709,13 @@ def bloquear_dia(datos: BloqueoDiaSchema, db: Session = Depends(get_db), cred: C
         return {"error": "Formato de fecha invÃ¡lido"}, 400
     
     # Verificamos que no exista ya
-    existe = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == fecha_dt).first()
+    existe = db.query(models.DiaBloqueado).filter(
+        models.DiaBloqueado.tenant_id == cred.tenant_id,
+        models.DiaBloqueado.fecha == fecha_dt
+    ).first()
     
     if not existe:
-        nuevo = models.DiaBloqueado(fecha=fecha_dt, motivo=datos.motivo)
+        nuevo = models.DiaBloqueado(tenant_id=cred.tenant_id, fecha=fecha_dt, motivo=datos.motivo)
         db.add(nuevo)
         db.commit()
     
@@ -727,9 +736,12 @@ def bloquear_dia_formulario(
     except ValueError:
         raise HTTPException(status_code=400, detail="Formato de fecha invÃ¡lido")
     
-    existe = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.fecha == fecha_dt).first()
+    existe = db.query(models.DiaBloqueado).filter(
+        models.DiaBloqueado.tenant_id == admin.tenant_id,
+        models.DiaBloqueado.fecha == fecha_dt
+    ).first()
     if not existe:
-        nuevo = models.DiaBloqueado(fecha=fecha_dt, motivo=motivo)
+        nuevo = models.DiaBloqueado(tenant_id=admin.tenant_id, fecha=fecha_dt, motivo=motivo)
         db.add(nuevo)
         db.commit()
     
@@ -737,7 +749,10 @@ def bloquear_dia_formulario(
 
 @router.post("/desbloquear-dia/{id}")
 def desbloquear_dia(id: int, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
-    dia = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.id == id).first()
+    dia = db.query(models.DiaBloqueado).filter(
+        models.DiaBloqueado.id == id,
+        models.DiaBloqueado.tenant_id == cred.tenant_id
+    ).first()
     if dia:
         db.delete(dia)
         db.commit()
@@ -782,7 +797,9 @@ async def editar_cita_admin(
 def obtener_bloqueos_json(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     """API que devuelve bloqueos en formato JSON para FullCalendar"""
     import json
-    dias_bloqueados = db.query(models.DiaBloqueado).all()
+    dias_bloqueados = db.query(models.DiaBloqueado).filter(
+        models.DiaBloqueado.tenant_id == cred.tenant_id
+    ).all()
     
     bloqueos = []
     for b in dias_bloqueados:

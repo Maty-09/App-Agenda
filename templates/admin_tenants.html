@@ -99,6 +99,10 @@
                             </td>
                             <td class="py-4 px-6 text-right">
                                 {% if t.id != 'default' %}
+                                <button onclick="abrirModalEdicion('{{ t.id }}', '{{ t.nombre_empresa }}', '{{ t.plan_actual }}', '{{ t.estado_suscripcion }}')"
+                                        class="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-2 rounded-lg transition mr-1" title="Editar Plan y Estado">
+                                    <i class="fas fa-edit"></i>
+                                </button>
                                 <button onclick="confirmarEliminar('{{ t.id }}', '{{ t.nombre_empresa }}')" 
                                         class="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition" title="Eliminar Tenant">
                                     <i class="fas fa-trash-alt"></i>
@@ -156,6 +160,7 @@
                     <div>
                         <label class="block text-sm font-bold text-slate-700 mb-1.5">Plan Inicial</label>
                         <select name="plan_actual" class="w-full rounded-xl border-slate-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                            <option value="Demo">Demo (Todo Desbloqueado)</option>
                             <option value="Starter">Starter</option>
                             <option value="Pro">Pro</option>
                             <option value="Business">Business</option>
@@ -194,11 +199,66 @@
         </div>
     </div>
     
+    <!-- Modal Editar Plan -->
+    <div id="modal-editar" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm hidden">
+        <div class="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden relative"
+             onclick="event.stopPropagation()">
+            <!-- Botón cerrar -->
+            <button onclick="document.getElementById('modal-editar').classList.add('hidden')" 
+                    class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <div class="p-6 md:p-8">
+                <div class="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center text-xl mb-6 shadow-inner">
+                    <i class="fas fa-sliders-h"></i>
+                </div>
+                
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Editar Empresa</h3>
+                <p id="edit-empresa-nombre" class="text-sm text-slate-500 mb-6 font-bold"></p>
+                
+                <form id="form-editar" action="" method="POST" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-700 mb-1.5">Plan de Suscripción</label>
+                        <select id="edit-plan" name="nuevo_plan" class="w-full rounded-xl border-slate-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                            <option value="Demo">Demo (Todo Desbloqueado)</option>
+                            <option value="Starter">Starter</option>
+                            <option value="Pro">Pro</option>
+                            <option value="Business">Business</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-slate-700 mb-1.5">Estado de la Cuenta</label>
+                        <select id="edit-estado" name="nuevo_estado" class="w-full rounded-xl border-slate-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                            <option value="activa">Activa</option>
+                            <option value="impaga">Impaga</option>
+                            <option value="cancelada">Cancelada</option>
+                        </select>
+                        <p class="text-[11px] text-slate-400 mt-1">Si la cancelas, restringirás el acceso del cliente.</p>
+                    </div>
+                    
+                    <div class="pt-4 flex gap-3">
+                        <button type="button" onclick="document.getElementById('modal-editar').classList.add('hidden')"
+                                class="w-1/2 px-4 py-3 font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                            Cancelar
+                        </button>
+                        <button type="submit" 
+                                class="w-1/2 px-4 py-3 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition">
+                            Guardar Cambios
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
     <script>
         // Cerrar modal con ESC
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 document.getElementById('modal-crear').classList.add('hidden');
+                document.getElementById('modal-editar').classList.add('hidden');
             }
         });
         
@@ -206,6 +266,17 @@
         document.getElementById('modal-crear').addEventListener('click', function() {
             this.classList.add('hidden');
         });
+        document.getElementById('modal-editar').addEventListener('click', function() {
+            this.classList.add('hidden');
+        });
+
+        function abrirModalEdicion(tenantId, nombreEmpresa, planActual, estadoActual) {
+            document.getElementById('edit-empresa-nombre').innerText = nombreEmpresa;
+            document.getElementById('edit-plan').value = planActual;
+            document.getElementById('edit-estado').value = estadoActual;
+            document.getElementById('form-editar').action = '/admin/tenants/' + tenantId + '/editar-plan';
+            document.getElementById('modal-editar').classList.remove('hidden');
+        }
 
         function confirmarEliminar(tenantId, nombreEmpresa) {
             Swal.fire({

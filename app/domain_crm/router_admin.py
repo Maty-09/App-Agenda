@@ -1226,6 +1226,27 @@ def eliminar_tenant(id_tenant: str, db: Session = Depends(get_db), cred: Current
     
     return RedirectResponse(url="/admin/tenants", status_code=303)
 
+@router.post("/tenants/{id_tenant}/editar-plan")
+def editar_plan(
+    id_tenant: str, 
+    nuevo_plan: str = Form(...), 
+    nuevo_estado: str = Form(...), 
+    db: Session = Depends(get_db), 
+    cred: CurrentUser = Depends(verificar_login)
+):
+    if cred.tenant_id != "default" or cred.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de SuperAdmin.")
+        
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == id_tenant).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant no encontrado.")
+        
+    tenant.plan_actual = nuevo_plan
+    tenant.estado_suscripcion = nuevo_estado
+    db.commit()
+    
+    return RedirectResponse(url="/admin/tenants", status_code=303)
+
 
 # ==========================================
 #   RUTA TEMPORAL: CREAR SUPERADMIN

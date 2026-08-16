@@ -265,6 +265,10 @@
                         <span class="text-sm font-semibold flex items-center gap-3"><i class="fas fa-home text-emerald-400 group-hover:scale-110 transition-transform"></i> Formulario Domicilio</span>
                         <i class="fas fa-chevron-right text-white/30 text-xs"></i>
                     </a>
+                    <button onclick="abrirConfigHorarios()" class="w-full group flex items-center justify-between gap-3 p-4 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition cursor-pointer">
+                        <span class="text-sm font-semibold flex items-center gap-3"><i class="fas fa-clock text-amber-400 group-hover:scale-110 transition-transform"></i> Horarios de Trabajo</span>
+                        <i class="fas fa-chevron-right text-white/30 text-xs"></i>
+                    </button>
                 </div>
             </div>
             <div class="mt-8 bg-white p-6 rounded-3xl border border-slate-100">
@@ -776,6 +780,88 @@
                     });
                 }
             });
+        }
+    </script>
+
+    <!-- Modal Configuración Horarios -->
+    <div id="modalConfigHorarios" class="fixed inset-0 z-[100] hidden items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden relative transform transition-all scale-95 opacity-0 duration-300" id="modalConfigHorariosContent">
+            <button onclick="cerrarConfigHorarios()" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition z-10">
+                <i class="fas fa-times"></i>
+            </button>
+            <div class="p-6 md:p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center text-xl shadow-sm border border-amber-100">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-900">Horarios de Trabajo</h3>
+                        <p class="text-xs text-slate-500 font-medium">Configura qué días atiendes y los bloques de horas (separados por comas).</p>
+                    </div>
+                </div>
+                
+                <form id="formConfigHorarios" action="/admin/config/horarios" method="POST" class="space-y-4">
+                    <div class="table-responsive max-h-[50vh] overflow-y-auto pr-2" style="scrollbar-width: thin;">
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0">
+                                <tr>
+                                    <th class="px-4 py-3 rounded-l-xl">Día</th>
+                                    <th class="px-4 py-3 text-center">Atiendes</th>
+                                    <th class="px-4 py-3 rounded-r-xl">Bloques (Ej: 09:00, 13:00)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% set dias_nombres = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'] %}
+                                {% for i in range(7) %}
+                                <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
+                                    <td class="px-4 py-3 font-semibold text-slate-700">{{ dias_nombres[i] }}</td>
+                                    <td class="px-4 py-3 text-center">
+                                        <input type="checkbox" name="dia_{{ i }}_activo" value="1" 
+                                            class="w-4 h-4 text-amber-500 bg-slate-100 border-slate-300 rounded focus:ring-amber-500 cursor-pointer"
+                                            {% if tenant_config and tenant_config.reglas_negocio and tenant_config.reglas_negocio.dias_habiles != None %}
+                                                {% if i in tenant_config.reglas_negocio.dias_habiles %}checked{% endif %}
+                                            {% elif i < 5 %}checked{% endif %}>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        {% set bloque_str = "09:00, 13:00, 15:30" %}
+                                        {% if tenant_config and tenant_config.reglas_negocio and tenant_config.reglas_negocio.bloques_horarios and (i|string) in tenant_config.reglas_negocio.bloques_horarios %}
+                                            {% set bloque_str = tenant_config.reglas_negocio.bloques_horarios[i|string] | join(', ') %}
+                                        {% endif %}
+                                        <input type="text" name="dia_{{ i }}_bloques" value="{{ bloque_str }}" 
+                                            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition"
+                                            placeholder="09:00, 13:00">
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pt-4 border-t border-slate-100 flex justify-end gap-3">
+                        <button type="button" onclick="cerrarConfigHorarios()" class="px-5 py-2.5 rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition">Cancelar</button>
+                        <button type="submit" class="px-5 py-2.5 rounded-xl bg-amber-500 text-white font-bold hover:bg-amber-600 shadow-sm shadow-amber-200 transition flex items-center gap-2">
+                            <i class="fas fa-save"></i> Guardar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function abrirConfigHorarios() {
+            const m = document.getElementById('modalConfigHorarios');
+            const c = document.getElementById('modalConfigHorariosContent');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+            setTimeout(() => { c.classList.remove('scale-95', 'opacity-0'); c.classList.add('scale-100', 'opacity-100'); }, 10);
+        }
+
+        function cerrarConfigHorarios() {
+            const m = document.getElementById('modalConfigHorarios');
+            const c = document.getElementById('modalConfigHorariosContent');
+            c.classList.remove('scale-100', 'opacity-100');
+            c.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => { m.classList.add('hidden'); m.classList.remove('flex'); }, 300);
         }
     </script>
 

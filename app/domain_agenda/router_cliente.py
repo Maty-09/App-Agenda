@@ -465,13 +465,26 @@ def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_i
 
     dia_semana = fecha.weekday() # 0:Lunes, 2:Miércoles
 
-    for h in Horarios_base:
-        # --- REGLA ESTRICTA DE MIÉRCOLES ---
-        # Si es miércoles (2), el bloque de las 15:30 no existe para nadie.
-        if dia_semana == 2 and h == "15:30":
-            continue 
+    # Obtener configuración del tenant
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+    bloques_dia = ["09:00", "13:00", "15:30"] # Default
+    if tenant:
+        try:
+            config = json.loads(tenant.config_json or "{}")
+            if "reglas_negocio" in config and "bloques_horarios" in config["reglas_negocio"]:
+                str_dia = str(dia_semana)
+                if str_dia in config["reglas_negocio"]["bloques_horarios"]:
+                    bloques_dia = config["reglas_negocio"]["bloques_horarios"][str_dia]
+        except Exception:
+            pass
 
-        inicio = datetime.combine(fecha, datetime.strptime(h, "%H:%M").time())
+    for h in bloques_dia:
+        try:
+            hora_obj = datetime.strptime(h, "%H:%M").time()
+        except ValueError:
+            continue
+            
+        inicio = datetime.combine(fecha, hora_obj)
         
         # Validaciones de horario general (08:00-18:00) y feriados
         if not verificar_disponibilidad(db, tipo_servicio, inicio, duracion_horas, tenant_id):
@@ -544,29 +557,29 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
     if h_inicio < time(13, 0) and h_fin > time(12, 0):
         return False
 
-    # 5. VALIDACIÓN POR TIPO DE SERVICIO
-    dia_semana = inicio.weekday() # 0:Lunes, 2:Miércoles...
+    # 5. VALIDACIÓN DE BLOQUES HORARIOS DINÁMICOS
+    dia_semana = inicio.weekday() 
     hora_str = inicio.strftime("%H:%M")
 
-    if tipo_servicio == "domicilio_taller":
-        if duracion_horas != 2:
-            return False
-            
-        # --- REGLA ESPECÍFICA MIÉRCOLES ---
-        if dia_semana == 2: # Es Miércoles
-            if hora_str not in ["09:00", "13:00"]:
-                return False
-        # --- REGLA OTROS DÍAS ---
-        else:
-            if hora_str not in ["09:00", "13:00", "15:30"]:
-                return False
+    # Obtener configuración del tenant
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+    bloques_validos = ["09:00", "13:00", "15:30"] # Default
+    if tenant:
+        try:
+            config = json.loads(tenant.config_json or "{}")
+            if "reglas_negocio" in config and "bloques_horarios" in config["reglas_negocio"]:
+                str_dia = str(dia_semana)
+                if str_dia in config["reglas_negocio"]["bloques_horarios"]:
+                    bloques_validos = config["reglas_negocio"]["bloques_horarios"][str_dia]
+        except Exception:
+            pass
 
-    elif tipo_servicio == "especializado":
-        # Para especializado, validamos que el bloque no sea Miércoles 15:30 
-        # (Opcional: Si el miércoles solo hay 09:00 y 13:00 para TODO, usa el bloque de arriba)
-        if dia_semana == 2 and hora_str not in ["09:00", "13:00"]:
-            return False
-    else:
+    # Verificamos si la hora requerida está dentro de los bloques permitidos para ese día
+    if hora_str not in bloques_validos:
+        return False
+        
+    # Excepción para domicilio_taller: siempre duran 2 horas según la regla antigua, pero ahora la flexibilidad de horas es mayor
+    if tipo_servicio == "domicilio_taller" and duracion_horas != 2:
         return False
 
     # 6. Validar traslapes en la DB

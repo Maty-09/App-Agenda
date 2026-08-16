@@ -107,6 +107,12 @@ def panel_agendamientos(
 ):
     query = db.query(models.Agendamiento).filter(models.Agendamiento.tenant_id == cred.tenant_id)
 
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    try:
+        tenant_config = json.loads(tenant.config_json or "{}")
+    except Exception:
+        tenant_config = {}
+
     print("=" * 80)
     print(f"DEBUG PANEL: subtipo={subtipo}, tipo_servicio={tipo_servicio}, fecha={fecha}")
 
@@ -206,7 +212,8 @@ def panel_agendamientos(
             "fecha": fecha,
             "utm_registro": utm_registro,
             "links_agenda": links_agenda,
-            "current_user": cred
+            "current_user": cred,
+            "tenant_config": tenant_config
         }
     )
 
@@ -536,26 +543,29 @@ def verificar_disponibilidad_detalle(
     if h_inicio < dt_time(13, 0) and h_fin > dt_time(12, 0):
         return False, "La cita interfiere con el horario de colaciÃ³n obligatorio (12:00 - 13:00)."
 
-    # 5. ValidaciÃ³n por tipo de servicio y dÃ­as
-    dia_semana = inicio.weekday() # 0:Lunes, 2:MiÃ©rcoles...
+    # 5. Validación de bloques horarios dinámicos
+    dia_semana = inicio.weekday() 
     hora_str = inicio.strftime("%H:%M")
 
-    if tipo_servicio == "domicilio_taller":
-        if duracion_horas != 2:
-            return False, "La duraciÃ³n de este tipo de servicio debe ser de 2 horas."
-            
-        if dia_semana == 2: # MiÃ©rcoles
-            if hora_str not in ["09:00", "13:00"]:
-                return False, "Los miÃ©rcoles los servicios en local/domicilio solo pueden iniciar a las 09:00 o 13:00."
-        else:
-            if hora_str not in ["09:00", "13:00", "15:30"]:
-                return False, "Los servicios en local/domicilio solo pueden iniciar a las 09:00, 13:00 o 15:30."
+    # Obtener configuración del tenant
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+    bloques_validos = ["09:00", "13:00", "15:30"] # Default
+    
+    if tenant:
+        try:
+            config = json.loads(tenant.config_json or "{}")
+            if "reglas_negocio" in config and "bloques_horarios" in config["reglas_negocio"]:
+                str_dia = str(dia_semana)
+                if str_dia in config["reglas_negocio"]["bloques_horarios"]:
+                    bloques_validos = config["reglas_negocio"]["bloques_horarios"][str_dia]
+        except Exception:
+            pass
 
-    elif tipo_servicio == "especializado":
-        if dia_semana == 2 and hora_str not in ["09:00", "13:00"]:
-            return False, "Los miÃ©rcoles los servicios especializados solo pueden iniciar a las 09:00 o 13:00."
-    else:
-        return False, f"Tipo de servicio '{tipo_servicio}' no vÃ¡lido."
+    if hora_str not in bloques_validos:
+        return False, f"La hora {hora_str} no está permitida para los días {dia_semana}. Bloques válidos: {', '.join(bloques_validos)}."
+
+    if tipo_servicio == "domicilio_taller" and duracion_horas != 2:
+        return False, "La duración de este tipo de servicio debe ser de 2 horas."
 
     # 6. Validar traslapes/capacidad (excluyendo la misma cita)
     query = db.query(models.Agendamiento).filter(
@@ -1323,3 +1333,49 @@ def post_setup_superadmin(
     '''.format(email)
     
     return HTMLResponse(content=html_success)
+
+
+@router.post("/config/horarios")
+async def guardar_config_horarios(
+    request: Request,
+    db: Session = Depends(get_db),
+    cred: CurrentUser = Depends(verificar_login)
+):
+    form_data = await request.form()
+    
+    dias_habiles = []
+    bloques_horarios = {}
+    
+    for i in range(7):
+        # Si el checkbox está marcado, lo añadimos a días hábiles
+        is_active = form_data.get(f"dia_{i}_activo")
+        if is_active == "1":
+            dias_habiles.append(i)
+            
+            # Recogemos los bloques escritos (ej: "09:00, 13:00")
+            bloques_raw = form_data.get(f"dia_{i}_bloques", "")
+            if bloques_raw.strip():
+                # Limpiar y separar por comas
+                bloques_lista = [b.strip() for b in bloques_raw.split(",") if b.strip()]
+                bloques_horarios[str(i)] = bloques_lista
+            else:
+                # Fallback si lo dejaron vacío pero marcado
+                bloques_horarios[str(i)] = ["09:00", "13:00", "15:30"]
+                
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    
+    try:
+        config = json.loads(tenant.config_json or "{}")
+    except Exception:
+        config = {}
+        
+    if "reglas_negocio" not in config:
+        config["reglas_negocio"] = {}
+        
+    config["reglas_negocio"]["dias_habiles"] = dias_habiles
+    config["reglas_negocio"]["bloques_horarios"] = bloques_horarios
+    
+    tenant.config_json = json.dumps(config)
+    db.commit()
+    
+    return RedirectResponse(url="/admin/panel", status_code=303)

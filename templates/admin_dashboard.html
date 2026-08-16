@@ -459,6 +459,7 @@
                 </div>
             </div>
 
+            {% if current_user.tenant_id != 'womenlashcl' %}
             <!-- Chart 4: Top Marcas de Vehículos (Horizontal Bar) -->
             <div class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
                 <div class="flex items-center gap-3 mb-6">
@@ -469,9 +470,11 @@
                     <canvas id="chartMarcas"></canvas>
                 </div>
             </div>
+            {% endif %}
 
         </section>
 
+        {% if current_user.tenant_id != 'womenlashcl' %}
         <!-- AI Insights Widget -->
         <section class="bg-gradient-to-r from-indigo-900 to-purple-900 p-8 rounded-3xl shadow-lg border border-indigo-800 mb-8 relative overflow-hidden text-white" id="ai-insights-widget">
             <div class="absolute top-0 right-0 p-8 opacity-10">
@@ -494,6 +497,7 @@
                 </button>
             </div>
         </section>
+        {% endif %}
 
         <!-- UTM Statistics Section -->
         <section class="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
@@ -566,6 +570,7 @@
 
     </div>
 
+    {% if current_user.tenant_id != 'womenlashcl' %}
     <!-- Copiloto IA (Floating Widget) -->
     <div id="ai-chatbot-window" class="fixed bottom-24 right-8 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden transition-all duration-300 transform translate-y-4 opacity-0 pointer-events-none z-50" style="height: 500px;">
         <div class="bg-indigo-900 p-4 text-white flex justify-between items-center">
@@ -595,6 +600,7 @@
     <button onclick="toggleAIChat()" class="fixed bottom-8 right-8 w-14 h-14 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full shadow-xl hover:shadow-indigo-500/30 flex items-center justify-center text-xl transition-all hover:scale-105 z-40">
         <i class="fas fa-robot"></i>
     </button>
+    {% endif %}
 
     <!-- Scripts para IA -->
     <script>
@@ -613,20 +619,25 @@
             .then(res => res.json())
             .then(data => {
                 const container = document.getElementById('ai-insights-content');
-                if(data.data && data.data.length > 0) {
-                    let html = `<p class="text-sm font-bold text-yellow-300 mb-2"><i class="fas fa-exclamation-triangle"></i> ${data.data.length} clientes en riesgo de abandono (>3 meses inactivos):</p><div class="flex flex-wrap gap-2">`;
-                    data.data.slice(0, 3).forEach(c => {
-                        html += `<a href="/admin/clientes/${c.cliente_id}" class="px-3 py-1 bg-white/10 rounded-lg text-xs hover:bg-white/20 transition">${c.nombre} (${c.dias_inactivo} días)</a>`;
-                    });
-                    if(data.data.length > 3) html += `<span class="px-3 py-1 bg-white/5 rounded-lg text-xs">+${data.data.length - 3} más</span>`;
-                    html += `</div>`;
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = `<p class="text-sm text-green-300"><i class="fas fa-check-circle"></i> Todos tus clientes han agendado recientemente. ¡Buen trabajo!</p>`;
+                if (container) {
+                    if(data.data && data.data.length > 0) {
+                        let html = `<p class="text-sm font-bold text-yellow-300 mb-2"><i class="fas fa-exclamation-triangle"></i> ${data.data.length} clientes en riesgo de abandono (>3 meses inactivos):</p><div class="flex flex-wrap gap-2">`;
+                        data.data.slice(0, 3).forEach(c => {
+                            html += `<a href="/admin/clientes/${c.cliente_id}" class="px-3 py-1 bg-white/10 rounded-lg text-xs hover:bg-white/20 transition">${c.nombre} (${c.dias_inactivo} días)</a>`;
+                        });
+                        if(data.data.length > 3) html += `<span class="px-3 py-1 bg-white/5 rounded-lg text-xs">+${data.data.length - 3} más</span>`;
+                        html += `</div>`;
+                        container.innerHTML = html;
+                    } else {
+                        container.innerHTML = `<p class="text-sm text-green-300"><i class="fas fa-check-circle"></i> Todos tus clientes han agendado recientemente. ¡Buen trabajo!</p>`;
+                    }
                 }
             })
             .catch(() => {
-                document.getElementById('ai-insights-content').innerHTML = `<p class="text-sm text-red-300">No se pudieron cargar las predicciones.</p>`;
+                const container = document.getElementById('ai-insights-content');
+                if (container) {
+                    container.innerHTML = `<p class="text-sm text-red-300">No se pudieron cargar las predicciones.</p>`;
+                }
             });
 
         // Chatbot Form
@@ -786,15 +797,17 @@
             });
 
             // 4. Chart Marcas (Horizontal Bar)
-            const ctxMarcas = document.getElementById('chartMarcas').getContext('2d');
-            let marcasLabels = {{ stats.marcas_labels | safe }};
-            let marcasValores = {{ stats.marcas_valores | safe }};
-            if (!marcasLabels || marcasLabels.length === 0) {
-                marcasLabels = ['TOYOTA', 'HYUNDAI', 'CHEVROLET', 'NISSAN', 'HONDA'];
-                marcasValores = [0, 0, 0, 0, 0];
-            }
+            const canvasMarcas = document.getElementById('chartMarcas');
+            if (canvasMarcas) {
+                const ctxMarcas = canvasMarcas.getContext('2d');
+                let marcasLabels = {{ stats.marcas_labels | safe }};
+                let marcasValores = {{ stats.marcas_valores | safe }};
+                if (!marcasLabels || marcasLabels.length === 0) {
+                    marcasLabels = ['TOYOTA', 'HYUNDAI', 'CHEVROLET', 'NISSAN', 'HONDA'];
+                    marcasValores = [0, 0, 0, 0, 0];
+                }
 
-            new Chart(ctxMarcas, {
+                new Chart(ctxMarcas, {
                 type: 'bar',
                 data: {
                     labels: marcasLabels,
@@ -817,7 +830,7 @@
                     }
                 }
             });
-            });
+            }
         });
 
         // Lógica de Filtros por Fechas (Mejora 5)

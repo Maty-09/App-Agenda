@@ -72,7 +72,7 @@ def enviar_solicitud_confirmacion(agendamiento):
     url_confirmar = f"{BASE_URL}/cliente/confirmar/{agendamiento.id}"
     url_rechazar = f"{BASE_URL}/cliente/rechazar/{agendamiento.id}" # Opcional: añadir esta ruta
 
-    asunto = f"⚠️ Acción Requerida: Confirma tu cita - {agendamiento.patente}"
+    asunto = f"⚠️ Acción Requerida: Confirma tu cita - {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}"
     contenido_html = f"""
     <html>
         <body style="margin:0; padding:0; background-color:#f4f7f6; font-family: 'Segoe UI', Arial, sans-serif;">
@@ -91,7 +91,7 @@ def enviar_solicitud_confirmacion(agendamiento):
                                 <td style="padding: 40px; text-align: center;">
                                     <h3 style="color:#1e293b; font-size:20px; margin-bottom:10px;">¿Confirmas tu asistencia?</h3>
                                     <p style="color:#475569; font-size:16px; line-height:1.6;">
-                                        Hola <strong>{agendamiento.nombre}</strong>, para asegurar el cupo de tu <strong>{agendamiento.marca} ({agendamiento.patente})</strong> este {agendamiento.fecha_inicio.strftime('%d/%m')}, pulsa el botón:
+                                        Hola <strong>{agendamiento.nombre}</strong>, para asegurar el cupo de tu <strong>{f"{agendamiento.marca} ({agendamiento.patente})" if agendamiento.tenant_id != "womenlashcl" else "servicio"}</strong> este {agendamiento.fecha_inicio.strftime('%d/%m')}, pulsa el botón:
                                     </p>
                                     <div style="margin-top: 35px;">
                                         <a href="{url_confirmar}" style="background-color:#10b981; color:#ffffff; padding:18px 35px; text-decoration:none; border-radius:8px; font-weight:bold; font-size:18px; display:inline-block; box-shadow: 0 4px 6px rgba(16,185,129,0.2);">✅ SÍ, CONFIRMO MI HORA</a>
@@ -111,11 +111,11 @@ def enviar_solicitud_confirmacion(agendamiento):
         </body>
     </html>
     """
-    return enviar_email_base(agendamiento.correo, f"⚠️ Acción Requerida: Confirma tu cita - {agendamiento.patente}", contenido_html)
+    return enviar_email_base(agendamiento.correo, f"⚠️ Acción Requerida: Confirma tu cita - {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}", contenido_html)
 
 def enviar_aviso_accion_al_dueno(agendamiento, accion):
     """ Notifica al dueño qué hizo el cliente (ACEPTADA / RECHAZADA) """
-    asunto = f"📢 CITA {accion}: {agendamiento.nombre} - {agendamiento.patente}"
+    asunto = f"📢 CITA {accion}: {agendamiento.nombre} - {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}"
     # Color dinámico: Verde si acepta, Rojo si rechaza
     color_status = "#10b981" if "ACEPTADA" in accion or "CONFIRMADA" in accion else "#ef4444"
     servicio_label = "Local" if getattr(agendamiento, 'subtipo', '').lower() == "taller" else getattr(agendamiento, 'subtipo', '').capitalize() or "Servicio"
@@ -143,7 +143,7 @@ def enviar_aviso_accion_al_dueno(agendamiento, accion):
                                     <table width="100%" style="color:#334155; font-size:15px; border-collapse:collapse;">
                                         <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Cliente:</strong></td><td style="text-align:right;">{agendamiento.nombre} {agendamiento.apellido}</td></tr>
                                         <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Vehículo:</strong></td><td style="text-align:right;">{agendamiento.marca} {agendamiento.modelo}</td></tr>
-                                        <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Patente:</strong></td><td style="text-align:right;">{agendamiento.patente}</td></tr>
+                                        {"" if agendamiento.tenant_id == "womenlashcl" else f"<tr><td style='padding:8px 0; border-bottom:1px solid #f1f5f9;'><strong>Patente:</strong></td><td style='text-align:right;'>{agendamiento.patente}</td></tr>"}
                                         <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Fecha/Hora:</strong></td><td style="text-align:right;">{agendamiento.fecha_inicio.strftime('%d-%m-%Y %H:%M')}</td></tr>
                                         <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Servicio:</strong></td><td style="text-align:right;">{servicio_label}</td></tr>
                                     </table>
@@ -164,7 +164,7 @@ def enviar_aviso_accion_al_dueno(agendamiento, accion):
 def enviar_confirmacion_agendamiento(agendamiento, nota_compartida):
     """ PASO 2 AUTOMÁTICO: Envía el calendario una vez confirmado """
     url_mapa = generar_url_mapa(getattr(agendamiento, 'direccion', ''))
-    asunto = f"✅ ¡Confirmado! Todo listo para tu cita - {agendamiento.patente}"
+    asunto = f"✅ ¡Confirmado! Todo listo para tu cita - {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}"
     
     contenido_html = f"""
     <html>
@@ -212,7 +212,7 @@ def enviar_confirmacion_agendamiento(agendamiento, nota_compartida):
     # Crear archivo .ics
     cal = vobject.iCalendar()
     vevent = cal.add('vevent')
-    vevent.add('summary').value = f"Mantención: {agendamiento.patente}"
+    vevent.add('summary').value = f"Cita: {agendamiento.nombre} {agendamiento.apellido}" if agendamiento.tenant_id == "womenlashcl" else f"Mantención: {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}"
     vevent.add('dtstart').value = agendamiento.fecha_inicio
     vevent.add('dtend').value = agendamiento.fecha_termino
     
@@ -221,11 +221,11 @@ def enviar_confirmacion_agendamiento(agendamiento, nota_compartida):
         asunto, 
         contenido_html, 
         adjunto_path=cal.serialize().encode('utf-8'), 
-        adjunto_name=f"cita_{agendamiento.patente}.ics"
+        adjunto_name=f"cita_{agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}.ics"
     )
 
 def enviar_correo_cancelacion(agendamiento):
-    asunto = f"❌ Tu cita ha sido cancelada - {agendamiento.patente}"
+    asunto = f"❌ Tu cita ha sido cancelada - {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}"
     contenido_html = f"""
     <html>
         <body style="margin:0; padding:0; background-color:#f4f7f6; font-family: 'Segoe UI', Arial, sans-serif;">

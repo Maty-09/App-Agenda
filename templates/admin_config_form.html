@@ -128,7 +128,7 @@
             </span>
         </div>
 
-        <h1 class="text-3xl font-extrabold text-gray-900 text-center mb-2">Agendar Mantención</h1>
+        <h1 class="text-3xl font-extrabold text-gray-900 text-center mb-2">{% if current_user.tenant_id == "womenlashcl" %}Agendar Cita{% else %}Agendar Mantención{% endif %}</h1>
         <p class="text-center text-gray-400 text-sm mb-10">Configura los datos adicionales que el dueño debe completar</p>
 
         <div class="divisor-dinamico">Preguntas (Arrastra para reordenar)</div>

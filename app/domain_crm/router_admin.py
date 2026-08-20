@@ -194,11 +194,16 @@ def panel_agendamientos(
     eventos_json_str = json.dumps(eventos_lista)
 
     base_url = str(request.base_url).rstrip("/")
-    links_agenda = {
-        "Domicilio": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio",
-        "Local": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local",
-        "Especializado": f"{base_url}/cliente/agendar_web?tipo=especializado",
-    }
+    if cred.tenant_id == "womenlashcl":
+        links_agenda = {
+            "Agendar Cita": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local",
+        }
+    else:
+        links_agenda = {
+            "Domicilio": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio",
+            "Local": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local",
+            "Especializado": f"{base_url}/cliente/agendar_web?tipo=especializado",
+        }
 
     return templates.TemplateResponse(
         name="admin_agendamientos.html",
@@ -318,22 +323,30 @@ def cancelar_agendamiento(
 def obtener_links_agenda(request: Request, admin = Depends(verificar_login)):
     base_url = str(request.base_url).rstrip("/")
 
-    links = {
-        "domicilio": {
-            "label": "Servicio a Domicilio",
-            "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio"
-            },
-        "local" : {
-            "label": "Servicio en Local",
-            "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local"
-            },
-        "especializado" : {
-            "label": "Equipo Especializado",
-            2: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=2",
-            3: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=3",
-            4: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=4",
-        } 
-    }
+    if admin.tenant_id == "womenlashcl":
+        links = {
+            "local" : {
+                "label": "Agendar Servicio",
+                "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local"
+            }
+        }
+    else:
+        links = {
+            "domicilio": {
+                "label": "Servicio a Domicilio",
+                "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio"
+                },
+            "local" : {
+                "label": "Servicio en Local",
+                "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local"
+                },
+            "especializado" : {
+                "label": "Equipo Especializado",
+                2: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=2",
+                3: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=3",
+                4: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=4",
+            } 
+        }
 
     return links
 # ==========================================

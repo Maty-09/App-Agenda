@@ -83,6 +83,9 @@ def agendar_web(
             
             # Calcular término si hay hora seleccionada
             if hora:
+            
+            # Calcular término si hay hora seleccionada
+            if hora:
                 inicio = datetime.combine(fecha_obj, datetime.strptime(hora, "%H:%M").time())
                 hora_termino = (inicio + timedelta(hours=duracion_horas)).strftime("%H:%M")
         except Exception as e:
@@ -91,6 +94,7 @@ def agendar_web(
     # 4. RENDER FINAL (Un solo return al final de la función)
     return templates.TemplateResponse("agendar.html", {
         "request": request,
+        "tenant_id": tenant_id,
         "tipo": tipo,
         "subtipo": subtipo,
         "fecha_seleccionada": fecha_seleccionada,
@@ -104,8 +108,6 @@ def agendar_web(
         "utm_campaign": f"{tipo}_{subtipo}"
         ,"booking_path": f"/cliente/{tenant_id}/agendar_web" if tenant_id != "default" else "/cliente/agendar_web"
     })
-
-buffer_minutos = 10
 
 import holidays
 feriados_cl = holidays.country_holidays('CL')
@@ -167,7 +169,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
             dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == tenant_id, models.DiaBloqueado.fecha == fecha).first()
             if dia_bloqueado:
                 return templates.TemplateResponse("agendar.html", {
-                    "request": request,
+                    "request": request, "tenant_id": tenant_id,
                     "mensaje_error": "Este día el local se encuentra cerrado. Por favor selecciona otra fecha.",
                     "tipo": tipo_servicio,
                     "subtipo": subtipo
@@ -378,7 +380,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
             print(f"Error al enviar aviso inicial: {e}")
 
         return templates.TemplateResponse("agendar.html", {
-            "request": request,
+            "request": request, "tenant_id": tenant_id,
             "success": True,
             "horas_disponibles": [],
             "tipo": tipo_servicio,
@@ -392,7 +394,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         print(f"ERROR CRITICO EN RENDER:\n{error_trace}")
         print(f"ERROR DETALLE: {traceback.format_exc()}")
         return templates.TemplateResponse("agendar.html", {
-            "request": request,
+            "request": request, "tenant_id": tenant_id,
             "mensaje_error": str(e),
             "tipo": form_data.get("tipo_servicio"),
             "subtipo": form_data.get("subtipo"),

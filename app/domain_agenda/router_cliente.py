@@ -83,9 +83,6 @@ def agendar_web(
             
             # Calcular término si hay hora seleccionada
             if hora:
-            
-            # Calcular término si hay hora seleccionada
-            if hora:
                 inicio = datetime.combine(fecha_obj, datetime.strptime(hora, "%H:%M").time())
                 hora_termino = (inicio + timedelta(hours=duracion_horas)).strftime("%H:%M")
         except Exception as e:

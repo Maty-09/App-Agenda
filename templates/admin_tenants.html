@@ -57,6 +57,8 @@
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Nombre Empresa</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Plan</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Administrador</th>
+                            <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Sesi&oacute;n</th>
+                            <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">&Uacute;ltima conexi&oacute;n</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Estado Suscripción</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Acciones</th>
                         </tr>
@@ -87,6 +89,20 @@
                                 </div>
                             </td>
                             <td class="py-4 px-6">
+                                {% if t.sesion_vigente %}
+                                <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Con sesi&oacute;n
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>Sin sesi&oacute;n
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="py-4 px-6 text-sm text-slate-600">
+                                {% if t.ultima_conexion %}{{ t.ultima_conexion.strftime('%d/%m/%Y %H:%M') }}{% else %}<span class="text-slate-400">Nunca</span>{% endif %}
+                            </td>
+                            <td class="py-4 px-6">
                                 {% set status_class = 'bg-emerald-100 text-emerald-700' %}
                                 {% if t.estado_suscripcion == 'cancelada' %}
                                     {% set status_class = 'bg-red-100 text-red-700' %}
@@ -113,7 +129,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="5" class="py-12 text-center text-slate-500 font-medium">
+                            <td colspan="8" class="py-12 text-center text-slate-500 font-medium">
                                 No hay tenants registrados en el sistema.
                             </td>
                         </tr>

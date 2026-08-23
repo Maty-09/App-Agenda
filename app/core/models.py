@@ -76,6 +76,8 @@ class Usuario(Base):
     email = Column(String, nullable=False, unique=True, index=True)
     password_hash = Column(String, nullable=False)
     rol = Column(String, default="tecnico") # admin, tecnico, asesor
+    ultima_conexion = Column(DateTime, nullable=True)
+    sesion_activa = Column(Boolean, nullable=False, default=False)
 
     tareas_asignadas = relationship("Tarea", back_populates="asignado")
     tenant = relationship("Tenant")

@@ -18,6 +18,10 @@ def login_access_token(
     if not user or not security.verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=400, detail="Correo o contraseña incorrectos")
     
+    user.ultima_conexion = models.get_now_chile()
+    user.sesion_activa = True
+    db.commit()
+
     access_token_expires = timedelta(minutes=security.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = security.create_access_token(
         subject=user.id, 

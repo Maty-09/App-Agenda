@@ -64,6 +64,10 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
             "error": "Correo o contraseÃ±a incorrectos"
         })
 
+    usuario.ultima_conexion = models.get_now_chile()
+    usuario.sesion_activa = True
+    db.commit()
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = security.create_access_token(
         subject=usuario.id,
@@ -79,7 +83,11 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
 
 
 @router.get("/logout")
-def logout():
+def logout(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == cred.id).first()
+    if usuario:
+        usuario.sesion_activa = False
+        db.commit()
     response = RedirectResponse(url="/admin/login", status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie("access_token")
     return response
@@ -1176,6 +1184,7 @@ def listar_tenants(request: Request, db: Session = Depends(get_db), cred: Curren
         raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de SuperAdmin.")
         
     tenants_raw = db.query(models.Tenant).all()
+    limite_sesion = models.get_now_chile() - timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     tenants_data = []
     for t in tenants_raw:
         admin_user = db.query(models.Usuario).filter(models.Usuario.tenant_id == t.id, models.Usuario.rol == "admin").first()
@@ -1184,7 +1193,15 @@ def listar_tenants(request: Request, db: Session = Depends(get_db), cred: Curren
             "nombre_empresa": t.nombre_empresa,
             "plan_actual": t.plan_actual,
             "estado_suscripcion": t.estado_suscripcion,
-            "admin_email": admin_user.email if admin_user else "Sin Admin"
+            "admin_email": admin_user.email if admin_user else "Sin Admin",
+            "admin_nombre": admin_user.nombre if admin_user else None,
+            "ultima_conexion": admin_user.ultima_conexion if admin_user else None,
+            "sesion_vigente": bool(
+                admin_user
+                and admin_user.sesion_activa
+                and admin_user.ultima_conexion
+                and admin_user.ultima_conexion >= limite_sesion
+            ),
         })
     
     return templates.TemplateResponse("admin_tenants.html", {

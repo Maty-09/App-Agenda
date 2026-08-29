@@ -198,7 +198,7 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 def read_root(request: Request):
     host = request.headers.get("host", "").split(":")[0].lower()
     if host == "agenda.norem.cl":
-        return RedirectResponse(url="/cliente/agendar_web", status_code=307)
+        return RedirectResponse(url="/admin/login", status_code=307)
     return templates.TemplateResponse("landing.html", {"request": request})
 
 @app.on_event("startup")

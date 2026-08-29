@@ -14,8 +14,8 @@ SMTP_PORT = 587
 SENDER_EMAIL = os.getenv("EMAIL_SENDER")
 SENDER_PASSWORD = os.getenv("EMAIL_PASSWORD") or os.getenv("EMAIL_TOKEN")
 
-# Usar Ngrok o localhost según esté configurado
-NGROK_URL = os.getenv("BASE_URL", "http://localhost:8000")
+# Dominio público del sistema para las confirmaciones de reserva.
+NGROK_URL = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
 
 def enviar_correo_confirmacion(destinatario: str, nombre: str, dia: str, hora: str, token: str):
     """

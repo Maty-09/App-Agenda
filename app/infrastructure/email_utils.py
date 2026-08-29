@@ -22,8 +22,8 @@ if _env_example.exists():
 REMITENTE = os.getenv("EMAIL_SENDER")
 PASSWORD = os.getenv("EMAIL_PASSWORD") or os.getenv("EMAIL_TOKEN")
 CORREO_LOCAL = os.getenv("EMAIL_ADMIN", "matiasduranm09@gmail.com")
-# IMPORTANTE: Cambia esto a tu URL de Render cuando subas el proyecto
-BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+# URL pública para los enlaces de confirmación enviados a clientes.
+BASE_URL = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
 
 print(f"[EMAIL CONFIG] SENDER={'OK (' + REMITENTE + ')' if REMITENTE else 'FALTA (EMAIL_SENDER)'}")
 print(f"[EMAIL CONFIG] PASSWORD={'OK (set)' if PASSWORD else 'FALTA (EMAIL_PASSWORD o EMAIL_TOKEN)'}")

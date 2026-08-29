@@ -24,6 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 templates = Jinja2Templates(directory=[str(BASE_DIR / "templates"), str(BASE_DIR / "app" / "templates")])
 
 router = APIRouter()
+SYSTEM_BASE_URL = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
 
 
 # =============================
@@ -207,7 +208,7 @@ def panel_agendamientos(
     # Convertimos a string JSON
     eventos_json_str = json.dumps(eventos_lista)
 
-    base_url = str(request.base_url).rstrip("/")
+    base_url = SYSTEM_BASE_URL
     if cred.tenant_id == "womenlashcl":
         links_agenda = {
             "Agendar Cita": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local",
@@ -335,7 +336,7 @@ def cancelar_agendamiento(
 # ENVIAR LINKS POR ADMIN
 @router.get("/links-agenda")
 def obtener_links_agenda(request: Request, admin = Depends(verificar_login)):
-    base_url = str(request.base_url).rstrip("/")
+    base_url = SYSTEM_BASE_URL
 
     if admin.tenant_id == "womenlashcl":
         links = {
@@ -895,8 +896,7 @@ async def agendar_emergencia(request: Request):
     Ruta para el modo sobrecupo. 
     Redirige al agendamiento web ignorando restricciones (si el formulario lo permite).
     """
-    # Obtenemos la base de la URL (ej: http://127.0.0.1:8000)
-    base_url = str(request.base_url).rstrip("/")
+    base_url = SYSTEM_BASE_URL
     
     # Redirigimos al agendamiento de local, pero puedes cambiar el 'tipo' 
     # o aÃ±adirle un parÃ¡metro 'emergencia=true' para tu lÃ³gica interna.

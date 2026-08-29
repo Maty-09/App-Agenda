@@ -6,6 +6,8 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
+from jose import jwt, JWTError
+from app.core.security import SECRET_KEY, ALGORITHM
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import pytz
@@ -50,6 +52,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def bloquear_prueba_vencida(request: Request, call_next):
+    """Mantiene disponible el acceso a suscripción cuando una prueba termina."""
+    path = request.url.path
+    rutas_permitidas = {"/admin/login", "/admin/logout", "/admin/forgot-password", "/admin/reset-password", "/admin/prueba", "/admin/suscripcion", "/admin/suscripcion/checkout"}
+    if path.startswith("/admin") and path not in rutas_permitidas:
+        token = request.cookies.get("access_token", "")
+        if token.startswith("Bearer "):
+            try:
+                payload = jwt.decode(token.split(" ", 1)[1], SECRET_KEY, algorithms=[ALGORITHM])
+                tenant_id = payload.get("tenant_id")
+                if tenant_id:
+                    db = SessionLocal()
+                    try:
+                        tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+                        if tenant and tenant.estado_suscripcion == "prueba" and tenant.trial_fin and tenant.trial_fin < models.get_now_chile():
+                            return RedirectResponse(url="/admin/suscripcion", status_code=303)
+                    finally:
+                        db.close()
+            except JWTError:
+                pass
+    return await call_next(request)
 # --- CONFIGURACIÓN DEL SCHEDULER ---
 scheduler = BackgroundScheduler(timezone="America/Santiago")
 

@@ -22,6 +22,8 @@ class Tenant(Base):
     stripe_subscription_id = Column(String, nullable=True)
     plan_actual = Column(String, default="Starter") # Starter, Pro, Business
     estado_suscripcion = Column(String, default="activa") # activa, impaga, cancelada
+    trial_inicio = Column(DateTime, nullable=True)
+    trial_fin = Column(DateTime, nullable=True)
     
     agendamientos = relationship("Agendamiento", back_populates="tenant")
 

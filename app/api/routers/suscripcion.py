@@ -58,8 +58,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(deps.get_db)):
             tenant.stripe_customer_id = customer_id
             tenant.stripe_subscription_id = subscription_id
             tenant.estado_suscripcion = "activa"
-            # Determinar plan basado en el amount_total o metadata en un entorno real
-            # tenant.plan_actual = "Pro" 
+            tenant.plan_actual = session.get("metadata", {}).get("plan", "Norem Mensual")
             db.commit()
             
     elif event['type'] == 'customer.subscription.deleted':

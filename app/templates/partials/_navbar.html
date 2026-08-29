@@ -31,6 +31,11 @@
                     Tenants
                 </a>
                 {% endif %}
+                {% if current_user and current_user.rol == 'admin' and current_user.tenant_id != 'default' %}
+                <a href="/admin/suscripcion" class="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+                    <i class="fas fa-credit-card text-xs"></i> Plan
+                </a>
+                {% endif %}
             </nav>
             <div class="flex items-center gap-3">
                 {% if current_user %}

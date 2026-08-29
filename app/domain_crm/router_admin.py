@@ -50,6 +50,8 @@ from app.core.auth_deps import CurrentUser, verificar_login
 import stripe
 import hashlib
 import secrets
+import re
+import unicodedata
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 dÃ­as
 
@@ -93,6 +95,102 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     response = RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
     response.set_cookie(key="access_token", value=f"Bearer {access_token}", httponly=True)
     return response
+
+
+def _crear_slug_empresa(nombre_empresa: str) -> str:
+    limpio = unicodedata.normalize("NFKD", nombre_empresa).encode("ascii", "ignore").decode("ascii").lower()
+    limpio = re.sub(r"[^a-z0-9]+", "-", limpio).strip("-")
+    return (limpio or "negocio")[:36]
+
+
+@router.get("/prueba", response_class=HTMLResponse)
+def prueba_form(request: Request):
+    return templates.TemplateResponse("trial_signup.html", {"request": request})
+
+
+@router.post("/prueba", response_class=HTMLResponse)
+def iniciar_prueba(
+    request: Request,
+    nombre_empresa: str = Form(...),
+    nombre: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    email = email.strip().lower()
+    if len(password) < 8:
+        return templates.TemplateResponse("trial_signup.html", {"request": request, "error": "La contraseña debe tener al menos 8 caracteres."})
+    if db.query(models.Usuario).filter(models.Usuario.email == email).first():
+        return templates.TemplateResponse("trial_signup.html", {"request": request, "error": "Ya existe una cuenta con este correo. Inicia sesión o recupera tu contraseña."})
+
+    base_id = _crear_slug_empresa(nombre_empresa)
+    tenant_id = f"{base_id}-{secrets.token_hex(3)}"
+    ahora = models.get_now_chile()
+    tenant = models.Tenant(
+        id=tenant_id,
+        nombre_empresa=nombre_empresa.strip(),
+        plan_actual="Norem · Prueba",
+        estado_suscripcion="prueba",
+        trial_inicio=ahora,
+        trial_fin=ahora + timedelta(days=14),
+    )
+    usuario = models.Usuario(
+        tenant_id=tenant_id,
+        nombre=nombre.strip(),
+        email=email,
+        password_hash=security.get_password_hash(password),
+        rol="admin",
+        ultima_conexion=ahora,
+        sesion_activa=True,
+    )
+    db.add(tenant)
+    db.add(usuario)
+    db.commit()
+    token = security.create_access_token(
+        subject=usuario.id, rol=usuario.rol, tenant_id=tenant_id, email=usuario.email,
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    response = RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True)
+    return response
+
+
+@router.get("/suscripcion", response_class=HTMLResponse)
+def ver_suscripcion(
+    request: Request,
+    estado: str = Query(None),
+    db: Session = Depends(get_db),
+    cred: CurrentUser = Depends(verificar_login),
+):
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
+    dias_restantes = max(0, (tenant.trial_fin - models.get_now_chile()).days + 1) if tenant.trial_fin and tenant.estado_suscripcion == "prueba" else 0
+    return templates.TemplateResponse("admin_subscription.html", {
+        "request": request, "current_user": cred, "tenant": tenant,
+        "dias_restantes": dias_restantes, "estado_checkout": estado,
+    })
+
+
+@router.post("/suscripcion/checkout")
+def iniciar_checkout_suscripcion(
+    request: Request,
+    db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)
+):
+    if cred.rol != "admin":
+        raise HTTPException(status_code=403, detail="Solo el administrador puede contratar la suscripción.")
+    try:
+        checkout_url = stripe_utils.create_norem_monthly_checkout_session(
+            tenant_id=cred.tenant_id,
+            success_url=f"{SYSTEM_BASE_URL}/admin/suscripcion",
+            cancel_url=f"{SYSTEM_BASE_URL}/admin/suscripcion",
+        )
+    except RuntimeError as exc:
+        tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+        return templates.TemplateResponse("admin_subscription.html", {
+            "request": request, "current_user": cred, "tenant": tenant, "dias_restantes": 0, "error": str(exc),
+        }, status_code=503)
+    return RedirectResponse(checkout_url, status_code=status.HTTP_303_SEE_OTHER)
 
 
 def _hash_reset_token(token: str) -> str:

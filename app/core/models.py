@@ -20,6 +20,7 @@ class Tenant(Base):
     # Monetización (Stripe)
     stripe_customer_id = Column(String, nullable=True)
     stripe_subscription_id = Column(String, nullable=True)
+    mercado_pago_preapproval_id = Column(String, nullable=True, unique=True)
     plan_actual = Column(String, default="Starter") # Starter, Pro, Business
     estado_suscripcion = Column(String, default="activa") # activa, impaga, cancelada
     trial_inicio = Column(DateTime, nullable=True)

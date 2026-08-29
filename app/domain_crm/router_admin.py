@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from sqlalchemy import func
 from app.core.database import SessionLocal
-from app.core import models, schemas
+from app.core import models, schemas, mercadopago_utils
 from typing import List, Optional, Tuple
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 import json
@@ -180,6 +180,23 @@ def iniciar_checkout_suscripcion(
 ):
     if cred.rol != "admin":
         raise HTTPException(status_code=403, detail="Solo el administrador puede contratar la suscripción.")
+    if os.getenv("MERCADOPAGO_ACCESS_TOKEN"):
+        try:
+            checkout_url, preapproval_id = mercadopago_utils.crear_suscripcion_mensual(
+                tenant_id=cred.tenant_id,
+                payer_email=cred.email,
+                back_url=f"{SYSTEM_BASE_URL}/admin/suscripcion?estado=pendiente",
+            )
+            tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+            if tenant:
+                tenant.mercado_pago_preapproval_id = preapproval_id
+                db.commit()
+            return RedirectResponse(checkout_url, status_code=status.HTTP_303_SEE_OTHER)
+        except RuntimeError as exc:
+            tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+            return templates.TemplateResponse("admin_subscription.html", {
+                "request": request, "current_user": cred, "tenant": tenant, "dias_restantes": 0, "error": str(exc),
+            }, status_code=503)
     mercado_pago_url = os.getenv("MERCADOPAGO_NOREM_MENSUAL_URL")
     if mercado_pago_url:
         return RedirectResponse(mercado_pago_url, status_code=status.HTTP_303_SEE_OTHER)

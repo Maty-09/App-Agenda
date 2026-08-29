@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from app.core import models, stripe_utils
+from app.core import models, stripe_utils, mercadopago_utils
 from app.api import deps
 import stripe
 
@@ -68,4 +68,38 @@ async def stripe_webhook(request: Request, db: Session = Depends(deps.get_db)):
             tenant.estado_suscripcion = "cancelada"
             db.commit()
             
+    return {"status": "success"}
+
+
+@router.post("/mercadopago/webhook")
+async def mercadopago_webhook(request: Request, db: Session = Depends(deps.get_db)):
+    """Sincroniza las altas y bajas que Mercado Pago confirma mediante webhook."""
+    payload = await request.json()
+    data = payload.get("data") or {}
+    preapproval_id = str(data.get("id") or "")
+    if not mercadopago_utils.firma_webhook_valida(
+        signature=request.headers.get("x-signature"),
+        request_id=request.headers.get("x-request-id"),
+        data_id=preapproval_id,
+    ):
+        raise HTTPException(status_code=401, detail="Firma de Mercado Pago inválida")
+
+    event_type = payload.get("type") or payload.get("topic")
+    if event_type not in {"subscription_preapproval", "preapproval"}:
+        return {"status": "ignored"}
+
+    try:
+        subscription = mercadopago_utils.obtener_suscripcion(preapproval_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    tenant_id = subscription.get("external_reference")
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+    if not tenant:
+        return {"status": "unknown_tenant"}
+
+    tenant.mercado_pago_preapproval_id = preapproval_id
+    tenant.plan_actual = "Norem Mensual"
+    tenant.estado_suscripcion = "activa" if subscription.get("status") == "authorized" else "cancelada"
+    db.commit()
     return {"status": "success"}

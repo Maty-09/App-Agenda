@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import pytz
@@ -195,6 +196,9 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 @app.get("/")
 def read_root(request: Request):
+    host = request.headers.get("host", "").split(":")[0].lower()
+    if host == "agenda.norem.cl":
+        return RedirectResponse(url="/cliente/agendar_web", status_code=307)
     return templates.TemplateResponse("landing.html", {"request": request})
 
 @app.on_event("startup")

@@ -61,6 +61,12 @@
                 <p class="text-sm font-medium text-red-600">{{ error }}</p>
             </div>
             {% endif %}
+            {% if request.query_params.get('password_reset') %}
+            <div class="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-start gap-3">
+                <i class="fas fa-check-circle text-emerald-500 mt-0.5"></i>
+                <p class="text-sm font-medium text-emerald-700">Tu contraseña fue actualizada. Ya puedes iniciar sesión.</p>
+            </div>
+            {% endif %}
 
             <form method="post" action="/admin/login" class="space-y-5">
                 <div>
@@ -72,6 +78,10 @@
                         <input type="text" name="username" placeholder="tu@correo.com" required
                             class="block w-full pl-10 pr-3 py-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
                     </div>
+                </div>
+
+                <div class="flex justify-end -mt-2">
+                    <a href="/admin/forgot-password" class="text-sm font-semibold text-blue-700 hover:text-blue-900 dark:text-blue-400">¿Olvidaste tu contraseña?</a>
                 </div>
 
                 <div>

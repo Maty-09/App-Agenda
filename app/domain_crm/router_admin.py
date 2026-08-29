@@ -15,7 +15,11 @@ import pytz
 import sqlite3
 import openpyxl
 from io import BytesIO 
-from app.infrastructure.email_utils import enviar_confirmacion_agendamiento, enviar_correo_cancelacion
+from app.infrastructure.email_utils import (
+    enviar_confirmacion_agendamiento,
+    enviar_correo_cancelacion,
+    enviar_correo_recuperacion_contrasena,
+)
 from app.domain_agenda.router_cliente import Recursos, calcular_fin_especializado
 from app.domain_team import crud_team
 import os
@@ -44,6 +48,8 @@ from fastapi import HTTPException, status
 from app.core import models, security, stripe_utils
 from app.core.auth_deps import CurrentUser, verificar_login
 import stripe
+import hashlib
+import secrets
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 dÃ­as
 
@@ -86,6 +92,65 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
 
     response = RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
     response.set_cookie(key="access_token", value=f"Bearer {access_token}", httponly=True)
+    return response
+
+
+def _hash_reset_token(token: str) -> str:
+    secret = os.getenv("PASSWORD_RESET_SECRET") or os.getenv("JWT_SECRET_KEY", "")
+    return hashlib.sha256(f"{secret}:{token}".encode("utf-8")).hexdigest()
+
+
+@router.get("/forgot-password", response_class=HTMLResponse)
+def forgot_password_form(request: Request):
+    return templates.TemplateResponse("forgot_password.html", {"request": request})
+
+
+@router.post("/forgot-password", response_class=HTMLResponse)
+def forgot_password(request: Request, email: str = Form(...), db: Session = Depends(get_db)):
+    # La misma respuesta para todos los correos evita revelar qué cuentas existen.
+    usuario = db.query(models.Usuario).filter(models.Usuario.email == email.strip().lower()).first()
+    if usuario:
+        token = secrets.token_urlsafe(32)
+        usuario.password_reset_token_hash = _hash_reset_token(token)
+        usuario.password_reset_expires_at = models.get_now_chile() + timedelta(minutes=30)
+        db.commit()
+        reset_url = f"{SYSTEM_BASE_URL}/admin/reset-password?token={token}"
+        enviar_correo_recuperacion_contrasena(usuario.email, usuario.nombre, reset_url)
+    return templates.TemplateResponse("forgot_password.html", {"request": request, "sent": True})
+
+
+@router.get("/reset-password", response_class=HTMLResponse)
+def reset_password_form(request: Request, token: str = ""):
+    return templates.TemplateResponse("reset_password.html", {"request": request, "token": token})
+
+
+@router.post("/reset-password", response_class=HTMLResponse)
+def reset_password(
+    request: Request,
+    token: str = Form(...),
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    if len(password) < 8:
+        return templates.TemplateResponse("reset_password.html", {"request": request, "token": token, "error": "La contraseña debe tener al menos 8 caracteres."})
+    if password != password_confirm:
+        return templates.TemplateResponse("reset_password.html", {"request": request, "token": token, "error": "Las contraseñas no coinciden."})
+
+    usuario = db.query(models.Usuario).filter(
+        models.Usuario.password_reset_token_hash == _hash_reset_token(token),
+        models.Usuario.password_reset_expires_at >= models.get_now_chile(),
+    ).first()
+    if not usuario:
+        return templates.TemplateResponse("reset_password.html", {"request": request, "token": "", "error": "Este enlace no es válido o ya venció."})
+
+    usuario.password_hash = security.get_password_hash(password)
+    usuario.password_reset_token_hash = None
+    usuario.password_reset_expires_at = None
+    usuario.sesion_activa = False
+    db.commit()
+    response = RedirectResponse(url="/admin/login?password_reset=1", status_code=status.HTTP_303_SEE_OTHER)
+    response.delete_cookie("access_token")
     return response
 
 

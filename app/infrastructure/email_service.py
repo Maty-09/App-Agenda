@@ -8,10 +8,10 @@ from dotenv import load_dotenv
 # Cargar variables desde el archivo .env existente
 load_dotenv()
 
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
+SMTP_SERVER = os.getenv("SMTP_HOST", "server.dns-principal-34.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 
-SENDER_EMAIL = os.getenv("EMAIL_SENDER")
+SENDER_EMAIL = os.getenv("EMAIL_SENDER", "no-reply@norem.cl")
 SENDER_PASSWORD = os.getenv("EMAIL_PASSWORD") or os.getenv("EMAIL_TOKEN")
 
 # Dominio público del sistema para las confirmaciones de reserva.
@@ -44,7 +44,7 @@ def enviar_correo_confirmacion(destinatario: str, nombre: str, dia: str, hora: s
     msg.attach(MIMEText(html, 'html'))
 
     try:
-        server = smtplib.SMTP_SSL(SMTP_SERVER, 465)
+        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.send_message(msg)
         server.quit()

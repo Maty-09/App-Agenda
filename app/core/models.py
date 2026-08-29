@@ -78,6 +78,8 @@ class Usuario(Base):
     rol = Column(String, default="tecnico") # admin, tecnico, asesor
     ultima_conexion = Column(DateTime, nullable=True)
     sesion_activa = Column(Boolean, nullable=False, default=False)
+    password_reset_token_hash = Column(String(64), nullable=True, index=True)
+    password_reset_expires_at = Column(DateTime, nullable=True)
 
     tareas_asignadas = relationship("Tarea", back_populates="asignado")
     tenant = relationship("Tenant")

@@ -19,8 +19,10 @@ if _env_example.exists():
     load_dotenv(dotenv_path=str(_env_example), override=False)
 
 # --- CONFIGURACIÓN GLOBAL ---
-REMITENTE = os.getenv("EMAIL_SENDER")
+REMITENTE = os.getenv("EMAIL_SENDER", "no-reply@norem.cl")
 PASSWORD = os.getenv("EMAIL_PASSWORD") or os.getenv("EMAIL_TOKEN")
+SMTP_HOST = os.getenv("SMTP_HOST", "server.dns-principal-34.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 CORREO_LOCAL = os.getenv("EMAIL_ADMIN", "matiasduranm09@gmail.com")
 # URL pública para los enlaces de confirmación enviados a clientes.
 BASE_URL = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
@@ -54,13 +56,39 @@ def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, a
         return False
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
             server.login(REMITENTE, PASSWORD)
             server.sendmail(REMITENTE, destinatario, msg.as_string())
         return True
     except Exception as e:
         print(f"❌ Error SMTP: {e}")
         return False
+
+
+def enviar_correo_recuperacion_contrasena(destinatario: str, nombre: str, url_restauracion: str) -> bool:
+    """Envía un enlace de un solo uso para recuperar el acceso a Norem."""
+    asunto = "Restablece tu contraseña de Norem"
+    contenido_html = f"""
+    <html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:40px 16px;"><tr><td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 10px 28px rgba(15,23,42,.10);">
+          <tr><td style="background:linear-gradient(135deg,#0b3d91,#0755bf);padding:28px 36px;text-align:center;">
+            <div style="display:inline-block;width:46px;height:46px;line-height:46px;background:#fff;border-radius:12px;color:#0755bf;font-weight:800;font-size:28px;">N</div>
+            <div style="margin-top:10px;color:#fff;font-weight:800;letter-spacing:5px;font-size:20px;">NOREM</div>
+          </td></tr>
+          <tr><td style="padding:36px;">
+            <h1 style="font-size:24px;margin:0 0 16px;color:#0f172a;">Restablece tu contraseña</h1>
+            <p style="font-size:16px;line-height:1.6;margin:0 0 20px;color:#475569;">Hola {nombre}, recibimos una solicitud para cambiar la contraseña de tu cuenta Norem.</p>
+            <p style="font-size:16px;line-height:1.6;margin:0 0 28px;color:#475569;">Haz clic en el botón para elegir una nueva contraseña. El enlace vence en 30 minutos.</p>
+            <p style="text-align:center;margin:0 0 28px;"><a href="{url_restauracion}" style="display:inline-block;background:#0755bf;color:#fff;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:10px;">Restablecer contraseña</a></p>
+            <p style="font-size:13px;line-height:1.5;margin:0;color:#64748b;">Si no solicitaste este cambio, puedes ignorar este correo. Tu contraseña actual seguirá siendo válida.</p>
+          </td></tr>
+          <tr><td style="background:#f8fafc;padding:18px 36px;text-align:center;color:#64748b;font-size:12px;">Este es un mensaje automático de Norem.</td></tr>
+        </table>
+      </td></tr></table>
+    </body></html>
+    """
+    return enviar_email_base(destinatario, asunto, contenido_html)
 
 def generar_url_mapa(direccion):
     direccion_busqueda = direccion if (direccion and "taller" not in direccion.lower() and "local" not in direccion.lower()) else "Tu Direccion Real, Ciudad, Chile"

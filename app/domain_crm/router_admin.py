@@ -180,6 +180,9 @@ def iniciar_checkout_suscripcion(
 ):
     if cred.rol != "admin":
         raise HTTPException(status_code=403, detail="Solo el administrador puede contratar la suscripción.")
+    mercado_pago_url = os.getenv("MERCADOPAGO_NOREM_MENSUAL_URL")
+    if mercado_pago_url:
+        return RedirectResponse(mercado_pago_url, status_code=status.HTTP_303_SEE_OTHER)
     try:
         checkout_url = stripe_utils.create_norem_monthly_checkout_session(
             tenant_id=cred.tenant_id,

@@ -14,7 +14,7 @@ def get_now_chile():
 class Tenant(Base):
     __tablename__ = "tenants"
     id = Column(String, primary_key=True, index=True, default="default")
-    nombre_empresa = Column(String, nullable=False, default="Noren Principal")
+    nombre_empresa = Column(String, nullable=False, default="Norem Principal")
     config_json = Column(String, nullable=True) # JSON para configs específicas
     
     # Monetización (Stripe)

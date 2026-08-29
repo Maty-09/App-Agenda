@@ -2,8 +2,9 @@ import os
 import sys
 import logging
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import pytz
@@ -39,6 +40,7 @@ BASE_DIR = Path(__file__).resolve().parent
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 app.add_middleware(
     CORSMiddleware,
@@ -123,7 +125,7 @@ async def startup_event():
         if not tenant:
             nuevo_tenant = models.Tenant(
                 id="default",
-                nombre_empresa="Noren Default"
+                nombre_empresa="Norem Default"
             )
             db.add(nuevo_tenant)
             db.commit()
@@ -191,12 +193,9 @@ app.include_router(notificaciones.router, prefix="/api/v1", tags=["Notificacione
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
-from fastapi.responses import RedirectResponse
-
 @app.get("/")
-def read_root():
-    # Redirigir automáticamente a la pantalla de login del SaaS
-    return RedirectResponse(url="/admin/login")
+def read_root(request: Request):
+    return templates.TemplateResponse("landing.html", {"request": request})
 
 @app.on_event("startup")
 async def debug_routes():

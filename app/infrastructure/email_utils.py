@@ -83,7 +83,7 @@ def enviar_solicitud_confirmacion(agendamiento):
                             <tr>
                                 <td align="center" style="padding: 30px 0 10px 0;">
                                     <div style="display: inline-block; width: 60px; height: 60px; line-height: 60px; border-radius: 50%; background-color: #e6f7ed; color: #10b981; font-size: 32px; font-weight: bold; text-align: center; margin-bottom: 15px;">✓</div>
-                                    <h2 style="color:#1e293b; margin: 0 0 5px 0; letter-spacing: 1px;">NOREN</h2>
+                                    <h2 style="color:#1e293b; margin: 0 0 5px 0; letter-spacing: 1px;">NOREM</h2>
                                     <p style="color:#64748b; font-size:12px; margin:0; text-transform: uppercase;">Sistema de Agendamiento</p>
                                 </td>
                             </tr>
@@ -101,7 +101,7 @@ def enviar_solicitud_confirmacion(agendamiento):
                             </tr>
                             <tr>
                                 <td style="background-color:#f8fafc; padding:20px; text-align:center; color:#94a3b8; font-size:11px;">
-                                    Este es un mensaje automático de Noren.
+                                    Este es un mensaje automático de Norem.
                                 </td>
                             </tr>
                         </table>
@@ -310,4 +310,4 @@ def enviar_aviso_recibido_cliente(agendamiento):
         </body>
     </html>
     """
-    return enviar_email_base(agendamiento.correo, "📨 Recibimos tu solicitud - Noren", contenido_html)
+    return enviar_email_base(agendamiento.correo, "📨 Recibimos tu solicitud - Norem", contenido_html)

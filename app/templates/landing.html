@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Norem centraliza la agenda, clientes y seguimiento de tu negocio en un solo lugar.">
+    <title>Norem | Tu operación, siempre en orden</title>
+    <link rel="icon" href="/static/norem-logo.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['DM Sans', 'sans-serif'], display: ['Manrope', 'sans-serif'] },
+                    colors: { norem: { 50: '#eff6ff', 100: '#dbeafe', 500: '#1769e0', 600: '#0d51be', 700: '#0a3f96', 950: '#061a42' } },
+                    boxShadow: { glow: '0 25px 70px rgba(23, 105, 224, .20)' }
+                }
+            }
+        }
+    </script>
+    <style>
+        html { scroll-behavior: smooth; }
+        .grid-glow { background-image: linear-gradient(rgba(147,197,253,.16) 1px, transparent 1px), linear-gradient(90deg, rgba(147,197,253,.16) 1px, transparent 1px); background-size: 42px 42px; }
+        .hero-orb { filter: blur(2px); background: radial-gradient(circle, rgba(59,130,246,.28), rgba(37,99,235,.04) 66%, transparent 70%); }
+    </style>
+</head>
+<body class="bg-white font-sans text-slate-800 antialiased">
+    <header class="fixed inset-x-0 top-0 z-30 border-b border-slate-100/80 bg-white/85 backdrop-blur-xl">
+        <div class="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-8">
+            <a href="#inicio" class="flex items-center gap-3" aria-label="Norem, inicio">
+                <img src="/static/norem-logo.png" alt="Norem" class="h-10 w-10 rounded-lg object-cover object-center shadow-sm">
+                <span class="font-display text-xl font-extrabold tracking-tight text-norem-700">Norem</span>
+            </a>
+            <nav class="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex" aria-label="Navegación principal">
+                <a href="#como-funciona" class="transition hover:text-norem-600">Cómo funciona</a>
+                <a href="#herramientas" class="transition hover:text-norem-600">Herramientas</a>
+                <a href="#para-ti" class="transition hover:text-norem-600">Para tu negocio</a>
+            </nav>
+            <a href="/admin/login" class="rounded-xl bg-norem-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-norem-700 focus:outline-none focus:ring-4 focus:ring-blue-100">Ingresar</a>
+        </div>
+    </header>
+
+    <main id="inicio" class="overflow-hidden pt-20">
+        <section class="relative isolate">
+            <div class="grid-glow absolute inset-0 -z-20 opacity-70"></div>
+            <div class="hero-orb absolute -right-44 -top-56 -z-10 h-[650px] w-[650px]"></div>
+            <div class="mx-auto grid max-w-7xl gap-14 px-5 py-20 sm:px-8 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:py-28">
+                <div>
+                    <div class="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-sm font-semibold text-norem-700">
+                        <span class="h-2 w-2 rounded-full bg-blue-500"></span>
+                        La forma simple de organizar tu operación
+                    </div>
+                    <h1 class="mt-6 max-w-3xl font-display text-5xl font-extrabold leading-[1.08] tracking-tight text-slate-950 sm:text-6xl">Todo tu negocio en <span class="text-norem-600">orden.</span></h1>
+                    <p class="mt-6 max-w-xl text-lg leading-8 text-slate-600">Norem reúne agenda, clientes, equipo y seguimiento en una plataforma clara para que puedas dedicar más tiempo a hacer crecer tu negocio.</p>
+                    <div class="mt-9 flex flex-col gap-3 sm:flex-row">
+                        <a href="/admin/login" class="inline-flex items-center justify-center gap-2 rounded-xl bg-norem-600 px-6 py-3.5 font-bold text-white shadow-glow transition hover:-translate-y-0.5 hover:bg-norem-700">Entrar a Norem <span aria-hidden="true">→</span></a>
+                        <a href="#como-funciona" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-6 py-3.5 font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50">Conocer cómo funciona</a>
+                    </div>
+                    <p class="mt-5 text-sm text-slate-500">Diseñado para equipos que quieren operar con foco y visibilidad.</p>
+                </div>
+                <div class="relative mx-auto w-full max-w-lg">
+                    <div class="absolute -inset-8 -z-10 rounded-[2.5rem] bg-gradient-to-br from-blue-100 to-indigo-50 blur-2xl"></div>
+                    <div class="rounded-[1.7rem] border border-slate-200 bg-white p-4 shadow-2xl shadow-blue-950/10">
+                        <div class="rounded-2xl bg-slate-950 p-5 text-white">
+                            <div class="flex items-center justify-between"><div class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-emerald-400"></span><span class="text-sm font-semibold text-slate-200">Operación de hoy</span></div><span class="text-xs text-slate-400">En vivo</span></div>
+                            <div class="mt-7 flex items-end gap-3"><div><p class="text-4xl font-bold">24</p><p class="mt-1 text-xs text-slate-400">actividades programadas</p></div><div class="mb-1 ml-auto h-12 w-24 overflow-hidden rounded-lg bg-gradient-to-tr from-blue-500 to-cyan-300 opacity-90"></div></div>
+                        </div>
+                        <div class="grid gap-3 py-4 sm:grid-cols-2">
+                            <div class="rounded-xl border border-slate-100 p-4"><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Agenda</p><p class="mt-2 font-bold text-slate-800">Todo bajo control</p><div class="mt-3 h-1.5 w-4/5 rounded-full bg-blue-100"><div class="h-full w-3/4 rounded-full bg-norem-500"></div></div></div>
+                            <div class="rounded-xl border border-slate-100 p-4"><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Clientes</p><p class="mt-2 font-bold text-slate-800">Seguimiento simple</p><div class="mt-3 flex -space-x-2"><span class="h-6 w-6 rounded-full border-2 border-white bg-blue-200"></span><span class="h-6 w-6 rounded-full border-2 border-white bg-indigo-200"></span><span class="h-6 w-6 rounded-full border-2 border-white bg-cyan-200"></span></div></div>
+                        </div>
+                        <div class="flex items-center gap-3 rounded-xl bg-blue-50 px-4 py-3"><span class="grid h-8 w-8 place-items-center rounded-lg bg-white text-norem-600">✓</span><p class="text-sm font-medium text-blue-950">Tu equipo siempre sabe qué sigue.</p></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="como-funciona" class="bg-slate-50 py-20 sm:py-24">
+            <div class="mx-auto max-w-7xl px-5 sm:px-8">
+                <div class="max-w-2xl"><p class="text-sm font-bold uppercase tracking-[.18em] text-norem-600">Cómo funciona</p><h2 class="mt-3 font-display text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">De la reserva al seguimiento, sin perder el hilo.</h2></div>
+                <div class="mt-12 grid gap-5 md:grid-cols-3">
+                    <article class="rounded-2xl bg-white p-7 shadow-sm ring-1 ring-slate-100"><span class="grid h-11 w-11 place-items-center rounded-xl bg-blue-100 font-display text-lg font-extrabold text-norem-700">01</span><h3 class="mt-6 text-xl font-bold text-slate-900">Organiza tu agenda</h3><p class="mt-3 leading-7 text-slate-600">Visualiza las actividades y asignaciones de tu equipo para que cada día tenga un plan claro.</p></article>
+                    <article class="rounded-2xl bg-white p-7 shadow-sm ring-1 ring-slate-100"><span class="grid h-11 w-11 place-items-center rounded-xl bg-blue-100 font-display text-lg font-extrabold text-norem-700">02</span><h3 class="mt-6 text-xl font-bold text-slate-900">Centraliza a tus clientes</h3><p class="mt-3 leading-7 text-slate-600">Guarda la información relevante y el historial de cada cliente para atender mejor en cada interacción.</p></article>
+                    <article class="rounded-2xl bg-white p-7 shadow-sm ring-1 ring-slate-100"><span class="grid h-11 w-11 place-items-center rounded-xl bg-blue-100 font-display text-lg font-extrabold text-norem-700">03</span><h3 class="mt-6 text-xl font-bold text-slate-900">Haz seguimiento</h3><p class="mt-3 leading-7 text-slate-600">Mantén al equipo alineado con tareas, recordatorios y una visión compartida de lo que ocurre.</p></article>
+                </div>
+            </div>
+        </section>
+
+        <section id="herramientas" class="py-20 sm:py-28">
+            <div class="mx-auto grid max-w-7xl gap-12 px-5 sm:px-8 lg:grid-cols-[.85fr_1.15fr] lg:items-center">
+                <div><p class="text-sm font-bold uppercase tracking-[.18em] text-norem-600">Una plataforma</p><h2 class="mt-3 font-display text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">Las herramientas que tu operación necesita, en un mismo lugar.</h2><p class="mt-5 max-w-xl leading-8 text-slate-600">Norem conecta la información esencial de tu negocio para que puedas tomar decisiones y responder rápido.</p><a href="/admin/login" class="mt-8 inline-flex font-bold text-norem-600 transition hover:text-norem-700">Acceder a la plataforma <span class="ml-2">→</span></a></div>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="rounded-2xl border border-blue-100 bg-blue-50 p-6"><div class="text-2xl">▣</div><h3 class="mt-5 font-bold text-slate-900">Agenda inteligente</h3><p class="mt-2 text-sm leading-6 text-slate-600">Ordena servicios, tareas y responsables.</p></div>
+                    <div class="rounded-2xl border border-slate-100 p-6"><div class="text-2xl">◎</div><h3 class="mt-5 font-bold text-slate-900">Gestión de clientes</h3><p class="mt-2 text-sm leading-6 text-slate-600">Un historial claro para relaciones duraderas.</p></div>
+                    <div class="rounded-2xl border border-slate-100 p-6"><div class="text-2xl">↗</div><h3 class="mt-5 font-bold text-slate-900">Panel de control</h3><p class="mt-2 text-sm leading-6 text-slate-600">Visibilidad para decidir con contexto.</p></div>
+                    <div class="rounded-2xl border border-slate-100 p-6"><div class="text-2xl">✦</div><h3 class="mt-5 font-bold text-slate-900">Automatización</h3><p class="mt-2 text-sm leading-6 text-slate-600">Seguimientos oportunos y procesos consistentes.</p></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="para-ti" class="px-5 pb-20 sm:px-8 sm:pb-28"><div class="mx-auto max-w-7xl rounded-[2rem] bg-norem-950 px-7 py-14 text-center sm:px-14 sm:py-20"><img src="/static/norem-logo.png" alt="" class="mx-auto h-16 w-16 rounded-xl object-cover"><h2 class="mx-auto mt-6 max-w-2xl font-display text-3xl font-extrabold tracking-tight text-white sm:text-4xl">Haz que la gestión diaria se sienta simple.</h2><p class="mx-auto mt-4 max-w-xl leading-7 text-blue-100">Ingresa a Norem y mantén a tu negocio organizado desde un solo lugar.</p><a href="/admin/login" class="mt-8 inline-flex rounded-xl bg-white px-6 py-3.5 font-bold text-norem-700 transition hover:bg-blue-50">Ingresar a Norem</a></div></section>
+    </main>
+    <footer class="border-t border-slate-100 py-8"><div class="mx-auto flex max-w-7xl flex-col gap-3 px-5 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-8"><span>© 2026 Norem. Todos los derechos reservados.</span><a href="/admin/login" class="font-medium text-slate-600 hover:text-norem-600">Acceso a la plataforma</a></div></footer>
+</body>
+</html>

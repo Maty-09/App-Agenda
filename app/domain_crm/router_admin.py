@@ -40,10 +40,16 @@ def get_db():
 #     SECURITY & JWT
 # =============================
 from fastapi import HTTPException, status
-from app.core import models, security
+from app.core import models, security, stripe_utils
 from app.core.auth_deps import CurrentUser, verificar_login
+import stripe
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 dÃ­as
+
+
+def verificar_superadmin(cred: CurrentUser) -> None:
+    if cred.tenant_id != "default" or cred.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de SuperAdmin.")
 
 
 # =============================
@@ -1183,6 +1189,7 @@ def listar_tenants(request: Request, db: Session = Depends(get_db), cred: Curren
     if cred.tenant_id != "default" or cred.rol != "admin":
         raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de SuperAdmin.")
         
+    verificar_superadmin(cred)
     tenants_raw = db.query(models.Tenant).all()
     limite_sesion = models.get_now_chile() - timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     tenants_data = []
@@ -1208,6 +1215,45 @@ def listar_tenants(request: Request, db: Session = Depends(get_db), cred: Curren
         "request": request,
         "tenants": tenants_data,
         "current_user": cred
+    })
+
+
+@router.get("/tenants/{id_tenant}/facturacion", response_class=HTMLResponse)
+def ver_facturacion_tenant(
+    id_tenant: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    cred: CurrentUser = Depends(verificar_login),
+):
+    verificar_superadmin(cred)
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == id_tenant).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant no encontrado.")
+
+    facturas = []
+    error_facturacion = None
+    if tenant.stripe_customer_id and stripe_utils.stripe.api_key:
+        try:
+            resultado = stripe.Invoice.list(customer=tenant.stripe_customer_id, limit=50)
+            for factura in resultado.auto_paging_iter():
+                fecha = factura.get("created")
+                facturas.append({
+                    "numero": factura.get("number") or factura.get("id"),
+                    "estado": factura.get("status") or "pendiente",
+                    "monto": (factura.get("amount_paid") or factura.get("amount_due") or 0) / 100,
+                    "moneda": (factura.get("currency") or "clp").upper(),
+                    "fecha": datetime.fromtimestamp(fecha) if fecha else None,
+                    "url": factura.get("hosted_invoice_url"),
+                })
+        except stripe.StripeError:
+            error_facturacion = "No fue posible consultar las facturas en Stripe."
+
+    return templates.TemplateResponse("admin_tenant_facturacion.html", {
+        "request": request,
+        "current_user": cred,
+        "tenant": tenant,
+        "facturas": facturas,
+        "error_facturacion": error_facturacion,
     })
 
 @router.post("/tenants/crear")

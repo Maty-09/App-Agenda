@@ -18,6 +18,7 @@ from io import BytesIO
 from app.infrastructure.email_utils import (
     enviar_confirmacion_agendamiento,
     enviar_correo_cancelacion,
+    enviar_correo_cancelacion_por_bloqueo,
     enviar_correo_recuperacion_contrasena,
 )
 from app.domain_agenda.router_cliente import Recursos, calcular_fin_especializado
@@ -213,7 +214,11 @@ def forgot_password(request: Request, email: str = Form(...), db: Session = Depe
         usuario.password_reset_expires_at = models.get_now_chile() + timedelta(minutes=30)
         db.commit()
         reset_url = f"{SYSTEM_BASE_URL}/admin/reset-password?token={token}"
-        enviar_correo_recuperacion_contrasena(usuario.email, usuario.nombre, reset_url)
+        if not enviar_correo_recuperacion_contrasena(usuario.email, usuario.nombre, reset_url):
+            # No dejamos activo un token que no llegó al destinatario.
+            usuario.password_reset_token_hash = None
+            usuario.password_reset_expires_at = None
+            db.commit()
     return templates.TemplateResponse("forgot_password.html", {"request": request, "sent": True})
 
 
@@ -901,6 +906,27 @@ class BloqueoDiaSchema(BaseModel):
     fecha: str
     motivo: Optional[str] = None
 
+
+def _cancelar_y_notificar_citas_del_dia(db: Session, tenant_id: str, fecha_dt, motivo: Optional[str]) -> Tuple[int, int]:
+    """Cancela solo las citas activas de ese tenant y día, y avisa una vez a cada una."""
+    inicio_dia = datetime.combine(fecha_dt, dt_time.min)
+    fin_dia = inicio_dia + timedelta(days=1)
+    citas = db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == tenant_id,
+        models.Agendamiento.fecha_inicio >= inicio_dia,
+        models.Agendamiento.fecha_inicio < fin_dia,
+        models.Agendamiento.estado != "cancelado",
+    ).all()
+    for cita in citas:
+        cita.estado = "cancelado"
+    db.commit()
+
+    notificaciones_enviadas = 0
+    for cita in citas:
+        if cita.correo and enviar_correo_cancelacion_por_bloqueo(cita, motivo):
+            notificaciones_enviadas += 1
+    return len(citas), notificaciones_enviadas
+
 @router.post("/bloquear-dia-completo")
 def bloquear_dia(datos: BloqueoDiaSchema, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     # Ahora accedemos a datos.fecha en lugar de un Form
@@ -919,11 +945,16 @@ def bloquear_dia(datos: BloqueoDiaSchema, db: Session = Depends(get_db), cred: C
         nuevo = models.DiaBloqueado(tenant_id=cred.tenant_id, fecha=fecha_dt, motivo=datos.motivo)
         db.add(nuevo)
         db.commit()
+        citas_canceladas, correos_enviados = _cancelar_y_notificar_citas_del_dia(
+            db, cred.tenant_id, fecha_dt, datos.motivo
+        )
+    else:
+        citas_canceladas, correos_enviados = 0, 0
     
     
     # Como es una peticiÃ³n AJAX (fetch), es mejor devolver un JSON de Ã©xito 
     # en lugar de un RedirectResponse, para que el JS haga el reload.
-    return {"status": "success", "message": "DÃ­a bloqueado correctamente"}
+    return {"status": "success", "message": "DÃ­a bloqueado correctamente", "citas_canceladas": citas_canceladas, "correos_enviados": correos_enviados}
 
 @router.post("/bloquear-dia")
 def bloquear_dia_formulario(
@@ -945,6 +976,7 @@ def bloquear_dia_formulario(
         nuevo = models.DiaBloqueado(tenant_id=admin.tenant_id, fecha=fecha_dt, motivo=motivo)
         db.add(nuevo)
         db.commit()
+        _cancelar_y_notificar_citas_del_dia(db, admin.tenant_id, fecha_dt, motivo)
     
     return RedirectResponse(url="/admin/panel", status_code=303)
 

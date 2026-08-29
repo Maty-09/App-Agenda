@@ -282,6 +282,34 @@ def enviar_correo_cancelacion(agendamiento):
     """
     return enviar_email_base(agendamiento.correo, asunto, contenido_html)
 
+
+def enviar_correo_cancelacion_por_bloqueo(agendamiento, motivo: str = None) -> bool:
+    """Informa un cierre de día y entrega un enlace para que el cliente reagende."""
+    tipo = agendamiento.tipo_servicio.value if hasattr(agendamiento.tipo_servicio, "value") else str(agendamiento.tipo_servicio)
+    parametros = {"tipo": tipo}
+    if getattr(agendamiento, "subtipo", None):
+        parametros["subtipo"] = "local" if agendamiento.subtipo == "taller" else agendamiento.subtipo
+    if tipo == "especializado" and getattr(agendamiento, "duracion_horas", None):
+        parametros["duracion_horas"] = agendamiento.duracion_horas
+    enlace_reagendar = f"{BASE_URL}/cliente/agendar_web?{urllib.parse.urlencode(parametros)}"
+    detalle_motivo = f" Motivo informado: {motivo}." if motivo else ""
+    asunto = f"Actualización importante sobre tu cita del {agendamiento.fecha_inicio.strftime('%d/%m')}"
+    contenido_html = f"""
+    <html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:40px 16px;"><tr><td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 10px 28px rgba(15,23,42,.10);">
+          <tr><td style="background:#0755bf;padding:28px;text-align:center;"><div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:4px;">NOREM</div></td></tr>
+          <tr><td style="padding:36px;"><h1 style="margin:0 0 16px;font-size:24px;color:#0f172a;">Tu cita fue cancelada</h1>
+            <p style="margin:0 0 16px;color:#475569;line-height:1.6;">Hola {agendamiento.nombre}, el día <strong>{agendamiento.fecha_inicio.strftime('%d de %B')}</strong> no estará disponible, por lo que tuvimos que cancelar tu cita de las <strong>{agendamiento.fecha_inicio.strftime('%H:%M')} hrs</strong>.{detalle_motivo}</p>
+            <p style="margin:0 0 26px;color:#475569;line-height:1.6;">Puedes elegir un nuevo horario disponible desde aquí:</p>
+            <p style="text-align:center;margin:0 0 25px;"><a href="{enlace_reagendar}" style="display:inline-block;background:#0755bf;color:#fff;padding:14px 24px;border-radius:10px;font-weight:700;text-decoration:none;">Reagendar mi cita</a></p>
+            <p style="margin:0;color:#64748b;font-size:13px;line-height:1.5;">Lamentamos los inconvenientes. Si necesitas ayuda, responde o contacta directamente a tu negocio.</p>
+          </td></tr><tr><td style="background:#f8fafc;padding:18px;text-align:center;color:#64748b;font-size:12px;">Este es un mensaje automático de Norem.</td></tr>
+        </table></td></tr></table>
+    </body></html>
+    """
+    return enviar_email_base(agendamiento.correo, asunto, contenido_html)
+
 def procesar_flujo_automatico():
     db = SessionLocal()
     ahora = get_now_chile()

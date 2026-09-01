@@ -16,11 +16,6 @@ from app.core.database import SessionLocal
 from app.core.models import Agendamiento, get_now_chile
 
 load_dotenv()
-# En producción (Render) no existe el .env, usamos .env.example como fallback
-import pathlib
-_env_example = pathlib.Path(__file__).resolve().parent.parent.parent / ".env.example"
-if _env_example.exists():
-    load_dotenv(dotenv_path=str(_env_example), override=False)
 
 # --- CONFIGURACIÓN GLOBAL ---
 REMITENTE = os.getenv("EMAIL_SENDER", "no-reply@norem.cl")
@@ -29,15 +24,15 @@ REPLY_TO = os.getenv("EMAIL_REPLY_TO", REMITENTE)
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
 SMTP_HOST = os.getenv("SMTP_HOST", "server.dns-principal-34.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+SMTP_TIMEOUT_SECONDS = float(os.getenv("SMTP_TIMEOUT_SECONDS", "15"))
 CORREO_LOCAL = os.getenv("EMAIL_ADMIN", "matiasduranm09@gmail.com")
 # URL pública para los enlaces de confirmación enviados a clientes.
 BASE_URL = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
 logger = logging.getLogger(__name__)
-
-print(f"[EMAIL CONFIG] SENDER={'OK (' + REMITENTE + ')' if REMITENTE else 'FALTA (EMAIL_SENDER)'}")
-print(f"[EMAIL CONFIG] PASSWORD={'OK (set)' if PASSWORD else 'FALTA (EMAIL_PASSWORD o EMAIL_TOKEN)'}")
-print(f"[EMAIL CONFIG] ADMIN={CORREO_LOCAL}")
-print(f"[EMAIL CONFIG] BASE_URL={BASE_URL}")
+logger.info(
+    "email_configuration_loaded sender_configured=%s password_configured=%s smtp_configured=%s",
+    bool(REMITENTE), bool(PASSWORD), bool(SMTP_HOST),
+)
 
 def _enviar_con_resend(destinatario, asunto, contenido_html, contenido_texto, adjunto_path, adjunto_name):
     """Envía por API transaccional, con mejor trazabilidad y reputación para Gmail."""
@@ -108,17 +103,20 @@ def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, a
         missing = []
         if not REMITENTE: missing.append("EMAIL_SENDER")
         if not PASSWORD:  missing.append("EMAIL_PASSWORD / EMAIL_TOKEN")
-        print(f"[EMAIL ERROR] Faltan variables de entorno: {', '.join(missing)}")
-        print(f"[EMAIL ERROR] Configura estas variables en el panel de Render > Environment")
+        logger.error("email_configuration_missing variables=%s", ",".join(missing))
         return False
 
     try:
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
+            server.ehlo()
             server.login(REMITENTE, PASSWORD)
-            server.sendmail(REMITENTE, destinatario, msg.as_string())
-        logger.info("smtp_message_accepted")
+            rechazados = server.sendmail(REMITENTE, [destinatario], msg.as_string())
+        if rechazados:
+            logger.warning("smtp_recipient_rejected rejected_count=%d", len(rechazados))
+            return False
+        logger.info("smtp_message_accepted host=%s port=%d", SMTP_HOST, SMTP_PORT)
         return True
-    except Exception as e:
+    except (OSError, smtplib.SMTPException):
         logger.exception("smtp_message_failed")
         return False
 

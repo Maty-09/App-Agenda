@@ -53,7 +53,7 @@ Configura únicamente dominios que controles. Cada origen debe incluir el protoc
 ## 1. Consultar disponibilidad
 
 ```http
-GET /api/public/v1/{tenant_id}/availability?fecha=2026-09-10&duracion_horas=2&tipo_servicio=domicilio_taller
+GET /api/public/v1/{tenant_id}/availability?fecha=YYYY-MM-DD&duracion_horas=2&tipo_servicio=domicilio_taller
 X-Norem-Public-Key: <public_key>
 ```
 
@@ -61,7 +61,7 @@ Respuesta:
 
 ```json
 {
-  "fecha": "2026-09-10",
+  "fecha": "YYYY-MM-DD",
   "horas": ["09:00", "13:00", "15:30"]
 }
 ```
@@ -81,7 +81,7 @@ X-Norem-Public-Key: <public_key>
   "apellido": "Pérez",
   "correo": "ana@example.com",
   "telefono": "+56912345678",
-  "fecha": "2026-09-10",
+  "fecha": "YYYY-MM-DD",
   "hora": "09:00",
   "duracion_horas": 2,
   "tipo_servicio": "domicilio_taller",
@@ -98,8 +98,8 @@ Respuesta exitosa (`201`):
 {
   "id": 123,
   "estado": "pendiente",
-  "fecha_inicio": "2026-09-10T09:00:00",
-  "fecha_termino": "2026-09-10T11:00:00"
+  "fecha_inicio": "YYYY-MM-DDTHH:MM:SS",
+  "fecha_termino": "YYYY-MM-DDTHH:MM:SS"
 }
 ```
 

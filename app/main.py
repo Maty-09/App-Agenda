@@ -30,7 +30,6 @@ from app.infrastructure.webhook import router as webhook_router
 from app.infrastructure.confirmation import router as confirmation_router
 
 # Autenticación JWT API
-<<<<<<< HEAD
 from app.api.routers import auth, tareas, dashboard, suscripcion, notificaciones, public_agenda, public_booking
 
 # Configuración de logs
@@ -216,7 +215,6 @@ app.include_router(tareas.router, prefix="/api/v1/tareas", tags=["Tareas Kanban"
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard API"])
 app.include_router(suscripcion.router, prefix="/api/v1/suscripcion", tags=["Monetización SaaS"])
 app.include_router(notificaciones.router, prefix="/api/v1", tags=["Notificaciones"])
-<<<<<<< HEAD
 app.include_router(public_agenda.router, prefix="/api/v1/public", tags=["Agenda pública"])
 app.include_router(public_booking.public_router, prefix="/api/public/v1", tags=["API pública"])
 app.include_router(public_booking.admin_router, prefix="/api/v1/public-api", tags=["Configuración API pública"])

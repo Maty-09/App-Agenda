@@ -32,13 +32,21 @@ print(f"[EMAIL CONFIG] PASSWORD={'OK (set)' if PASSWORD else 'FALTA (EMAIL_PASSW
 print(f"[EMAIL CONFIG] ADMIN={CORREO_LOCAL}")
 print(f"[EMAIL CONFIG] BASE_URL={BASE_URL}")
 
-def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, adjunto_name=None):
-    """Función maestra para enviar correos y evitar repetir código de login"""
-    msg = MIMEMultipart()
+def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, adjunto_name=None, contenido_texto=None):
+    """Envía correo HTML con alternativa de texto plano y adjuntos opcionales."""
+    msg = MIMEMultipart("mixed" if adjunto_path else "alternative")
     msg['From'] = REMITENTE
     msg['To'] = destinatario
     msg['Subject'] = asunto
-    msg.attach(MIMEText(contenido_html, 'html'))
+    alternativa = MIMEMultipart("alternative") if adjunto_path else msg
+    alternativa.attach(MIMEText(
+        contenido_texto or "Tienes una actualización de tu agenda. Abre este correo en un cliente compatible con HTML.",
+        "plain",
+        "utf-8",
+    ))
+    alternativa.attach(MIMEText(contenido_html, "html", "utf-8"))
+    if adjunto_path:
+        msg.attach(alternativa)
 
     if adjunto_path:
         part = MIMEBase('application', "octet-stream")

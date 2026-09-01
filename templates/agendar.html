@@ -154,12 +154,14 @@
         if (inputFecha) {
             flatpickr(inputFecha, {
                 locale: "es",
-                minDate: esEmergencia ? "today" : "today", 
+                minDate: "today",
+                maxDate: new Date().fp_incr({{ dias_anticipacion|default(30) }}),
                 dateFormat: "Y-m-d",
                 disable: [
                     function(date) {
                         if (esEmergencia) return false;
-                        return (date.getDay() === 0 || date.getDay() === 6);
+                        const diasPermitidos = {{ dias_habiles_config|default([0,1,2,3,4])|tojson }};
+                        return !diasPermitidos.includes((date.getDay() + 6) % 7);
                     }
                 ],
                 onReady: function(selectedDates, dateStr, instance) {

@@ -255,15 +255,17 @@ def configuracion_negocio(request: Request, db: Session = Depends(get_db), cred:
 
 
 @router.post("/configuracion-negocio")
-def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), equipos: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), dias_anticipacion: int = Form(30), dias_dashboard: int = Form(7), dashboard_widgets: List[str] = Form([]), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     if cred.rol not in {"admin", "superadmin"}:
         raise HTTPException(status_code=403, detail="Sólo el administrador puede configurar el negocio.")
     tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
     config, dias = _leer_config_tenant(tenant), sorted({dia for dia in dias_habiles if 0 <= dia <= 6}) or [0, 1, 2, 3, 4]
-    config["negocio"] = {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480))}
-    config["reglas_negocio"] = {"dias_habiles": dias, "bloques_horarios": {str(dia): [hora_inicio, hora_fin] for dia in dias}}
+    equipos_config = [equipo.strip() for equipo in equipos.split(",") if equipo.strip()] or ["Agenda principal"]
+    config["negocio"] = {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480)), "equipos": equipos_config}
+    config["reglas_negocio"] = {"dias_habiles": dias, "bloques_horarios": {str(dia): [hora_inicio, hora_fin] for dia in dias}, "dias_anticipacion": max(1, min(dias_anticipacion, 365))}
+    config["dashboard"] = {"dias_disponibilidad": max(1, min(dias_dashboard, 28)), "widgets": [widget for widget in dashboard_widgets if widget in {"resumen", "disponibilidad", "tareas", "metricas", "analitica"}]}
     config["onboarding_completo"] = True
     tenant.nombre_empresa, tenant.config_json = nombre_empresa.strip(), json.dumps(config)
     db.commit()
@@ -464,11 +466,9 @@ def panel_agendamientos(
 
     dias_bloqueados = db.query(models.DiaBloqueado).all()
 
-    colores = {
-        "Equipo Cristhian": "#3F22FF",
-        "Equipo Samuel": "#FC4646",
-        "Equipo Movil": "#32CD32",
-    }
+    equipos_config = tenant_config.get("negocio", {}).get("equipos", []) or ["Agenda principal"]
+    paleta = ["#2563EB", "#059669", "#7C3AED", "#EA580C", "#DB2777"]
+    colores = {equipo: paleta[index % len(paleta)] for index, equipo in enumerate(equipos_config)}
     
     eventos_lista = []
 
@@ -511,16 +511,7 @@ def panel_agendamientos(
     eventos_json_str = json.dumps(eventos_lista)
 
     base_url = SYSTEM_BASE_URL
-    if cred.tenant_id == "womenlashcl":
-        links_agenda = {
-            "Agendar Cita": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local",
-        }
-    else:
-        links_agenda = {
-            "Domicilio": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio",
-            "Local": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local",
-            "Especializado": f"{base_url}/cliente/agendar_web?tipo=especializado",
-        }
+    links_agenda = {tenant_config.get("negocio", {}).get("servicio_principal") or "Agendar": f"{base_url}/cliente/{cred.tenant_id}/agendar_web"}
 
     return templates.TemplateResponse(
         name="admin_agendamientos.html",
@@ -536,6 +527,7 @@ def panel_agendamientos(
             "links_agenda": links_agenda,
             "current_user": cred,
             "tenant_config": tenant_config
+            ,"equipos_config": equipos_config
         }
     )
 
@@ -1383,7 +1375,9 @@ def get_dashboard(
         return resultado
         return resultado
 
-    disponibilidad_semana = get_disponibilidad_dias(len(dias_habiles))
+    dashboard_config = tenant_config.get("dashboard", {}) if 'tenant_config' in locals() else {}
+    dias_dashboard = dashboard_config.get("dias_disponibilidad", len(dias_habiles))
+    disponibilidad_semana = get_disponibilidad_dias(max(1, min(int(dias_dashboard), 28)))
 
     # Citas por estado
     confirmadas = query.filter(models.Agendamiento.estado == "confirmado").count()
@@ -1404,8 +1398,7 @@ def get_dashboard(
     servicios_labels = []
     servicios_valores = []
     for sub, count in servicios_raw:
-        label = "ð ï¸ Local" if sub == "taller" else ("ð  Domicilio" if sub == "domicilio" else str(sub).capitalize())
-        servicios_labels.append(label)
+        servicios_labels.append(tenant_config.get("negocio", {}).get("servicio_principal") or "Reservas")
         servicios_valores.append(count)
         
     # Carga de trabajo por equipo (excluyendo cancelados)
@@ -1417,14 +1410,6 @@ def get_dashboard(
     equipos_labels = [eq if eq else "Sin Equipo" for eq, _ in equipos_raw]
     equipos_valores = [count for _, count in equipos_raw]
     
-    # Top 5 marcas de vehÃ­culos
-    marcas_raw = query.with_entities(
-        models.Agendamiento.marca,
-        func.count(models.Agendamiento.id)
-    ).filter(models.Agendamiento.marca != None).group_by(models.Agendamiento.marca).order_by(func.count(models.Agendamiento.id).desc()).limit(5).all()
-    
-    marcas_labels = [str(marca).upper().strip() for marca, _ in marcas_raw]
-    marcas_valores = [count for _, count in marcas_raw]
     
     # Canales UTM
     utm_raw = query.with_entities(
@@ -1492,8 +1477,6 @@ def get_dashboard(
         "servicios_valores": json.dumps(servicios_valores),
         "equipos_labels": json.dumps(equipos_labels),
         "equipos_valores": json.dumps(equipos_valores),
-        "marcas_labels": json.dumps(marcas_labels),
-        "marcas_valores": json.dumps(marcas_valores),
         "utm_stats": utm_stats,
         "tendencia_labels": json.dumps(tendencia_labels),
         "tendencia_valores": json.dumps(tendencia_valores)
@@ -1508,7 +1491,7 @@ def get_dashboard(
 
     return templates.TemplateResponse(
         name="admin_dashboard.html",
-        context={"request": request, "stats": stats, "listas": listas, "current_user": cred}
+        context={"request": request, "stats": stats, "listas": listas, "current_user": cred, "dashboard_widgets": dashboard_config.get("widgets", ["resumen", "disponibilidad", "tareas", "metricas", "analitica"])}
     )
 
 # ==========================================

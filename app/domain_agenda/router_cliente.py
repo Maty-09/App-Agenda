@@ -17,6 +17,7 @@ from sqlalchemy import func
 import json
 import pytz
 import traceback
+from typing import List
 
 
 # pruebas
@@ -28,6 +29,14 @@ def get_db():
         db.close()
 
 router = APIRouter()
+
+
+def equipos_configurados(tenant) -> List[str]:
+    try:
+        equipos = json.loads(tenant.config_json or "{}").get("negocio", {}).get("equipos", [])
+        return [str(equipo).strip() for equipo in equipos if str(equipo).strip()] or ["Agenda principal"]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return ["Agenda principal"]
 
 import os
 from pathlib import Path
@@ -54,6 +63,9 @@ def agendar_web(
         config_negocio = json.loads(tenant.config_json or "{}")
     except (TypeError, ValueError, json.JSONDecodeError):
         config_negocio = {}
+    reglas_negocio = config_negocio.get("reglas_negocio", {})
+    dias_anticipacion = max(1, min(int(reglas_negocio.get("dias_anticipacion", 30)), 365))
+    dias_habiles_config = reglas_negocio.get("dias_habiles", [0, 1, 2, 3, 4])
     # 1. NORMALIZACIÓN Y VALIDACIÓN INICIAL
     tipo = tipo.lower().strip() if tipo else "domicilio_taller"
     subtipo = subtipo.lower().strip() if subtipo else "local"
@@ -113,6 +125,8 @@ def agendar_web(
         "campos_dinamicos": campos_dinamicos, # <--- ESTO ES LO QUE USA EL HTML
         "negocio": config_negocio.get("negocio", {}),
         "nombre_empresa": tenant.nombre_empresa,
+        "dias_anticipacion": dias_anticipacion,
+        "dias_habiles_config": dias_habiles_config,
         "utm_source": "whatsapp",
         "utm_campaign": f"{tipo}_{subtipo}"
         ,"booking_path": f"/cliente/{tenant_id}/agendar_web" if tenant_id != "default" else "/cliente/agendar_web"
@@ -186,7 +200,6 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         duracion_horas = int(form_data.get("duracion", 2))
         fecha_termino = fecha_cliente + timedelta(hours=duracion_horas)
 
-        equipos_oficiales = ["Cristhian", "Samuel", "Movil"]
         equipo_asignado = None
 
         # 3. MAPEO DE CAMPOS DINÁMICOS
@@ -264,12 +277,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         fecha_termino = fecha_inicio + timedelta(hours=duracion_horas)
         # --- 5. LÓGICA DE ASIGNACIÓN AUTOMÁTICA DE EQUIPO ---
         # Definimos los equipos por tipo de servicio
-        equipos_posibles = Recursos.get(tipo_servicio, [])
-        
-        # Si no hay equipos definidos para este tipo, usamos los de domicilio_taller como fallback
-        if not equipos_posibles:
-            print(f"Alerta: tipo_servicio '{tipo_servicio}' no definido en Recursos. Usando fallback.")
-            equipos_posibles = Recursos.get("domicilio_taller", ["Equipo Local"])
+        equipos_posibles = equipos_configurados(tenant)
         
         equipo_asignado = None
 
@@ -289,12 +297,12 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         
         # Si no hay equipo libre pero es el DUEÑO, forzamos el primero de la lista (Sobrecupo)
         if not equipo_asignado and es_dueno:
-            equipo_asignado = equipos_posibles[0] if equipos_posibles else "Equipo Local"
+            equipo_asignado = equipos_posibles[0]
             print(f"Modo emergencia: sobrecupo detectado. Asignando a {equipo_asignado}")
 
         if not equipo_asignado:
             # Fallback final: asignar equipo por defecto incluso si nada está libre
-            equipo_asignado = equipos_posibles[0] if equipos_posibles else "Equipo Local"
+            equipo_asignado = equipos_posibles[0]
             print(f"Fallback: todos los equipos ocupados. Asignando {equipo_asignado}")
             
         # 6. LÓGICA CRM: CREAR O BUSCAR CLIENTE
@@ -490,14 +498,12 @@ def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_i
 
     horas_disponibles = []
     # IMPORTANTE: Asegúrate que Recursos["domicilio_taller"] tenga 3 nombres de equipos
-    equipos = Recursos.get(tipo_servicio, [])
-    if not equipos:
-        return []
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+    equipos = equipos_configurados(tenant)
 
     dia_semana = fecha.weekday() # 0:Lunes, 2:Miércoles
 
     # Obtener configuración del tenant
-    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
     bloques_dia = _bloques_del_dia(tenant, dia_semana, duracion_horas)
 
     for h in bloques_dia:
@@ -600,7 +606,7 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
         models.Agendamiento.estado != "cancelado"
     ).count()
 
-    limite_equipos = len(Recursos.get(tipo_servicio, []))
+    limite_equipos = len(equipos_configurados(tenant))
     
     return agendados_en_bloque < limite_equipos
 

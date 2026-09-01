@@ -22,7 +22,6 @@ from app.domain_agenda import router_cliente as cliente
 from app.domain_crm import router_admin as admin
 from app.domain_crm import router_clientes as admin_crm
 from app.domain_team import router_team as admin_team
-from app.domain_ai import router_ai as admin_ai
 # IMPORTANTE: Cambiamos el import para usar la función que está en email_utils
 from app.infrastructure.email_utils import procesar_flujo_automatico 
 
@@ -204,7 +203,6 @@ def shutdown_event():
 app.include_router(admin.router, prefix="/admin", tags=["Administrador"])
 app.include_router(admin_crm.router, tags=["CRM"])
 app.include_router(admin_team.router, tags=["Team"])
-app.include_router(admin_ai.router, tags=["AI"])
 app.include_router(cliente.router, prefix="/cliente", tags=["Cliente"])
 
 # Registro de rutas del Bot de WhatsApp

@@ -271,6 +271,7 @@
             </div>
         </section>
 
+        {% if 'disponibilidad' in dashboard_widgets %}
         <!-- Control de Disponibilidad Futura (Mejora 7) -->
         <section class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm mb-8">
             <div class="flex items-center gap-3 mb-6">
@@ -346,6 +347,7 @@
             </div>
         </section>
 
+        {% endif %}
         <!-- Agendas Panels Grid -->
         <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             
@@ -459,8 +461,8 @@
                 </div>
             </div>
 
-            {% if current_user.tenant_id != 'womenlashcl' %}
-            <!-- Chart 4: Top Marcas de Vehículos (Horizontal Bar) -->
+            {% if false %}
+            <!-- Legacy vehicle chart removed -->
             <div class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
                 <div class="flex items-center gap-3 mb-6">
                     <i class="fas fa-car text-slate-400 text-lg"></i>
@@ -474,8 +476,8 @@
 
         </section>
 
-        {% if current_user.tenant_id != 'womenlashcl' %}
-        <!-- AI Insights Widget -->
+        {% if false %}
+        <!-- AI Insights Widget removed -->
         <section class="bg-gradient-to-r from-indigo-900 to-purple-900 p-8 rounded-3xl shadow-lg border border-indigo-800 mb-8 relative overflow-hidden text-white" id="ai-insights-widget">
             <div class="absolute top-0 right-0 p-8 opacity-10">
                 <i class="fas fa-robot text-9xl"></i>
@@ -570,8 +572,8 @@
 
     </div>
 
-    {% if current_user.tenant_id != 'womenlashcl' %}
-    <!-- Copiloto IA (Floating Widget) -->
+    {% if false %}
+    <!-- Copiloto IA removed -->
     <div id="ai-chatbot-window" class="fixed bottom-24 right-8 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden transition-all duration-300 transform translate-y-4 opacity-0 pointer-events-none z-50" style="height: 500px;">
         <div class="bg-indigo-900 p-4 text-white flex justify-between items-center">
             <div class="flex items-center gap-3">
@@ -602,7 +604,8 @@
     </button>
     {% endif %}
 
-    <!-- Scripts para IA -->
+    {% if false %}
+    <!-- Scripts para IA removed -->
     <script>
         function toggleAIChat() {
             const chat = document.getElementById('ai-chatbot-window');
@@ -683,6 +686,7 @@
                 });
         });
     </script>
+    {% endif %}
     
     <!-- Chart Configuration Script -->
     <script>
@@ -707,8 +711,8 @@
             let serviciosLabels = {{ stats.servicios_labels | safe }};
             let serviciosValores = {{ stats.servicios_valores | safe }};
             if (!serviciosLabels || serviciosLabels.length === 0 || serviciosValores.every(v => v === 0)) {
-                serviciosLabels = ['🛠️ Local', '🏠 Domicilio'];
-                serviciosValores = [1, 1];
+                serviciosLabels = ['Sin reservas todavía'];
+                serviciosValores = [0];
             }
 
             new Chart(ctxServicios, {
@@ -733,8 +737,8 @@
             let equiposLabels = {{ stats.equipos_labels | safe }};
             let equiposValores = {{ stats.equipos_valores | safe }};
             if (!equiposLabels || equiposLabels.length === 0) {
-                equiposLabels = ['Equipo Alfa', 'Equipo Beta', 'Taller Central'];
-                equiposValores = [0, 0, 0];
+                equiposLabels = ['Sin equipos configurados'];
+                equiposValores = [0];
             }
 
             new Chart(ctxEquipos, {

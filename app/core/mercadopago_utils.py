@@ -58,18 +58,6 @@ def obtener_suscripcion(preapproval_id: str) -> Dict[str, Any]:
     return response.json()
 
 
-def cancelar_suscripcion(preapproval_id: str) -> None:
-    """Cancela el cobro recurrente antes de borrar una cuenta."""
-    response = requests.put(
-        f"{API_URL}/preapproval/{preapproval_id}",
-        headers={"Authorization": f"Bearer {_access_token()}", "Content-Type": "application/json"},
-        json={"status": "cancelled"},
-        timeout=15,
-    )
-    if not response.ok:
-        raise RuntimeError("Mercado Pago no pudo cancelar la suscripción.")
-
-
 def firma_webhook_valida(
     *, signature: Optional[str], request_id: Optional[str], data_id: Optional[str]
 ) -> bool:

@@ -80,6 +80,13 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
             "error": "Correo o contraseÃ±a incorrectos"
         })
 
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == usuario.tenant_id).first()
+    if not tenant or tenant.estado_suscripcion == "cancelada":
+        return templates.TemplateResponse("admin_login.html", {
+            "request": request,
+            "error": "Esta cuenta está desactivada. Contacta a Norem para reactivarla."
+        }, status_code=403)
+
     usuario.ultima_conexion = models.get_now_chile()
     usuario.sesion_activa = True
     db.commit()
@@ -1621,43 +1628,37 @@ def crear_tenant(
     
     return RedirectResponse(url="/admin/tenants", status_code=303)
 
-@router.post("/tenants/{id_tenant}/eliminar")
-def eliminar_tenant(id_tenant: str, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+@router.post("/tenants/{id_tenant}/desactivar")
+def desactivar_tenant(id_tenant: str, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     if cred.tenant_id != "default" or cred.rol != "admin":
         raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de SuperAdmin.")
         
     if id_tenant == "default":
-        raise HTTPException(status_code=400, detail="No se puede eliminar el Tenant principal.")
+        raise HTTPException(status_code=400, detail="No se puede desactivar la cuenta principal.")
         
     tenant = db.query(models.Tenant).filter(models.Tenant.id == id_tenant).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant no encontrado.")
         
-    try:
-        # Primero se cancela cualquier cobro recurrente. Si el proveedor falla,
-        # se conserva el tenant para no borrar datos mientras sigue facturándose.
-        if tenant.stripe_subscription_id:
-            stripe_utils.cancelar_suscripcion(tenant.stripe_subscription_id)
-        if tenant.mercado_pago_preapproval_id:
-            mercadopago_utils.cancelar_suscripcion(tenant.mercado_pago_preapproval_id)
-
-        # Eliminación transaccional de toda la información asociada al tenant.
-        db.query(models.RespuestaCampo).filter(models.RespuestaCampo.tenant_id == id_tenant).delete(synchronize_session=False)
-        db.query(models.NotificacionAgendamiento).filter(models.NotificacionAgendamiento.tenant_id == id_tenant).delete(synchronize_session=False)
-        db.query(models.UTMRegistro).filter(models.UTMRegistro.tenant_id == id_tenant).delete(synchronize_session=False)
-        db.query(models.TimelineEvent).filter(models.TimelineEvent.tenant_id == id_tenant).delete(synchronize_session=False)
-        db.query(models.Tarea).filter(models.Tarea.tenant_id == id_tenant).delete(synchronize_session=False)
-        db.query(models.Agendamiento).filter(models.Agendamiento.tenant_id == id_tenant).delete(synchronize_session=False)
-        db.query(models.CampoFormulario).filter(models.CampoFormulario.tenant_id == id_tenant).delete(synchronize_session=False)
-        db.query(models.Cliente).filter(models.Cliente.tenant_id == id_tenant).delete(synchronize_session=False)
-        db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == id_tenant).delete(synchronize_session=False)
-        db.query(models.Usuario).filter(models.Usuario.tenant_id == id_tenant).delete(synchronize_session=False)
-        db.delete(tenant)
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="No fue posible cancelar la suscripción y eliminar esta cuenta.") from exc
+    tenant.estado_suscripcion = "cancelada"
+    db.query(models.Usuario).filter(models.Usuario.tenant_id == id_tenant).update(
+        {models.Usuario.sesion_activa: False}, synchronize_session=False
+    )
+    db.commit()
     
+    return RedirectResponse(url="/admin/tenants", status_code=303)
+
+
+@router.post("/tenants/{id_tenant}/reactivar")
+def reactivar_tenant(id_tenant: str, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    verificar_superadmin(cred)
+    if id_tenant == "default":
+        raise HTTPException(status_code=400, detail="No se puede modificar la cuenta principal.")
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == id_tenant).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant no encontrado.")
+    tenant.estado_suscripcion = "activa"
+    db.commit()
     return RedirectResponse(url="/admin/tenants", status_code=303)
 
 @router.post("/tenants/{id_tenant}/editar-plan")

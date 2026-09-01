@@ -577,14 +577,6 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
     h_inicio = inicio.time()
     h_fin = fin.time()
     
-    # REGLA GENERAL: 08:00 - 18:00
-    if h_inicio < time(8, 0) or h_fin > time(18, 0):
-        return False
-
-    # REGLA COLACIÓN: No puede cruzar de 12:00 a 13:00
-    if h_inicio < time(13, 0) and h_fin > time(12, 0):
-        return False
-
     # 5. VALIDACIÓN DE BLOQUES HORARIOS DINÁMICOS
     dia_semana = inicio.weekday() 
     hora_str = inicio.strftime("%H:%M")

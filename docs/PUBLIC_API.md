@@ -53,7 +53,7 @@ Configura únicamente dominios que controles. Cada origen debe incluir el protoc
 ## 1. Consultar disponibilidad
 
 ```http
-GET /api/public/v1/{tenant_id}/availability?fecha=YYYY-MM-DD&duracion_horas=2&tipo_servicio=domicilio_taller
+GET /api/public/v1/{tenant_id}/availability?fecha=YYYY-MM-DD&duracion_minutos=30&tipo_servicio=domicilio_taller
 X-Norem-Public-Key: <public_key>
 ```
 
@@ -83,7 +83,7 @@ X-Norem-Public-Key: <public_key>
   "telefono": "+56912345678",
   "fecha": "YYYY-MM-DD",
   "hora": "09:00",
-  "duracion_horas": 2,
+  "duracion_minutos": 30,
   "tipo_servicio": "domicilio_taller",
   "subtipo": "local",
   "marca": "Toyota",

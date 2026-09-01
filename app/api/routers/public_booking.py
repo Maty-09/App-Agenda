@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 import secrets
 from collections import defaultdict, deque
 from datetime import date, datetime, time, timedelta
@@ -61,7 +62,9 @@ class PublicBookingIn(BaseModel):
     telefono: Annotated[str, Field(min_length=5, max_length=40)]
     fecha: date
     hora: time
-    duracion_horas: Annotated[int, Field(ge=1, le=8)] = 2
+    duracion_minutos: Annotated[int | None, Field(default=None, ge=15, le=480)] = None
+    # Compatibilidad temporal para integraciones existentes. Prefiere duracion_minutos.
+    duracion_horas: Annotated[float | None, Field(default=None, ge=0.25, le=8)] = None
     tipo_servicio: str = "domicilio_taller"
     subtipo: str = "local"
     direccion: str | None = Field(default=None, max_length=300)
@@ -97,6 +100,15 @@ def _public_config(tenant: models.Tenant) -> dict:
     config = _tenant_config(tenant)
     public = config.get(PUBLIC_API_CONFIG_KEY, {})
     return public if isinstance(public, dict) else {}
+
+
+def _duracion_minutos(tenant: models.Tenant, minutos: int | None, horas: float | None) -> int:
+    if minutos is not None:
+        return minutos
+    if horas is not None:
+        return max(15, min(480, round(horas * 60)))
+    config = _tenant_config(tenant)
+    return max(15, min(480, int(config.get("negocio", {}).get("duracion_minutos", 60))))
 
 
 def _save_public_config(tenant: models.Tenant, public: dict) -> None:
@@ -239,7 +251,8 @@ def get_availability(
     tenant_id: str,
     request: Request,
     fecha: date,
-    duracion_horas: Annotated[int, Field(ge=1, le=8)] = 2,
+    duracion_minutos: Annotated[int | None, Field(default=None, ge=15, le=480)] = None,
+    duracion_horas: Annotated[float | None, Field(default=None, ge=0.25, le=8)] = None,
     tipo_servicio: str = "domicilio_taller",
     db: Session = Depends(deps.get_db),
 ):
@@ -247,7 +260,8 @@ def get_availability(
     _, headers = _validate_public_access(request, tenant)
     if tipo_servicio not in Recursos:
         raise HTTPException(status_code=422, detail="Tipo de servicio no disponible")
-    hours = obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_id)
+    minutos = _duracion_minutos(tenant, duracion_minutos, duracion_horas)
+    hours = obtener_horas_disponibles(tipo_servicio, fecha, minutos / 60, db, tenant_id)
     return Response(
         content=json.dumps({"fecha": fecha.isoformat(), "horas": hours}),
         media_type="application/json",
@@ -269,15 +283,17 @@ def create_public_booking(
 
     if payload.tipo_servicio not in Recursos:
         raise HTTPException(status_code=422, detail="Tipo de servicio no disponible")
+    minutos = _duracion_minutos(tenant, payload.duracion_minutos, payload.duracion_horas)
+    duracion_horas = minutos / 60
     slot = payload.hora.strftime("%H:%M")
     available = obtener_horas_disponibles(
-        payload.tipo_servicio, payload.fecha, payload.duracion_horas, db, tenant_id
+        payload.tipo_servicio, payload.fecha, duracion_horas, db, tenant_id
     )
     if slot not in available:
         raise HTTPException(status_code=409, detail="El horario ya no está disponible")
 
     starts_at = datetime.combine(payload.fecha, payload.hora)
-    ends_at = starts_at + timedelta(hours=payload.duracion_horas)
+    ends_at = starts_at + timedelta(minutes=minutos)
     assigned_team = None
     for team in Recursos[payload.tipo_servicio]:
         occupied = db.query(models.Agendamiento).filter(
@@ -332,7 +348,8 @@ def create_public_booking(
         equipo=assigned_team,
         fecha_inicio=starts_at,
         fecha_termino=ends_at,
-        duracion_horas=payload.duracion_horas,
+        # Columna legacy entera; las fechas contienen la duración real en minutos.
+        duracion_horas=max(1, math.ceil(minutos / 60)),
         estado="pendiente",
         nota_interna="Reserva creada desde API pública",
     )

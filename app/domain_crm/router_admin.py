@@ -280,8 +280,13 @@ def configuracion_negocio(request: Request, db: Session = Depends(get_db), cred:
 
 @router.get("/integraciones", response_class=HTMLResponse)
 def integraciones(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
-    """Compatibilidad con el enlace anterior: la integración vive en Configuración."""
-    return RedirectResponse("/admin/configuracion-negocio#integracion-web", status_code=303)
+    return RedirectResponse("/admin/api-publica", status_code=303)
+
+
+@router.get("/api-publica", response_class=HTMLResponse)
+def api_publica(request: Request, cred: CurrentUser = Depends(verificar_login)):
+    """Panel listo para activar y copiar la integración de la API pública."""
+    return templates.TemplateResponse("admin_public_api.html", {"request": request, "current_user": cred})
 
 
 @router.post("/configuracion-negocio")

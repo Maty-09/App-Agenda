@@ -5,7 +5,7 @@ import logging
 import base64
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from email.utils import formataddr, formatdate, make_msgid
+from email.utils import formataddr, formatdate, make_msgid, parseaddr
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -20,7 +20,22 @@ load_dotenv()
 # --- CONFIGURACIÓN GLOBAL ---
 REMITENTE = os.getenv("EMAIL_SENDER", "no-reply@norem.cl")
 PASSWORD = os.getenv("EMAIL_PASSWORD") or os.getenv("EMAIL_TOKEN")
-REPLY_TO = os.getenv("EMAIL_REPLY_TO", REMITENTE)
+
+
+def _reply_to_configurado(valor: str | None, remitente: str) -> str:
+    """Evita que una variable de ejemplo termine en correos reales.
+
+    Una respuesta siempre debe volver a un buzón del dominio que envía el
+    mensaje si no se ha configurado un Reply-To real.
+    """
+    candidato = (valor or "").strip()
+    _, direccion = parseaddr(candidato)
+    if not direccion or "@" not in direccion or "tu-dominio" in direccion.lower():
+        return remitente
+    return candidato
+
+
+REPLY_TO = _reply_to_configurado(os.getenv("EMAIL_REPLY_TO"), REMITENTE)
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
 SMTP_HOST = os.getenv("SMTP_HOST", "server.dns-principal-34.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))

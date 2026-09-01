@@ -13,6 +13,9 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 
 SENDER_EMAIL = os.getenv("EMAIL_SENDER", "no-reply@norem.cl")
 SENDER_PASSWORD = os.getenv("EMAIL_PASSWORD") or os.getenv("EMAIL_TOKEN")
+REPLY_TO = os.getenv("EMAIL_REPLY_TO", SENDER_EMAIL).strip()
+if "@" not in REPLY_TO or "tu-dominio" in REPLY_TO.lower():
+    REPLY_TO = SENDER_EMAIL
 
 # Dominio público del sistema para las confirmaciones de reserva.
 NGROK_URL = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
@@ -25,6 +28,7 @@ def enviar_correo_confirmacion(destinatario: str, nombre: str, dia: str, hora: s
     msg['From'] = SENDER_EMAIL
     msg['To'] = destinatario
     msg['Subject'] = "Confirma tu Reserva de Cita"
+    msg['Reply-To'] = REPLY_TO
 
     url_confirmacion = f"{NGROK_URL}/api/confirmar/{token}"
 

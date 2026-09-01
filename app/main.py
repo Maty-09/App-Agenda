@@ -58,7 +58,7 @@ app.add_middleware(
 async def bloquear_prueba_vencida(request: Request, call_next):
     """Mantiene disponible el acceso a suscripción cuando una prueba termina."""
     path = request.url.path
-    rutas_permitidas = {"/admin/login", "/admin/logout", "/admin/forgot-password", "/admin/reset-password", "/admin/prueba", "/admin/suscripcion", "/admin/suscripcion/checkout"}
+    rutas_permitidas = {"/admin/login", "/admin/logout", "/admin/forgot-password", "/admin/reset-password", "/admin/prueba", "/admin/suscripcion", "/admin/suscripcion/checkout", "/admin/configuracion-inicial", "/admin/onboarding", "/admin/onboarding/finalizar"}
     if path.startswith("/admin") and path not in rutas_permitidas:
         token = request.cookies.get("access_token", "")
         if token.startswith("Bearer "):

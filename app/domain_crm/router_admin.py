@@ -94,7 +94,7 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     )
 
     tenant = db.query(models.Tenant).filter(models.Tenant.id == usuario.tenant_id).first()
-    destino = "/admin/onboarding" if tenant and _leer_config_tenant(tenant).get("onboarding_requerido") else "/admin/dashboard"
+    destino = "/admin/configuracion-inicial" if tenant and _leer_config_tenant(tenant).get("onboarding_requerido") else "/admin/dashboard"
     response = RedirectResponse(url=destino, status_code=status.HTTP_303_SEE_OTHER)
     response.set_cookie(key="access_token", value=f"Bearer {access_token}", httponly=True)
     return response
@@ -154,7 +154,7 @@ def iniciar_prueba(
         subject=usuario.id, rol=usuario.rol, tenant_id=tenant_id, email=usuario.email,
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
-    response = RedirectResponse(url="/admin/onboarding", status_code=status.HTTP_303_SEE_OTHER)
+    response = RedirectResponse(url="/admin/configuracion-inicial", status_code=status.HTTP_303_SEE_OTHER)
     response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True)
     return response
 
@@ -180,19 +180,19 @@ def _campos_contacto_iniciales(db: Session, tenant_id: str, campos: List[str]) -
             db.add(models.CampoFormulario(tenant_id=tenant_id, label=etiquetas[nombre_tecnico], nombre_tecnico=nombre_tecnico, tipo_campo="email" if nombre_tecnico == "correo" else "text", subtipo_servicio="taller", obligatorio=True, orden=orden))
 
 
-@router.get("/onboarding", response_class=HTMLResponse)
-def onboarding_norem(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+@router.get("/configuracion-inicial", response_class=HTMLResponse)
+def configuracion_inicial_norem(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
     config = _leer_config_tenant(tenant)
-    if config.get("onboarding_completo"):
+    if config.get("configuracion_inicial_completa"):
         return RedirectResponse("/admin/dashboard", status_code=303)
     return templates.TemplateResponse("admin_onboarding.html", {"request": request, "current_user": cred, "tenant": tenant, "config": config, "dias": _DIAS})
 
 
-@router.post("/onboarding")
-def guardar_onboarding_norem(nombre_empresa: str = Form(...), giro: str = Form(...), servicio_principal: str = Form(...), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), campos_cliente: List[str] = Form([]), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+@router.post("/configuracion-inicial")
+def guardar_configuracion_inicial(nombre_empresa: str = Form(...), giro: str = Form(...), servicio_principal: str = Form(...), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), campos_cliente: List[str] = Form([]), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
@@ -200,11 +200,36 @@ def guardar_onboarding_norem(nombre_empresa: str = Form(...), giro: str = Form(.
     inicio = hora_inicio if re.fullmatch(r"\d{2}:\d{2}", hora_inicio) else "09:00"
     fin = hora_fin if re.fullmatch(r"\d{2}:\d{2}", hora_fin) else "18:00"
     config = _leer_config_tenant(tenant)
-    config.update({"onboarding_completo": True, "onboarding_requerido": False, "negocio": {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480))}, "reglas_negocio": {"dias_habiles": dias, "bloques_horarios": {str(dia): [inicio, fin] for dia in dias}}})
+    config.update({"configuracion_inicial_completa": True, "onboarding_completo": False, "onboarding_requerido": False, "negocio": {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480))}, "reglas_negocio": {"dias_habiles": dias, "bloques_horarios": {str(dia): [inicio, fin] for dia in dias}}})
     tenant.nombre_empresa, tenant.config_json = nombre_empresa.strip(), json.dumps(config)
     _campos_contacto_iniciales(db, tenant.id, campos_cliente or ["nombre", "correo", "telefono"])
     db.commit()
-    return RedirectResponse("/admin/configuracion-negocio?bienvenida=1", status_code=303)
+    return RedirectResponse("/admin/onboarding", status_code=303)
+
+
+@router.get("/onboarding", response_class=HTMLResponse)
+def onboarding_norem(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
+    config = _leer_config_tenant(tenant)
+    if not config.get("configuracion_inicial_completa"):
+        return RedirectResponse("/admin/configuracion-inicial", status_code=303)
+    if config.get("onboarding_completo"):
+        return RedirectResponse("/admin/dashboard", status_code=303)
+    return templates.TemplateResponse("admin_product_onboarding.html", {"request": request, "current_user": cred, "tenant": tenant, "config": config})
+
+
+@router.post("/onboarding/finalizar")
+def finalizar_onboarding(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
+    config = _leer_config_tenant(tenant)
+    config["onboarding_completo"] = True
+    tenant.config_json = json.dumps(config)
+    db.commit()
+    return RedirectResponse("/admin/dashboard", status_code=303)
 
 
 @router.get("/configuracion-negocio", response_class=HTMLResponse)

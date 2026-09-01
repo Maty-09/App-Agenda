@@ -1,19 +1,20 @@
 {% from "partials/_logo.html" import logo %}
+{% set is_superadmin = current_user and current_user.tenant_id == 'default' and current_user.rol == 'admin' %}
+{% if is_superadmin %}
+{% set nav_links = [('/admin/tenants', 'Cuentas', 'fa-building-shield')] %}
+{% else %}
 {% set nav_links = [
     ('/admin/dashboard', 'Dashboard', 'fa-gauge-high'),
     ('/admin/tareas', 'Tareas', 'fa-list-check'),
     ('/admin/clientes', 'Clientes', 'fa-address-book'),
     ('/admin/panel', 'Calendario', 'fa-calendar-days'),
-    ('/admin/integraciones', 'Integrar web', 'fa-code'),
     ('/admin/configuracion-negocio', 'Configuración', 'fa-sliders'),
 ] %}
-{% if current_user and current_user.tenant_id == 'default' and current_user.rol == 'admin' %}
-{% set nav_links = nav_links + [('/admin/tenants', 'Cuentas', 'fa-building-shield')] %}
 {% endif %}
 <header class="bg-white dark:bg-[#111827] border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 transition-colors duration-200">
     <div class="max-w-7xl mx-auto px-4 md:px-8">
         <div class="flex items-center justify-between h-16">
-            <a href="/admin/dashboard" class="shrink-0">
+            <a href="{{ '/admin/tenants' if is_superadmin else '/admin/dashboard' }}" class="shrink-0">
                 {{ logo(size='sm') }}
             </a>
             <nav class="hidden md:flex items-center gap-1">
@@ -26,13 +27,6 @@
                     {{ label }}
                 </a>
                 {% endfor %}
-                {% if current_user and current_user.rol == 'admin' and current_user.tenant_id == 'default' %}
-                <a href="/admin/tenants"
-                   class="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition text-slate-600 hover:bg-slate-50 hover:text-slate-900">
-                    <i class="fas fa-building text-xs"></i>
-                    Tenants
-                </a>
-                {% endif %}
                 {% if current_user and current_user.rol == 'admin' and current_user.tenant_id != 'default' %}
                 <a href="/admin/suscripcion" class="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition text-slate-600 hover:bg-slate-50 hover:text-slate-900">
                     <i class="fas fa-credit-card text-xs"></i> Plan
@@ -63,13 +57,6 @@
                 {{ label }}
             </a>
             {% endfor %}
-            {% if current_user and current_user.rol == 'admin' and current_user.tenant_id == 'default' %}
-            <a href="/admin/tenants"
-               class="px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition text-slate-600 hover:bg-slate-50">
-                <i class="fas fa-building text-xs"></i>
-                Tenants
-            </a>
-            {% endif %}
         </nav>
     </div>
 </header>

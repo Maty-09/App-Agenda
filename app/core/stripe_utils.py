@@ -53,6 +53,13 @@ def create_norem_monthly_checkout_session(tenant_id: str, success_url: str, canc
         metadata={"tenant_id": tenant_id, "plan": "Norem Mensual"},
     ).url
 
+
+def cancelar_suscripcion(subscription_id: str) -> None:
+    """Cancela la suscripción antes de eliminar definitivamente un tenant."""
+    if not stripe.api_key:
+        raise RuntimeError("Stripe no está configurado para cancelar la suscripción.")
+    stripe.Subscription.cancel(subscription_id)
+
 def verify_webhook_signature(payload: bytes, sig_header: str):
     """Verifica la firma del Webhook de Stripe."""
     try:

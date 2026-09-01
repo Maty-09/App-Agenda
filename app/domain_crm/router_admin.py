@@ -256,25 +256,8 @@ def configuracion_negocio(request: Request, db: Session = Depends(get_db), cred:
 
 @router.get("/integraciones", response_class=HTMLResponse)
 def integraciones(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
-    """Entrega al administrador un código de inserción listo para enviar a su desarrollador."""
-    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
-    config = _leer_config_tenant(tenant)
-    if not config.get("configuracion_inicial_completa", True):
-        return RedirectResponse("/admin/configuracion-inicial", status_code=303)
-    if not config.get("onboarding_completo", True):
-        return RedirectResponse("/admin/onboarding", status_code=303)
-    base_url = SYSTEM_BASE_URL
-    widget_url = f"{base_url}/api/v1/public/{tenant.id}/agenda/widget.js"
-    return templates.TemplateResponse("admin_integrations.html", {
-        "request": request,
-        "current_user": cred,
-        "tenant": tenant,
-        "widget_code": f'<script async src="{widget_url}"></script>',
-        "booking_url": f"{base_url}/cliente/{tenant.id}/agendar_web",
-        "api_url": f"{base_url}/api/v1/public/{tenant.id}/agenda",
-    })
+    """Compatibilidad con el enlace anterior: la integración vive en Configuración."""
+    return RedirectResponse("/admin/configuracion-negocio#integracion-web", status_code=303)
 
 
 @router.post("/configuracion-negocio")
@@ -1650,20 +1633,30 @@ def eliminar_tenant(id_tenant: str, db: Session = Depends(get_db), cred: Current
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant no encontrado.")
         
-    # Eliminación en cascada manual
-    db.query(models.RespuestaCampo).filter(models.RespuestaCampo.tenant_id == id_tenant).delete(synchronize_session=False)
-    db.query(models.CampoFormulario).filter(models.CampoFormulario.tenant_id == id_tenant).delete(synchronize_session=False)
-    db.query(models.UTMRegistro).filter(models.UTMRegistro.tenant_id == id_tenant).delete(synchronize_session=False)
-    db.query(models.NotificacionAgendamiento).filter(models.NotificacionAgendamiento.tenant_id == id_tenant).delete(synchronize_session=False)
-    db.query(models.Agendamiento).filter(models.Agendamiento.tenant_id == id_tenant).delete(synchronize_session=False)
-    db.query(models.Tarea).filter(models.Tarea.tenant_id == id_tenant).delete(synchronize_session=False)
-    db.query(models.Usuario).filter(models.Usuario.tenant_id == id_tenant).delete(synchronize_session=False)
-    db.query(models.TimelineEvent).filter(models.TimelineEvent.tenant_id == id_tenant).delete(synchronize_session=False)
-    db.query(models.Cliente).filter(models.Cliente.tenant_id == id_tenant).delete(synchronize_session=False)
-    db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == id_tenant).delete(synchronize_session=False)
-    
-    db.delete(tenant)
-    db.commit()
+    try:
+        # Primero se cancela cualquier cobro recurrente. Si el proveedor falla,
+        # se conserva el tenant para no borrar datos mientras sigue facturándose.
+        if tenant.stripe_subscription_id:
+            stripe_utils.cancelar_suscripcion(tenant.stripe_subscription_id)
+        if tenant.mercado_pago_preapproval_id:
+            mercadopago_utils.cancelar_suscripcion(tenant.mercado_pago_preapproval_id)
+
+        # Eliminación transaccional de toda la información asociada al tenant.
+        db.query(models.RespuestaCampo).filter(models.RespuestaCampo.tenant_id == id_tenant).delete(synchronize_session=False)
+        db.query(models.NotificacionAgendamiento).filter(models.NotificacionAgendamiento.tenant_id == id_tenant).delete(synchronize_session=False)
+        db.query(models.UTMRegistro).filter(models.UTMRegistro.tenant_id == id_tenant).delete(synchronize_session=False)
+        db.query(models.TimelineEvent).filter(models.TimelineEvent.tenant_id == id_tenant).delete(synchronize_session=False)
+        db.query(models.Tarea).filter(models.Tarea.tenant_id == id_tenant).delete(synchronize_session=False)
+        db.query(models.Agendamiento).filter(models.Agendamiento.tenant_id == id_tenant).delete(synchronize_session=False)
+        db.query(models.CampoFormulario).filter(models.CampoFormulario.tenant_id == id_tenant).delete(synchronize_session=False)
+        db.query(models.Cliente).filter(models.Cliente.tenant_id == id_tenant).delete(synchronize_session=False)
+        db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == id_tenant).delete(synchronize_session=False)
+        db.query(models.Usuario).filter(models.Usuario.tenant_id == id_tenant).delete(synchronize_session=False)
+        db.delete(tenant)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="No fue posible cancelar la suscripción y eliminar esta cuenta.") from exc
     
     return RedirectResponse(url="/admin/tenants", status_code=303)
 

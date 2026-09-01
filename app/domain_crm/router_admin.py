@@ -284,9 +284,10 @@ def integraciones(request: Request, db: Session = Depends(get_db), cred: Current
 
 
 @router.get("/api-publica", response_class=HTMLResponse)
-def api_publica(request: Request, cred: CurrentUser = Depends(verificar_login)):
+def api_publica(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     """Panel listo para activar y copiar la integración de la API pública."""
-    return templates.TemplateResponse("admin_public_api.html", {"request": request, "current_user": cred})
+    base_url = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
+    return templates.TemplateResponse("admin_public_api.html", {"request": request, "current_user": cred, "agenda_url": f"{base_url}/cliente/{cred.tenant_id}/agendar_web"})
 
 
 @router.post("/configuracion-negocio")

@@ -39,8 +39,10 @@ class PublicApiSettingsIn(BaseModel):
         normalized: list[str] = []
         for origin in origins:
             value = origin.strip().rstrip("/")
-            if not value.startswith(("https://", "http://")):
-                raise ValueError("Cada origen debe comenzar con http:// o https://")
+            if value and not value.startswith(("https://", "http://")):
+                value = f"https://{value}"
+            if not value:
+                raise ValueError("Ingresa un dominio válido")
             if value not in normalized:
                 normalized.append(value)
         return normalized

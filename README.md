@@ -1,5 +1,9 @@
 # PoC Bot de WhatsApp con FastAPI y Twilio
 
+## API pública para sitios web
+
+Norem incluye una API pública para mostrar disponibilidad y crear reservas desde una página externa, sin exponer clientes, tareas ni datos internos. Revisa la guía de habilitación, seguridad y ejemplos en [`docs/PUBLIC_API.md`](docs/PUBLIC_API.md).
+
 Este proyecto es una Prueba de Concepto (PoC) para un bot de agendamiento por WhatsApp. 
 Utiliza FastAPI, Python 3.10+ y la API de Twilio Sandbox (TwiML).
 

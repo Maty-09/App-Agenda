@@ -2,13 +2,16 @@ import os
 import smtplib
 import vobject
 import logging
+import base64
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from email.utils import formataddr, formatdate, make_msgid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 import urllib.parse
+import requests
 from app.core.database import SessionLocal 
 from app.core.models import Agendamiento, get_now_chile
 
@@ -22,6 +25,8 @@ if _env_example.exists():
 # --- CONFIGURACIÓN GLOBAL ---
 REMITENTE = os.getenv("EMAIL_SENDER", "no-reply@norem.cl")
 PASSWORD = os.getenv("EMAIL_PASSWORD") or os.getenv("EMAIL_TOKEN")
+REPLY_TO = os.getenv("EMAIL_REPLY_TO", REMITENTE)
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
 SMTP_HOST = os.getenv("SMTP_HOST", "server.dns-principal-34.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 CORREO_LOCAL = os.getenv("EMAIL_ADMIN", "matiasduranm09@gmail.com")
@@ -34,15 +39,54 @@ print(f"[EMAIL CONFIG] PASSWORD={'OK (set)' if PASSWORD else 'FALTA (EMAIL_PASSW
 print(f"[EMAIL CONFIG] ADMIN={CORREO_LOCAL}")
 print(f"[EMAIL CONFIG] BASE_URL={BASE_URL}")
 
+def _enviar_con_resend(destinatario, asunto, contenido_html, contenido_texto, adjunto_path, adjunto_name):
+    """Envía por API transaccional, con mejor trazabilidad y reputación para Gmail."""
+    payload = {
+        "from": formataddr(("Norem", REMITENTE)),
+        "to": [destinatario],
+        "subject": asunto,
+        "html": contenido_html,
+        "text": contenido_texto,
+        "reply_to": REPLY_TO,
+    }
+    if adjunto_path:
+        contenido = adjunto_path if isinstance(adjunto_path, bytes) else str(adjunto_path).encode("utf-8")
+        payload["attachments"] = [{
+            "filename": adjunto_name or "adjunto",
+            "content": base64.b64encode(contenido).decode("ascii"),
+        }]
+    try:
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+            json=payload,
+            timeout=15,
+        )
+        if response.ok:
+            logger.info("resend_message_accepted")
+            return True
+        logger.error("resend_message_failed status=%s", response.status_code)
+    except requests.RequestException:
+        logger.exception("resend_request_failed")
+    return False
+
+
 def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, adjunto_name=None, contenido_texto=None):
     """Envía correo HTML con alternativa de texto plano y adjuntos opcionales."""
     msg = MIMEMultipart("mixed" if adjunto_path else "alternative")
-    msg['From'] = REMITENTE
+    texto_plano = contenido_texto or "Tienes una actualización de tu agenda. Abre este correo en un cliente compatible con HTML."
+    if RESEND_API_KEY:
+        return _enviar_con_resend(destinatario, asunto, contenido_html, texto_plano, adjunto_path, adjunto_name)
+
+    msg['From'] = formataddr(("Norem", REMITENTE))
     msg['To'] = destinatario
     msg['Subject'] = asunto
+    msg['Reply-To'] = REPLY_TO
+    msg['Date'] = formatdate(localtime=True)
+    msg['Message-ID'] = make_msgid(domain=REMITENTE.rsplit("@", 1)[-1])
     alternativa = MIMEMultipart("alternative") if adjunto_path else msg
     alternativa.attach(MIMEText(
-        contenido_texto or "Tienes una actualización de tu agenda. Abre este correo en un cliente compatible con HTML.",
+        texto_plano,
         "plain",
         "utf-8",
     ))

@@ -58,7 +58,10 @@ def _enviar_con_resend(destinatario, asunto, contenido_html, contenido_texto, ad
     try:
         response = requests.post(
             "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "User-Agent": "Norem/1.0",
+            },
             json=payload,
             timeout=15,
         )

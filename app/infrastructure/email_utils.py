@@ -1,6 +1,7 @@
 import os
 import smtplib
 import vobject
+import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from email.mime.text import MIMEText
@@ -26,6 +27,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 CORREO_LOCAL = os.getenv("EMAIL_ADMIN", "matiasduranm09@gmail.com")
 # URL pública para los enlaces de confirmación enviados a clientes.
 BASE_URL = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
+logger = logging.getLogger(__name__)
 
 print(f"[EMAIL CONFIG] SENDER={'OK (' + REMITENTE + ')' if REMITENTE else 'FALTA (EMAIL_SENDER)'}")
 print(f"[EMAIL CONFIG] PASSWORD={'OK (set)' if PASSWORD else 'FALTA (EMAIL_PASSWORD o EMAIL_TOKEN)'}")
@@ -67,9 +69,10 @@ def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, a
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
             server.login(REMITENTE, PASSWORD)
             server.sendmail(REMITENTE, destinatario, msg.as_string())
+        logger.info("smtp_message_accepted")
         return True
     except Exception as e:
-        print(f"❌ Error SMTP: {e}")
+        logger.exception("smtp_message_failed")
         return False
 
 

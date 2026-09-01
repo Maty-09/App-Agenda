@@ -25,8 +25,10 @@ from app.domain_agenda.router_cliente import Recursos, calcular_fin_especializad
 from app.domain_team import crud_team
 import os
 from pathlib import Path
+import logging
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 templates = Jinja2Templates(directory=[str(BASE_DIR / "templates"), str(BASE_DIR / "app" / "templates")])
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 SYSTEM_BASE_URL = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
@@ -363,11 +365,16 @@ def forgot_password(request: Request, email: str = Form(...), db: Session = Depe
         usuario.password_reset_expires_at = models.get_now_chile() + timedelta(minutes=30)
         db.commit()
         reset_url = f"{SYSTEM_BASE_URL}/admin/reset-password?token={token}"
-        if not enviar_correo_recuperacion_contrasena(usuario.email, usuario.nombre, reset_url):
+        if enviar_correo_recuperacion_contrasena(usuario.email, usuario.nombre, reset_url):
+            logger.info("password_reset_smtp_accepted")
+        else:
             # No dejamos activo un token que no llegó al destinatario.
             usuario.password_reset_token_hash = None
             usuario.password_reset_expires_at = None
             db.commit()
+            logger.warning("password_reset_delivery_failed")
+    else:
+        logger.info("password_reset_account_not_found")
     return templates.TemplateResponse("forgot_password.html", {"request": request, "sent": True})
 
 

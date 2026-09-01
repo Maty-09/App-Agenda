@@ -12,6 +12,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 import urllib.parse
 import requests
+import json
 from app.core.database import SessionLocal 
 from app.core.models import Agendamiento, get_now_chile
 
@@ -192,9 +193,19 @@ def enviar_prueba_vencida(destinatario: str, nombre: str) -> bool:
     return enviar_email_base(destinatario, "Tu prueba de Norem finalizó", f"<h2>Hola {nombre}, tu prueba de 14 días finalizó.</h2><p>Tu información está resguardada. Activa tu suscripción para continuar usando Norem.</p><p><a href='{enlace}'>Continuar con Norem</a></p>")
 
 def generar_url_mapa(direccion):
-    direccion_busqueda = direccion if (direccion and "taller" not in direccion.lower() and "local" not in direccion.lower()) else "Tu Direccion Real, Ciudad, Chile"
-    encoded_dir = urllib.parse.quote(direccion_busqueda)
-    return f"https://www.google.com/maps/search/?api=1&query={encoded_dir}"
+    if not direccion or direccion.strip().lower() in {"taller", "local"}:
+        return None
+    return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(direccion.strip())}"
+
+
+def debe_enviar_ubicacion_google(agendamiento) -> bool:
+    """La ubicación solo se comparte si el negocio la habilitó explícitamente."""
+    try:
+        tenant = getattr(agendamiento, "tenant", None)
+        config = json.loads(getattr(tenant, "config_json", "") or "{}")
+        return bool(config.get("notificaciones", {}).get("enviar_ubicacion_google", False))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
 
 def enviar_solicitud_confirmacion(agendamiento):
     """ PASO 1 AUTOMÁTICO: Envía el botón de confirmación """
@@ -292,7 +303,15 @@ def enviar_aviso_accion_al_dueno(agendamiento, accion):
 
 def enviar_confirmacion_agendamiento(agendamiento, nota_compartida):
     """ PASO 2 AUTOMÁTICO: Envía el calendario una vez confirmado """
-    url_mapa = generar_url_mapa(getattr(agendamiento, 'direccion', ''))
+    url_mapa = generar_url_mapa(getattr(agendamiento, 'direccion', '')) if debe_enviar_ubicacion_google(agendamiento) else None
+    ubicacion_html = ""
+    if url_mapa:
+        ubicacion_html = f"""
+            <p style=\"margin:5px 0; color:#1e293b;\">📍 <strong>Ubicación:</strong> {getattr(agendamiento, 'direccion', '')}</p>
+            <div style=\"text-align:center; margin-top:18px;\">
+                <a href=\"{url_mapa}\" style=\"background-color:#2563eb; color:#ffffff; padding:12px 25px; text-decoration:none; border-radius:6px; font-weight:bold; display:inline-block; font-size:14px;\">📍 VER UBICACIÓN EN GOOGLE MAPS</a>
+            </div>
+        """
     asunto = f"✅ ¡Confirmado! Todo listo para tu cita - {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}"
     
     contenido_html = f"""
@@ -315,11 +334,7 @@ def enviar_confirmacion_agendamiento(agendamiento, nota_compartida):
                                     <div style="background-color:#f8fafc; border-radius:10px; padding:20px; margin:25px 0;">
                                         <p style="margin:5px 0; color:#1e293b;">📅 <strong>Día:</strong> {agendamiento.fecha_inicio.strftime('%d de %B, %Y')}</p>
                                         <p style="margin:5px 0; color:#1e293b;">🕒 <strong>Hora:</strong> {agendamiento.fecha_inicio.strftime('%H:%M')} hrs</p>
-                                        <p style="margin:5px 0; color:#1e293b;">📍 <strong>Ubicación:</strong> {getattr(agendamiento, 'direccion', 'Local')}</p>
-                                    </div>
-
-                                    <div style="text-align:center;">
-                                        <a href="{url_mapa}" style="background-color:#2563eb; color:#ffffff; padding:12px 25px; text-decoration:none; border-radius:6px; font-weight:bold; display:inline-block; font-size:14px;">📍 VER UBICACIÓN EN MAPA</a>
+                                        {ubicacion_html}
                                     </div>
                                     
                                     <p style="color:#64748b; font-size:14px; text-align:center; margin-top:30px;">

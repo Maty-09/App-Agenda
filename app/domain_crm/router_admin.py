@@ -285,7 +285,7 @@ def integraciones(request: Request, db: Session = Depends(get_db), cred: Current
 
 
 @router.post("/configuracion-negocio")
-def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), equipos: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), dias_anticipacion: int = Form(30), dias_dashboard: int = Form(7), dashboard_widgets: List[str] = Form([]), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), equipos: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), dias_anticipacion: int = Form(30), dias_dashboard: int = Form(7), dashboard_widgets: List[str] = Form([]), enviar_ubicacion_google: Optional[str] = Form(None), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     if cred.rol not in {"admin", "superadmin"}:
         raise HTTPException(status_code=403, detail="Sólo el administrador puede configurar el negocio.")
     tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
@@ -296,6 +296,9 @@ def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = F
     config["negocio"] = {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480)), "equipos": equipos_config}
     config["reglas_negocio"] = {"dias_habiles": dias, "bloques_horarios": {str(dia): [hora_inicio, hora_fin] for dia in dias}, "dias_anticipacion": max(1, min(dias_anticipacion, 365))}
     config["dashboard"] = {"dias_disponibilidad": max(1, min(dias_dashboard, 28)), "widgets": [widget for widget in dashboard_widgets if widget in {"resumen", "disponibilidad", "tareas", "metricas", "analitica"}]}
+    notificaciones = config.get("notificaciones", {})
+    notificaciones["enviar_ubicacion_google"] = enviar_ubicacion_google == "1"
+    config["notificaciones"] = notificaciones
     config["onboarding_completo"] = True
     tenant.nombre_empresa, tenant.config_json = nombre_empresa.strip(), json.dumps(config)
     db.commit()

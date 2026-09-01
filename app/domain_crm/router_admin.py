@@ -1292,6 +1292,12 @@ def get_dashboard(
     
     # Capacidad Futura (Mejora 7)
     CAPACIDAD_DIARIA = 8
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    try:
+        tenant_config = json.loads(tenant.config_json or "{}")
+    except (AttributeError, ValueError, TypeError, json.JSONDecodeError):
+        tenant_config = {}
+    horizonte_reservas = max(1, min(int(tenant_config.get("reglas_negocio", {}).get("dias_anticipacion", 30)), 365))
     def get_capacidad_rango(dias: int):
         fecha_fin = hoy_dt + timedelta(days=dias)
         dias_habiles = sum(1 for i in range(dias) if (hoy_dt + timedelta(days=i)).weekday() != 6)
@@ -1307,18 +1313,11 @@ def get_dashboard(
         estado = "Saturado" if porcentaje > 80 else ("Media" if porcentaje > 50 else "Libre")
         return {"disponible": disponible, "total": capacidad_total, "porcentaje": porcentaje, "estado": estado, "ocupado": ocupado}
 
-    capacidad = {
-        "d7": get_capacidad_rango(7),
-        "d15": get_capacidad_rango(15),
-        "d30": get_capacidad_rango(30),
-        "d60": get_capacidad_rango(60),
-    }
+    capacidad = get_capacidad_rango(horizonte_reservas)
 
     # Disponibilidad dÃ­a a dÃ­a de la semana (Mejora: vista semanal para el cliente interno)
     DIAS_ES = ["Lun", "Mar", "MiÃ©", "Jue", "Vie", "SÃ¡b", "Dom"]
     try:
-        tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
-        tenant_config = json.loads(tenant.config_json or "{}")
         dias_habiles = {
             int(dia)
             for dia in tenant_config.get("reglas_negocio", {}).get("dias_habiles", [0, 1, 2, 3, 4])
@@ -1466,6 +1465,7 @@ def get_dashboard(
         "tareas_activas": tareas_activas,
         "tareas_vencidas": tareas_vencidas,
         "capacidad": capacidad,
+        "horizonte_reservas": horizonte_reservas,
         "disponibilidad_semana": disponibilidad_semana,
         "resumen_kanban": resumen_kanban,
         "total": total_citas,

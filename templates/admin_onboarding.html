@@ -1,0 +1,25 @@
+{% extends "base_admin.html" %}
+{% block title %}Configura tu espacio | Norem{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-3xl">
+  <div class="rounded-3xl bg-gradient-to-br from-blue-700 to-blue-950 p-8 text-white shadow-xl md:p-10">
+    <p class="text-sm font-bold uppercase tracking-[.2em] text-blue-200">Bienvenido a Norem</p>
+    <h1 class="mt-3 text-3xl font-extrabold md:text-4xl">Dejemos tu agenda lista en pocos minutos.</h1>
+    <p class="mt-3 max-w-2xl text-blue-100">Configura lo esencial ahora. Después podrás modificarlo cuando quieras, sin depender de plantillas de otros negocios.</p>
+  </div>
+  <form method="post" class="mt-6 space-y-6 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
+    <section><h2 class="text-lg font-extrabold">1. Cuéntanos de tu negocio</h2><div class="mt-4 grid gap-4 md:grid-cols-2">
+      <label class="block text-sm font-bold">Nombre del negocio<input required name="nombre_empresa" value="{{ tenant.nombre_empresa }}" class="mt-1.5 w-full rounded-xl border border-slate-300 px-4 py-3 font-normal"></label>
+      <label class="block text-sm font-bold">¿A qué se dedica?<input required name="giro" placeholder="Ej.: estética, servicios técnicos, consultas" class="mt-1.5 w-full rounded-xl border border-slate-300 px-4 py-3 font-normal"></label>
+      <label class="block text-sm font-bold md:col-span-2">Servicio principal<input required name="servicio_principal" placeholder="Ej.: Corte y peinado, mantención, evaluación" class="mt-1.5 w-full rounded-xl border border-slate-300 px-4 py-3 font-normal"></label>
+    </div></section>
+    <section class="border-t border-slate-100 pt-6"><h2 class="text-lg font-extrabold">2. ¿Cuándo atiendes?</h2><div class="mt-4 grid gap-4 sm:grid-cols-3">
+      <label class="text-sm font-bold">Inicio<input type="time" name="hora_inicio" value="09:00" class="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-3 font-normal"></label>
+      <label class="text-sm font-bold">Término<input type="time" name="hora_fin" value="18:00" class="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-3 font-normal"></label>
+      <label class="text-sm font-bold">Duración estimada<select name="duracion_minutos" class="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-3 font-normal"><option value="30">30 minutos</option><option value="60" selected>1 hora</option><option value="90">1 h 30 min</option><option value="120">2 horas</option></select></label>
+    </div><div class="mt-4 flex flex-wrap gap-2">{% for dia in dias %}<label class="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50"><input class="mr-1.5" type="checkbox" name="dias_habiles" value="{{ loop.index0 }}" {% if loop.index0 < 5 %}checked{% endif %}>{{ dia }}</label>{% endfor %}</div></section>
+    <section class="border-t border-slate-100 pt-6"><h2 class="text-lg font-extrabold">3. Datos que pedirás al cliente</h2><p class="mt-1 text-sm text-slate-500">Elige sólo lo que realmente necesitas. Podrás añadir más preguntas después.</p><div class="mt-4 grid gap-2 sm:grid-cols-2">{% for key, label in [('nombre','Nombre'),('correo','Correo electrónico'),('telefono','Teléfono'),('rut','Identificación/RUT')] %}<label class="rounded-xl border border-slate-200 p-3 text-sm font-bold"><input class="mr-2" type="checkbox" name="campos_cliente" value="{{ key }}" {% if key in ['nombre','correo','telefono'] %}checked{% endif %}>{{ label }}</label>{% endfor %}</div></section>
+    <button class="w-full rounded-xl bg-blue-700 px-5 py-4 font-extrabold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800">Guardar y ver mi configuración →</button>
+  </form>
+</div>
+{% endblock %}

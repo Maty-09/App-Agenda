@@ -4,6 +4,7 @@
     ('/admin/tareas', 'Tareas', 'fa-list-check'),
     ('/admin/clientes', 'Clientes', 'fa-address-book'),
     ('/admin/panel', 'Calendario', 'fa-calendar-days'),
+    ('/admin/configuracion-negocio', 'Configuración', 'fa-sliders'),
 ] %}
 {% if current_user and current_user.tenant_id == 'default' and current_user.rol == 'admin' %}
 {% set nav_links = nav_links + [('/admin/tenants', 'Cuentas', 'fa-building-shield')] %}

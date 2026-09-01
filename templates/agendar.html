@@ -39,11 +39,8 @@
             </div>
         {% else %}
         
-        {% if tenant_id == 'womenlashcl' %}
-        <h1 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-6">Agendar Cita</h1>
-        {% else %}
-        <h1 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-6">Agendar Mantención</h1>
-        {% endif %}
+        <h1 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-2">Agenda tu {{ negocio.get('servicio_principal', 'hora') }}</h1>
+        <p class="mb-6 text-center text-sm text-slate-500">{{ nombre_empresa|default('Norem') }}</p>
 
         {% if not fecha_seleccionada %}
         <div class="space-y-6">
@@ -123,11 +120,17 @@
                     {% for campo in campos_dinamicos %}
                     <div>
                         <label class="block text-[10px] font-black {% if es_admin %}text-amber-600{% else %}text-slate-400{% endif %} uppercase tracking-widest mb-1 ml-1">{{ campo.label }}</label>
+                        {% if campo.tipo_campo == 'select' %}
+                        <select name="dinamico_{{ campo.id }}" {% if campo.obligatorio %}required{% endif %} class="w-full border-2 {% if es_admin %}border-amber-200{% else %}border-gray-200{% endif %} px-4 py-4 rounded-xl outline-none font-medium"><option value="">Selecciona una opción</option>{% for opcion in (campo.opciones or '').split(',') %}<option value="{{ opcion.strip() }}">{{ opcion.strip() }}</option>{% endfor %}</select>
+                        {% elif campo.tipo_campo == 'textarea' %}
+                        <textarea name="dinamico_{{ campo.id }}" {% if campo.obligatorio %}required{% endif %} class="w-full border-2 border-gray-200 px-4 py-4 rounded-xl outline-none font-medium"></textarea>
+                        {% else %}
                         <input type="{{ campo.tipo_campo }}" 
                             name="dinamico_{{ campo.id }}" 
                             {% if campo.nombre_tecnico == 'patente' %}id="patente"{% endif %}
                             {% if campo.obligatorio %}required{% endif %}
                             class="w-full border-2 {% if es_admin %}border-amber-200 focus:border-amber-500{% else %}border-gray-200 focus:border-blue-500{% endif %} px-4 py-4 rounded-xl outline-none font-medium transition-all">
+                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>

@@ -47,8 +47,13 @@ def agendar_web(
     db: Session = Depends(get_db),
     tenant_id: str = "default"
 ):
-    if not db.query(models.Tenant.id).filter(models.Tenant.id == tenant_id).first():
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+    if not tenant:
         raise HTTPException(status_code=404, detail="Tenant no encontrado")
+    try:
+        config_negocio = json.loads(tenant.config_json or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        config_negocio = {}
     # 1. NORMALIZACIÓN Y VALIDACIÓN INICIAL
     tipo = tipo.lower().strip() if tipo else "domicilio_taller"
     subtipo = subtipo.lower().strip() if subtipo else "local"
@@ -67,7 +72,8 @@ def agendar_web(
 
     # 3. LÓGICA DE CALENDARIO Y HORAS (Tu lógica actual)
     if duracion_horas is None:
-        duracion_horas = 2 if tipo == "domicilio_taller" else 1
+        minutos = config_negocio.get("negocio", {}).get("duracion_minutos", 120 if tipo == "domicilio_taller" else 60)
+        duracion_horas = max(1, round(int(minutos) / 60))
 
     horas_disponibles = []
     mensaje_error = None
@@ -101,6 +107,8 @@ def agendar_web(
         "hora_termino": hora_termino,
         "mensaje_error": mensaje_error,
         "campos_dinamicos": campos_dinamicos, # <--- ESTO ES LO QUE USA EL HTML
+        "negocio": config_negocio.get("negocio", {}),
+        "nombre_empresa": tenant.nombre_empresa,
         "utm_source": "whatsapp",
         "utm_campaign": f"{tipo}_{subtipo}"
         ,"booking_path": f"/cliente/{tenant_id}/agendar_web" if tenant_id != "default" else "/cliente/agendar_web"
@@ -110,7 +118,7 @@ import holidays
 feriados_cl = holidays.country_holidays('CL')
 
 
-def dias_habiles_tenant(db: Session, tenant_id: str) -> set[int]:
+def dias_habiles_tenant(db: Session, tenant_id: str) -> set:
     """Días permitidos por tenant (0=lunes … 6=domingo)."""
     tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
     try:
@@ -200,7 +208,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         for c in campos_db:
             valor = form_data.get(f"dinamico_{c.id}")
             if valor:
-                nombre_tecnico_normalizado = c.nombre_tecnico.lower().strip()
+                nombre_tecnico_normalizado = (c.nombre_tecnico or c.label or "campo").lower().strip()
                 
                 # Buscar la clave normalizada correcta
                 clave_final = None
@@ -219,11 +227,11 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         print(f"Respuestas finales mapeadas: {respuestas}")
 
         # 2. ASIGNACIÓN DE VARIABLES (Mejorado con fallbacks)
-        rut = respuestas.get("rut")
-        nombre = respuestas.get("nombre")
-        apellido = respuestas.get("apellido")
-        correo = respuestas.get("correo")
-        telefono = respuestas.get("telefono")
+        rut = respuestas.get("rut") or f"WEB-{tenant_id}-{int(datetime.utcnow().timestamp())}"
+        nombre = respuestas.get("nombre") or "Cliente web"
+        apellido = respuestas.get("apellido") or ""
+        correo = respuestas.get("correo") or "sin-correo@norem.local"
+        telefono = respuestas.get("telefono") or "Sin teléfono"
         marca = respuestas.get("marca") or "N/A"
         modelo = respuestas.get("modelo") or "N/A"
         patente = (respuestas.get("patente") or "S/P").upper()
@@ -238,8 +246,8 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         print(f"  Nombre: {nombre}")
         print(f"  Apellido: {apellido}")
         
-        if not correo or not rut:
-            raise Exception(f"El correo y el RUT son obligatorios. Recibido: rut={rut}, correo={correo}")
+        if correo == "sin-correo@norem.local":
+            raise Exception("Agrega al menos el campo Correo electrónico en la configuración de tu formulario.")
 
         # 4. LÓGICA DE DURACIÓN
         try:
@@ -450,6 +458,26 @@ def obtner_cupos_disponibles(tipo_servicio, fecha, duracion, db):
 
 
 
+def _bloques_del_dia(tenant, dia_semana, duracion_horas):
+    """Acepta bloques legacy y también rangos inicio/término del onboarding."""
+    bloques = ["09:00", "13:00", "15:30"]
+    try:
+        config = json.loads(tenant.config_json or "{}") if tenant else {}
+        bloques = config.get("reglas_negocio", {}).get("bloques_horarios", {}).get(str(dia_semana), bloques)
+        if len(bloques) == 2 and bloques[0] < bloques[1]:
+            inicio = datetime.strptime(bloques[0], "%H:%M")
+            fin = datetime.strptime(bloques[1], "%H:%M")
+            paso = max(30, duracion_horas * 60)
+            salida = []
+            while inicio + timedelta(minutes=paso) <= fin:
+                salida.append(inicio.strftime("%H:%M"))
+                inicio += timedelta(minutes=paso)
+            return salida
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+    return bloques
+
+
 def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_id="default"):
     # 1. Bloqueo manual (botón de administración)
     bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == tenant_id, models.DiaBloqueado.fecha == fecha).first()
@@ -466,16 +494,7 @@ def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_i
 
     # Obtener configuración del tenant
     tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
-    bloques_dia = ["09:00", "13:00", "15:30"] # Default
-    if tenant:
-        try:
-            config = json.loads(tenant.config_json or "{}")
-            if "reglas_negocio" in config and "bloques_horarios" in config["reglas_negocio"]:
-                str_dia = str(dia_semana)
-                if str_dia in config["reglas_negocio"]["bloques_horarios"]:
-                    bloques_dia = config["reglas_negocio"]["bloques_horarios"][str_dia]
-        except Exception:
-            pass
+    bloques_dia = _bloques_del_dia(tenant, dia_semana, duracion_horas)
 
     for h in bloques_dia:
         try:
@@ -562,25 +581,12 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
 
     # Obtener configuración del tenant
     tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
-    bloques_validos = ["09:00", "13:00", "15:30"] # Default
-    if tenant:
-        try:
-            config = json.loads(tenant.config_json or "{}")
-            if "reglas_negocio" in config and "bloques_horarios" in config["reglas_negocio"]:
-                str_dia = str(dia_semana)
-                if str_dia in config["reglas_negocio"]["bloques_horarios"]:
-                    bloques_validos = config["reglas_negocio"]["bloques_horarios"][str_dia]
-        except Exception:
-            pass
+    bloques_validos = _bloques_del_dia(tenant, dia_semana, duracion_horas)
 
     # Verificamos si la hora requerida está dentro de los bloques permitidos para ese día
     if hora_str not in bloques_validos:
         return False
         
-    # Excepción para domicilio_taller: siempre duran 2 horas según la regla antigua, pero ahora la flexibilidad de horas es mayor
-    if tipo_servicio == "domicilio_taller" and duracion_horas != 2:
-        return False
-
     # 6. Validar traslapes en la DB
     # Contamos cuántos equipos están ocupados en este bloque
     agendados_en_bloque = db.query(models.Agendamiento).filter(

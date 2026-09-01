@@ -93,7 +93,9 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
         expires_delta=access_token_expires
     )
 
-    response = RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == usuario.tenant_id).first()
+    destino = "/admin/onboarding" if tenant and _leer_config_tenant(tenant).get("onboarding_requerido") else "/admin/dashboard"
+    response = RedirectResponse(url=destino, status_code=status.HTTP_303_SEE_OTHER)
     response.set_cookie(key="access_token", value=f"Bearer {access_token}", httponly=True)
     return response
 
@@ -134,6 +136,7 @@ def iniciar_prueba(
         estado_suscripcion="prueba",
         trial_inicio=ahora,
         trial_fin=ahora + timedelta(days=14),
+        config_json=json.dumps({"onboarding_requerido": True}),
     )
     usuario = models.Usuario(
         tenant_id=tenant_id,
@@ -151,9 +154,80 @@ def iniciar_prueba(
         subject=usuario.id, rol=usuario.rol, tenant_id=tenant_id, email=usuario.email,
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
-    response = RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    response = RedirectResponse(url="/admin/onboarding", status_code=status.HTTP_303_SEE_OTHER)
     response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True)
     return response
+
+
+_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
+
+def _leer_config_tenant(tenant: models.Tenant) -> dict:
+    try:
+        return json.loads(tenant.config_json or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _campos_contacto_iniciales(db: Session, tenant_id: str, campos: List[str]) -> None:
+    """Crea solamente los campos elegidos durante el onboarding."""
+    etiquetas = {"nombre": "Nombre", "correo": "Correo electrónico", "telefono": "Teléfono", "rut": "Identificación/RUT"}
+    for orden, nombre_tecnico in enumerate(campos, start=1):
+        if nombre_tecnico not in etiquetas:
+            continue
+        existe = db.query(models.CampoFormulario).filter(models.CampoFormulario.tenant_id == tenant_id, models.CampoFormulario.nombre_tecnico == nombre_tecnico).first()
+        if not existe:
+            db.add(models.CampoFormulario(tenant_id=tenant_id, label=etiquetas[nombre_tecnico], nombre_tecnico=nombre_tecnico, tipo_campo="email" if nombre_tecnico == "correo" else "text", subtipo_servicio="taller", obligatorio=True, orden=orden))
+
+
+@router.get("/onboarding", response_class=HTMLResponse)
+def onboarding_norem(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
+    config = _leer_config_tenant(tenant)
+    if config.get("onboarding_completo"):
+        return RedirectResponse("/admin/dashboard", status_code=303)
+    return templates.TemplateResponse("admin_onboarding.html", {"request": request, "current_user": cred, "tenant": tenant, "config": config, "dias": _DIAS})
+
+
+@router.post("/onboarding")
+def guardar_onboarding_norem(nombre_empresa: str = Form(...), giro: str = Form(...), servicio_principal: str = Form(...), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), campos_cliente: List[str] = Form([]), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
+    dias = sorted({dia for dia in dias_habiles if 0 <= dia <= 6}) or [0, 1, 2, 3, 4]
+    inicio = hora_inicio if re.fullmatch(r"\d{2}:\d{2}", hora_inicio) else "09:00"
+    fin = hora_fin if re.fullmatch(r"\d{2}:\d{2}", hora_fin) else "18:00"
+    config = _leer_config_tenant(tenant)
+    config.update({"onboarding_completo": True, "onboarding_requerido": False, "negocio": {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480))}, "reglas_negocio": {"dias_habiles": dias, "bloques_horarios": {str(dia): [inicio, fin] for dia in dias}}})
+    tenant.nombre_empresa, tenant.config_json = nombre_empresa.strip(), json.dumps(config)
+    _campos_contacto_iniciales(db, tenant.id, campos_cliente or ["nombre", "correo", "telefono"])
+    db.commit()
+    return RedirectResponse("/admin/configuracion-negocio?bienvenida=1", status_code=303)
+
+
+@router.get("/configuracion-negocio", response_class=HTMLResponse)
+def configuracion_negocio(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
+    base_url = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
+    return templates.TemplateResponse("admin_business_config.html", {"request": request, "current_user": cred, "tenant": tenant, "config": _leer_config_tenant(tenant), "dias": _DIAS, "agenda_url": f"{base_url}/cliente/{tenant.id}/agendar_web", "api_url": f"{base_url}/api/v1/public/{tenant.id}/agenda"})
+
+
+@router.post("/configuracion-negocio")
+def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
+    config, dias = _leer_config_tenant(tenant), sorted({dia for dia in dias_habiles if 0 <= dia <= 6}) or [0, 1, 2, 3, 4]
+    config["negocio"] = {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480))}
+    config["reglas_negocio"] = {"dias_habiles": dias, "bloques_horarios": {str(dia): [hora_inicio, hora_fin] for dia in dias}}
+    config["onboarding_completo"] = True
+    tenant.nombre_empresa, tenant.config_json = nombre_empresa.strip(), json.dumps(config)
+    db.commit()
+    return RedirectResponse("/admin/configuracion-negocio?guardado=1", status_code=303)
 
 
 @router.get("/suscripcion", response_class=HTMLResponse)
@@ -568,6 +642,7 @@ def configurar_formulario(
 
     # Buscamos los campos que coincidan con el subtipo seleccionado
     campos = db.query(models.CampoFormulario).filter(
+        models.CampoFormulario.tenant_id == cred.tenant_id,
         models.CampoFormulario.subtipo_servicio == db_subtipo
     ).order_by(models.CampoFormulario.orden.asc()).all()
 
@@ -621,7 +696,7 @@ async def guardar_campo(
         nombre_tecnico = "tipo_vivienda"
 
     if campo_id:
-        campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id).first()
+        campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id, models.CampoFormulario.tenant_id == cred.tenant_id).first()
         if campo:
             campo.subtipo_servicio = db_subtipo
             campo.label = texto_label
@@ -631,6 +706,7 @@ async def guardar_campo(
             campo.nombre_tecnico = nombre_tecnico
     else:
         nuevo = models.CampoFormulario(
+            tenant_id=cred.tenant_id,
             subtipo_servicio=db_subtipo,
             label=texto_label,
             nombre_tecnico=nombre_tecnico,
@@ -646,7 +722,7 @@ async def guardar_campo(
 @router.get("/configurar-formulario/eliminar/{campo_id}")
 async def eliminar_campo(campo_id: int, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     # 1. Buscamos el campo en la base de datos
-    campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id).first()
+    campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id, models.CampoFormulario.tenant_id == cred.tenant_id).first()
     
     if not campo:
         print(f"No se encontrÃ³ el campo con ID {campo_id}")
@@ -679,7 +755,8 @@ async def reordenar_campos(
         for item in posiciones:
             # Buscamos el campo por su ID
             campo = db.query(models.CampoFormulario).filter(
-                models.CampoFormulario.id == int(item['id'])
+                models.CampoFormulario.id == int(item['id']),
+                models.CampoFormulario.tenant_id == cred.tenant_id
             ).first()
             
             if campo:
@@ -704,7 +781,7 @@ def editar_campo(
     db: Session = Depends(get_db),
     cred: CurrentUser = Depends(verificar_login)
 ):
-    campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id).first()
+    campo = db.query(models.CampoFormulario).filter(models.CampoFormulario.id == campo_id, models.CampoFormulario.tenant_id == cred.tenant_id).first()
     if not campo:
         return RedirectResponse("/admin/editor-visual-formulario", status_code=303)
 

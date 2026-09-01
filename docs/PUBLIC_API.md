@@ -4,13 +4,13 @@ La agenda se puede integrar de dos maneras: mediante el widget listo para usar (
 
 ## Integración rápida: un solo script
 
-Para mostrar la agenda completa dentro de cualquier página, el cliente solo debe pegar esto donde quiera que aparezca el formulario:
+El administrador encontrará un botón **Integrar web** dentro de Norem. Desde ahí debe copiar el bloque que el sistema genera y enviarlo tal cual a quien administra su sitio. Esa persona solo lo pega donde quiera que aparezca el formulario: no debe reemplazar valores ni conocer el identificador interno del negocio.
 
 ```html
-<script src="https://TU-DOMINIO/api/v1/public/TENANT_ID/agenda/widget.js"></script>
+<script async src="https://TU-DOMINIO/api/v1/public/TENANT_ID/agenda/widget.js"></script>
 ```
 
-Reemplaza `TU-DOMINIO` por el dominio donde esté publicado Norem y `TENANT_ID` por el identificador entregado para ese negocio. El script inserta un iframe responsive con el formulario de reserva; no requiere instalar librerías ni copiar una clave al sitio del cliente.
+El bloque entregado por Norem ya trae el dominio y el identificador correctos encapsulados. El script inserta un iframe responsive con el formulario de reserva; no requiere instalar librerías ni copiar una clave al sitio del cliente.
 
 También se puede obtener el enlace listo desde:
 

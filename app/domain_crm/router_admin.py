@@ -254,6 +254,29 @@ def configuracion_negocio(request: Request, db: Session = Depends(get_db), cred:
     return templates.TemplateResponse("admin_business_config.html", {"request": request, "current_user": cred, "tenant": tenant, "config": config_actual, "dias": _DIAS, "agenda_url": f"{base_url}/cliente/{tenant.id}/agendar_web", "api_url": f"{base_url}/api/v1/public/{tenant.id}/agenda"})
 
 
+@router.get("/integraciones", response_class=HTMLResponse)
+def integraciones(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    """Entrega al administrador un código de inserción listo para enviar a su desarrollador."""
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
+    config = _leer_config_tenant(tenant)
+    if not config.get("configuracion_inicial_completa", True):
+        return RedirectResponse("/admin/configuracion-inicial", status_code=303)
+    if not config.get("onboarding_completo", True):
+        return RedirectResponse("/admin/onboarding", status_code=303)
+    base_url = SYSTEM_BASE_URL
+    widget_url = f"{base_url}/api/v1/public/{tenant.id}/agenda/widget.js"
+    return templates.TemplateResponse("admin_integrations.html", {
+        "request": request,
+        "current_user": cred,
+        "tenant": tenant,
+        "widget_code": f'<script async src="{widget_url}"></script>',
+        "booking_url": f"{base_url}/cliente/{tenant.id}/agendar_web",
+        "api_url": f"{base_url}/api/v1/public/{tenant.id}/agenda",
+    })
+
+
 @router.post("/configuracion-negocio")
 def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), equipos: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), dias_anticipacion: int = Form(30), dias_dashboard: int = Form(7), dashboard_widgets: List[str] = Form([]), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     if cred.rol not in {"admin", "superadmin"}:

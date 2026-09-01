@@ -64,11 +64,15 @@ def agendar_web(
 
     # 2. OBTENER CAMPOS DINÁMICOS (Lo que configuraste en el Admin)
     # Filtramos por el subtipo para que si es Local salgan unos y si es Domicilio otros
-    campos_dinamicos = db.query(models.CampoFormulario).filter(
-        models.CampoFormulario.tenant_id == tenant_id,
-        models.CampoFormulario.subtipo_servicio == subtipo_db,
-        models.CampoFormulario.activo == True
-    ).order_by(models.CampoFormulario.orden.asc()).all()
+    campos_dinamicos = []
+    # Una cuenta nueva no hereda nunca el formulario de la agenda base. Sólo se
+    # muestran los campos que su administrador eligió al completar el onboarding.
+    if not config_negocio.get("onboarding_requerido"):
+        campos_dinamicos = db.query(models.CampoFormulario).filter(
+            models.CampoFormulario.tenant_id == tenant_id,
+            models.CampoFormulario.subtipo_servicio == subtipo_db,
+            models.CampoFormulario.activo == True
+        ).order_by(models.CampoFormulario.orden.asc()).all()
 
     # 3. LÓGICA DE CALENDARIO Y HORAS (Tu lógica actual)
     if duracion_horas is None:

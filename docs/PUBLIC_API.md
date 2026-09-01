@@ -1,6 +1,28 @@
 # API pública de Norem
 
-La API pública permite integrar la agenda de una empresa en una página web propia. Solo ofrece dos capacidades: consultar horarios disponibles y crear una reserva. No expone CRM, tareas, usuarios ni datos de otras empresas.
+La agenda se puede integrar de dos maneras: mediante el widget listo para usar (recomendado) o con la API para un formulario propio. Ninguna opción expone CRM, tareas, usuarios ni información de otros negocios.
+
+## Integración rápida: un solo script
+
+Para mostrar la agenda completa dentro de cualquier página, el cliente solo debe pegar esto donde quiera que aparezca el formulario:
+
+```html
+<script src="https://TU-DOMINIO/api/v1/public/TENANT_ID/agenda/widget.js"></script>
+```
+
+Reemplaza `TU-DOMINIO` por el dominio donde esté publicado Norem y `TENANT_ID` por el identificador entregado para ese negocio. El script inserta un iframe responsive con el formulario de reserva; no requiere instalar librerías ni copiar una clave al sitio del cliente.
+
+También se puede obtener el enlace listo desde:
+
+```http
+GET /api/v1/public/{tenant_id}/agenda
+```
+
+La respuesta incluye `booking_url` y `embed_script`.
+
+## Integración personalizada
+
+Si el cliente necesita diseñar su propio formulario, puede usar los endpoints de disponibilidad y creación de reserva que se describen a continuación.
 
 ## Seguridad y activación
 

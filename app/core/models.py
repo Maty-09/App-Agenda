@@ -25,6 +25,8 @@ class Tenant(Base):
     estado_suscripcion = Column(String, default="activa") # activa, impaga, cancelada
     trial_inicio = Column(DateTime, nullable=True)
     trial_fin = Column(DateTime, nullable=True)
+    trial_vencimiento_notificado_at = Column(DateTime, nullable=True)
+    suscripcion_notificada_at = Column(DateTime, nullable=True)
     
     agendamientos = relationship("Agendamiento", back_populates="tenant")
 

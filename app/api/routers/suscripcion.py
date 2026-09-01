@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from app.core import models, stripe_utils, mercadopago_utils
 from app.api import deps
+from app.infrastructure.email_utils import enviar_aviso_nueva_suscripcion, enviar_suscripcion_activada
 import stripe
 
 router = APIRouter()
@@ -55,11 +56,19 @@ async def stripe_webhook(request: Request, db: Session = Depends(deps.get_db)):
         # Actualizar base de datos
         tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
         if tenant:
+            primera_activacion = tenant.estado_suscripcion != "activa"
             tenant.stripe_customer_id = customer_id
             tenant.stripe_subscription_id = subscription_id
             tenant.estado_suscripcion = "activa"
             tenant.plan_actual = session.get("metadata", {}).get("plan", "Norem Mensual")
             db.commit()
+            if primera_activacion:
+                usuario = db.query(models.Usuario).filter(models.Usuario.tenant_id == tenant.id, models.Usuario.rol == "admin").first()
+                if usuario:
+                    enviar_suscripcion_activada(usuario.email, usuario.nombre)
+                    enviar_aviso_nueva_suscripcion(tenant, usuario, "Stripe")
+                tenant.suscripcion_notificada_at = models.get_now_chile()
+                db.commit()
             
     elif event['type'] == 'customer.subscription.deleted':
         subscription = event['data']['object']
@@ -98,8 +107,16 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(deps.get_d
     if not tenant:
         return {"status": "unknown_tenant"}
 
+    primera_activacion = tenant.estado_suscripcion != "activa" and subscription.get("status") == "authorized"
     tenant.mercado_pago_preapproval_id = preapproval_id
     tenant.plan_actual = "Norem Mensual"
     tenant.estado_suscripcion = "activa" if subscription.get("status") == "authorized" else "cancelada"
     db.commit()
+    if primera_activacion:
+        usuario = db.query(models.Usuario).filter(models.Usuario.tenant_id == tenant.id, models.Usuario.rol == "admin").first()
+        if usuario:
+            enviar_suscripcion_activada(usuario.email, usuario.nombre)
+            enviar_aviso_nueva_suscripcion(tenant, usuario, "Mercado Pago")
+        tenant.suscripcion_notificada_at = models.get_now_chile()
+        db.commit()
     return {"status": "success"}

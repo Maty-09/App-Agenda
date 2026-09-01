@@ -90,6 +90,22 @@ def enviar_correo_recuperacion_contrasena(destinatario: str, nombre: str, url_re
     """
     return enviar_email_base(destinatario, asunto, contenido_html)
 
+
+def enviar_aviso_nueva_suscripcion(tenant, usuario, proveedor: str) -> bool:
+    """Alerta interna al dueño de Norem, sin exponer datos sensibles en logs."""
+    fecha = get_now_chile().strftime("%d/%m/%Y %H:%M")
+    html = f"<h2>Nueva suscripción Norem</h2><p><b>Negocio:</b> {tenant.nombre_empresa}</p><p><b>Cliente:</b> {usuario.nombre} · {usuario.email}</p><p><b>Origen:</b> {proveedor}</p><p><b>Fecha:</b> {fecha} (Chile)</p>"
+    return enviar_email_base(CORREO_LOCAL, "Nueva suscripción en Norem", html)
+
+
+def enviar_suscripcion_activada(destinatario: str, nombre: str) -> bool:
+    return enviar_email_base(destinatario, "Tu suscripción Norem está activa", f"<h2>¡Todo listo, {nombre}!</h2><p>Tu suscripción de Norem ya está activa. Ya puedes seguir usando todas las herramientas de tu negocio.</p>")
+
+
+def enviar_prueba_vencida(destinatario: str, nombre: str) -> bool:
+    enlace = f"{BASE_URL}/admin/suscripcion"
+    return enviar_email_base(destinatario, "Tu prueba de Norem finalizó", f"<h2>Hola {nombre}, tu prueba de 14 días finalizó.</h2><p>Tu información está resguardada. Activa tu suscripción para continuar usando Norem.</p><p><a href='{enlace}'>Continuar con Norem</a></p>")
+
 def generar_url_mapa(direccion):
     direccion_busqueda = direccion if (direccion and "taller" not in direccion.lower() and "local" not in direccion.lower()) else "Tu Direccion Real, Ciudad, Chile"
     encoded_dir = urllib.parse.quote(direccion_busqueda)

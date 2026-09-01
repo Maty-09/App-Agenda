@@ -15,5 +15,6 @@
       "src": "/(.*)",
       "dest": "app/main.py"
     }
-  ]
+  ],
+  "crons": [{"path": "/api/v1/cron/pruebas-vencidas", "schedule": "0 13 * * *"}]
 }

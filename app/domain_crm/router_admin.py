@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, Request, HTTPException, Query, Form, Body, Header
+from fastapi import APIRouter, Depends, Request, HTTPException, Query, Form, Body
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from sqlalchemy import func
 from app.core.database import SessionLocal
 from app.core import models, schemas, mercadopago_utils
 from typing import List, Optional, Tuple
-from types import SimpleNamespace
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 import json
 from fastapi.templating import Jinja2Templates
@@ -23,13 +22,6 @@ from app.infrastructure.email_utils import (
     enviar_correo_recuperacion_contrasena,
     enviar_aviso_inicio_prueba,
     enviar_aviso_nueva_suscripcion,
-    enviar_suscripcion_activada,
-    enviar_prueba_vencida,
-    enviar_solicitud_confirmacion,
-    enviar_aviso_accion_al_dueno,
-    enviar_confirmacion_agendamiento,
-    enviar_aviso_recibido_cliente,
-    enviar_email_base,
 )
 from app.domain_agenda.router_cliente import Recursos, calcular_fin_especializado
 from app.domain_team import crud_team
@@ -52,65 +44,6 @@ def _avisar_activacion_interna(db: Session, tenant: models.Tenant, origen: str) 
     ).first()
     if administrador and not enviar_aviso_nueva_suscripcion(tenant, administrador, origen):
         logger.warning("subscription_activation_internal_notification_failed")
-
-
-@router.post("/internal/email-template-test")
-def ejecutar_prueba_plantillas_email(
-    x_email_template_test_token: Optional[str] = Header(default=None),
-):
-    """Ruta temporal de verificación de entrega; se elimina tras una ejecución."""
-    token_esperado = os.getenv("EMAIL_TEMPLATE_TEST_TOKEN", "")
-    destinatario = os.getenv("EMAIL_TEMPLATE_TEST_RECIPIENT", "").strip()
-    if not token_esperado or not destinatario or not x_email_template_test_token or not secrets.compare_digest(token_esperado, x_email_template_test_token):
-        raise HTTPException(status_code=404, detail="No encontrado")
-
-    ahora = models.get_now_chile().replace(second=0, microsecond=0)
-    tenant = SimpleNamespace(
-        id="preview-email",
-        nombre_empresa="Norem · Prueba de plantillas",
-        trial_inicio=ahora,
-        trial_fin=ahora + timedelta(days=14),
-    )
-    usuario = SimpleNamespace(nombre="Prueba Norem", email=destinatario)
-    cita = SimpleNamespace(
-        id=999999,
-        tenant_id="preview-email",
-        nombre="Prueba",
-        apellido="Norem",
-        correo=destinatario,
-        telefono="+56900000000",
-        patente="TEST00",
-        marca="Norem",
-        modelo="Plantilla",
-        fecha_inicio=ahora + timedelta(days=2),
-        fecha_termino=ahora + timedelta(days=2, hours=1),
-        direccion="Dirección de prueba, Santiago",
-        subtipo="taller",
-        tipo_servicio="domicilio_taller",
-        duracion_horas=1,
-    )
-    resultados = {
-        "recuperacion": enviar_correo_recuperacion_contrasena(destinatario, usuario.nombre, f"{SYSTEM_BASE_URL}/admin/reset-password?token=preview-no-valido"),
-        "inicio_prueba_interno": enviar_aviso_inicio_prueba(tenant, usuario),
-        "suscripcion_interna": enviar_aviso_nueva_suscripcion(tenant, usuario, "Prueba de plantillas"),
-        "suscripcion_cliente": enviar_suscripcion_activada(destinatario, usuario.nombre),
-        "prueba_vencida": enviar_prueba_vencida(destinatario, usuario.nombre),
-        "solicitud_confirmacion": enviar_solicitud_confirmacion(cita),
-        "aviso_dueno": enviar_aviso_accion_al_dueno(cita, "PRUEBA"),
-        "confirmacion_cita": enviar_confirmacion_agendamiento(cita, "Mensaje de prueba; no corresponde a una reserva real."),
-        "cancelacion": enviar_correo_cancelacion(cita),
-        "cancelacion_bloqueo": enviar_correo_cancelacion_por_bloqueo(cita, "Prueba de plantilla"),
-        "solicitud_recibida": enviar_aviso_recibido_cliente(cita),
-    }
-    from app.infrastructure.notifications import _correo_html
-    mensaje = "Este es un correo de prueba. No corresponde a una reserva real."
-    resultados["agenda_multitenant"] = enviar_email_base(
-        destinatario,
-        "[PRUEBA] Agenda Norem",
-        _correo_html(cita, "creada", tenant.nombre_empresa, mensaje),
-        contenido_texto=mensaje,
-    )
-    return {"enviados": sum(bool(resultado) for resultado in resultados.values()), "total": len(resultados)}
 
 
 # =============================

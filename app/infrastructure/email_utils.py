@@ -13,6 +13,8 @@ from email import encoders
 import urllib.parse
 import requests
 import json
+import re
+import html
 from app.core.database import SessionLocal 
 from app.core.models import Agendamiento, get_now_chile
 
@@ -49,6 +51,21 @@ logger.info(
     "email_configuration_loaded sender_configured=%s password_configured=%s smtp_configured=%s",
     bool(REMITENTE), bool(PASSWORD), bool(SMTP_HOST),
 )
+
+
+def plantilla_norem(asunto: str, contenido_html: str) -> str:
+    """Envuelve cualquier correo heredado en una presentación Norem uniforme."""
+    fuente = re.sub(r"<(script|style)[^>]*>.*?</\\1>", "", contenido_html or "", flags=re.IGNORECASE | re.DOTALL)
+    enlaces = re.findall(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', fuente, flags=re.IGNORECASE | re.DOTALL)
+    texto = re.sub(r"<[^>]+>", " ", fuente)
+    texto = re.sub(r"\\s+", " ", html.unescape(texto)).strip()
+    parrafos = "".join(f'<p style="margin:0 0 14px;color:#475569;font-size:16px;line-height:1.6;">{html.escape(fragmento)}</p>' for fragmento in re.split(r"(?<=[.!?])\\s+", texto) if fragmento)
+    acciones = "".join(
+        f'<p style="margin:18px 0 0;text-align:center;"><a href="{html.escape(url, quote=True)}" style="display:inline-block;border-radius:9px;background:#0755bf;color:#fff;padding:12px 18px;font-weight:700;text-decoration:none;">{html.escape(re.sub(r"<[^>]+>", " ", html.unescape(etiqueta)).strip() or "Abrir enlace")}</a></p>'
+        for url, etiqueta in enlaces[:3]
+    )
+    titulo = html.escape(asunto)
+    return f'''<!doctype html><html lang="es"><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:32px 16px;"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;"><tr><td align="center" style="background:linear-gradient(135deg,#0b3d91,#0755bf);padding:26px;"><div style="display:inline-block;width:42px;height:42px;line-height:42px;border-radius:10px;background:#fff;color:#0755bf;font-size:24px;font-weight:800;">N</div><div style="margin-top:9px;color:#fff;font-size:18px;font-weight:800;letter-spacing:4px;">NOREM</div></td></tr><tr><td style="padding:32px 36px;"><h1 style="margin:0 0 18px;color:#0f172a;font-size:23px;line-height:1.3;">{titulo}</h1>{parrafos}{acciones}</td></tr><tr><td style="padding:18px 36px;background:#f8fafc;color:#64748b;font-size:12px;line-height:1.5;text-align:center;">Mensaje automático de Norem. No compartas contraseñas ni códigos de acceso.</td></tr></table></td></tr></table></body></html>'''
 
 def _enviar_con_resend(destinatario, asunto, contenido_html, contenido_texto, adjunto_path, adjunto_name):
     """Envía por API transaccional, con mejor trazabilidad y reputación para Gmail."""
@@ -87,6 +104,7 @@ def _enviar_con_resend(destinatario, asunto, contenido_html, contenido_texto, ad
 
 def enviar_email_base(destinatario, asunto, contenido_html, adjunto_path=None, adjunto_name=None, contenido_texto=None):
     """Envía correo HTML con alternativa de texto plano y adjuntos opcionales."""
+    contenido_html = plantilla_norem(asunto, contenido_html)
     msg = MIMEMultipart("mixed" if adjunto_path else "alternative")
     texto_plano = contenido_texto or "Tienes una actualización de tu agenda. Abre este correo en un cliente compatible con HTML."
     if RESEND_API_KEY:

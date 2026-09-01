@@ -162,6 +162,20 @@ def enviar_correo_recuperacion_contrasena(destinatario: str, nombre: str, url_re
     return enviar_email_base(destinatario, asunto, contenido_html)
 
 
+def enviar_aviso_inicio_prueba(tenant, usuario) -> bool:
+    """Avisa al equipo de Norem una vez creada una prueba válida."""
+    inicio = tenant.trial_inicio.strftime("%d/%m/%Y %H:%M") if tenant.trial_inicio else "No disponible"
+    fin = tenant.trial_fin.strftime("%d/%m/%Y") if tenant.trial_fin else "No disponible"
+    html = (
+        "<h2>Nueva prueba iniciada en Norem</h2>"
+        f"<p><b>Negocio:</b> {tenant.nombre_empresa}</p>"
+        f"<p><b>Administrador:</b> {usuario.nombre} · {usuario.email}</p>"
+        f"<p><b>Inicio:</b> {inicio} (Chile)</p>"
+        f"<p><b>Finaliza:</b> {fin}</p>"
+    )
+    return enviar_email_base(CORREO_LOCAL, "Nueva prueba iniciada en Norem", html)
+
+
 def enviar_aviso_nueva_suscripcion(tenant, usuario, proveedor: str) -> bool:
     """Alerta interna al dueño de Norem, sin exponer datos sensibles en logs."""
     fecha = get_now_chile().strftime("%d/%m/%Y %H:%M")

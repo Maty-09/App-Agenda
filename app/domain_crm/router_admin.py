@@ -20,6 +20,8 @@ from app.infrastructure.email_utils import (
     enviar_correo_cancelacion,
     enviar_correo_cancelacion_por_bloqueo,
     enviar_correo_recuperacion_contrasena,
+    enviar_aviso_inicio_prueba,
+    enviar_aviso_nueva_suscripcion,
 )
 from app.domain_agenda.router_cliente import Recursos, calcular_fin_especializado
 from app.domain_team import crud_team
@@ -32,6 +34,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 SYSTEM_BASE_URL = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
+
+
+def _avisar_activacion_interna(db: Session, tenant: models.Tenant, origen: str) -> None:
+    """Notifica al equipo cuando una cuenta pasa a estar activa."""
+    administrador = db.query(models.Usuario).filter(
+        models.Usuario.tenant_id == tenant.id,
+        models.Usuario.rol == "admin",
+    ).first()
+    if administrador and not enviar_aviso_nueva_suscripcion(tenant, administrador, origen):
+        logger.warning("subscription_activation_internal_notification_failed")
 
 
 # =============================
@@ -165,6 +177,9 @@ def iniciar_prueba(
     db.add(tenant)
     db.add(usuario)
     db.commit()
+    # El alta quedó confirmada en la base antes de avisar al equipo interno.
+    if not enviar_aviso_inicio_prueba(tenant, usuario):
+        logger.warning("trial_start_internal_notification_failed")
     token = security.create_access_token(
         subject=usuario.id, rol=usuario.rol, tenant_id=tenant_id, email=usuario.email,
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
@@ -1664,8 +1679,11 @@ def reactivar_tenant(id_tenant: str, db: Session = Depends(get_db), cred: Curren
     tenant = db.query(models.Tenant).filter(models.Tenant.id == id_tenant).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant no encontrado.")
+    primera_activacion = tenant.estado_suscripcion != "activa"
     tenant.estado_suscripcion = "activa"
     db.commit()
+    if primera_activacion:
+        _avisar_activacion_interna(db, tenant, "Reactivación manual")
     return RedirectResponse(url="/admin/tenants", status_code=303)
 
 @router.post("/tenants/{id_tenant}/editar-plan")
@@ -1683,9 +1701,12 @@ def editar_plan(
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant no encontrado.")
         
+    primera_activacion = tenant.estado_suscripcion != "activa" and nuevo_estado == "activa"
     tenant.plan_actual = nuevo_plan
     tenant.estado_suscripcion = nuevo_estado
     db.commit()
+    if primera_activacion:
+        _avisar_activacion_interna(db, tenant, "Activación manual")
     
     return RedirectResponse(url="/admin/tenants", status_code=303)
 

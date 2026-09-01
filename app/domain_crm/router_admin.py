@@ -94,7 +94,13 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     )
 
     tenant = db.query(models.Tenant).filter(models.Tenant.id == usuario.tenant_id).first()
-    destino = "/admin/configuracion-inicial" if tenant and _leer_config_tenant(tenant).get("onboarding_requerido") else "/admin/dashboard"
+    config_inicio = _leer_config_tenant(tenant) if tenant else {}
+    if config_inicio.get("onboarding_requerido") or not config_inicio.get("configuracion_inicial_completa", True):
+        destino = "/admin/configuracion-inicial"
+    elif not config_inicio.get("onboarding_completo", True):
+        destino = "/admin/onboarding"
+    else:
+        destino = "/admin/dashboard"
     response = RedirectResponse(url=destino, status_code=status.HTTP_303_SEE_OTHER)
     response.set_cookie(key="access_token", value=f"Bearer {access_token}", httponly=True)
     return response
@@ -187,12 +193,14 @@ def configuracion_inicial_norem(request: Request, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
     config = _leer_config_tenant(tenant)
     if config.get("configuracion_inicial_completa"):
-        return RedirectResponse("/admin/dashboard", status_code=303)
+        return RedirectResponse("/admin/onboarding" if not config.get("onboarding_completo") else "/admin/dashboard", status_code=303)
     return templates.TemplateResponse("admin_onboarding.html", {"request": request, "current_user": cred, "tenant": tenant, "config": config, "dias": _DIAS})
 
 
 @router.post("/configuracion-inicial")
 def guardar_configuracion_inicial(nombre_empresa: str = Form(...), giro: str = Form(...), servicio_principal: str = Form(...), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), campos_cliente: List[str] = Form([]), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    if cred.rol not in {"admin", "superadmin"}:
+        raise HTTPException(status_code=403, detail="Sólo el administrador puede configurar el negocio.")
     tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
@@ -202,7 +210,7 @@ def guardar_configuracion_inicial(nombre_empresa: str = Form(...), giro: str = F
     config = _leer_config_tenant(tenant)
     config.update({"configuracion_inicial_completa": True, "onboarding_completo": False, "onboarding_requerido": False, "negocio": {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480))}, "reglas_negocio": {"dias_habiles": dias, "bloques_horarios": {str(dia): [inicio, fin] for dia in dias}}})
     tenant.nombre_empresa, tenant.config_json = nombre_empresa.strip(), json.dumps(config)
-    _campos_contacto_iniciales(db, tenant.id, campos_cliente or ["nombre", "correo", "telefono"])
+    _campos_contacto_iniciales(db, tenant.id, campos_cliente)
     db.commit()
     return RedirectResponse("/admin/onboarding", status_code=303)
 
@@ -237,12 +245,19 @@ def configuracion_negocio(request: Request, db: Session = Depends(get_db), cred:
     tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
+    config_actual = _leer_config_tenant(tenant)
+    if not config_actual.get("configuracion_inicial_completa", True):
+        return RedirectResponse("/admin/configuracion-inicial", status_code=303)
+    if not config_actual.get("onboarding_completo", True):
+        return RedirectResponse("/admin/onboarding", status_code=303)
     base_url = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
-    return templates.TemplateResponse("admin_business_config.html", {"request": request, "current_user": cred, "tenant": tenant, "config": _leer_config_tenant(tenant), "dias": _DIAS, "agenda_url": f"{base_url}/cliente/{tenant.id}/agendar_web", "api_url": f"{base_url}/api/v1/public/{tenant.id}/agenda"})
+    return templates.TemplateResponse("admin_business_config.html", {"request": request, "current_user": cred, "tenant": tenant, "config": config_actual, "dias": _DIAS, "agenda_url": f"{base_url}/cliente/{tenant.id}/agendar_web", "api_url": f"{base_url}/api/v1/public/{tenant.id}/agenda"})
 
 
 @router.post("/configuracion-negocio")
 def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    if cred.rol not in {"admin", "superadmin"}:
+        raise HTTPException(status_code=403, detail="Sólo el administrador puede configurar el negocio.")
     tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada.")

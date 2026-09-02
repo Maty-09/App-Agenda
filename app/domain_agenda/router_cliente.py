@@ -491,49 +491,40 @@ def _bloques_del_dia(tenant, dia_semana, duracion_horas):
 
 
 def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_id="default"):
-    # 1. Bloqueo manual (botón de administración)
-    bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == tenant_id, models.DiaBloqueado.fecha == fecha).first()
-    if bloqueado:
+    """Calcula disponibilidad con reglas del tenant y consultas acotadas por día."""
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+    if not tenant or fecha.weekday() not in dias_habiles_tenant(db, tenant_id):
+        return []
+    if fecha in feriados_cl or db.query(models.DiaBloqueado.id).filter(
+        models.DiaBloqueado.tenant_id == tenant_id, models.DiaBloqueado.fecha == fecha
+    ).first():
         return []
 
-    horas_disponibles = []
-    # IMPORTANTE: Asegúrate que Recursos["domicilio_taller"] tenga 3 nombres de equipos
-    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
-    equipos = equipos_configurados(tenant)
-
-    dia_semana = fecha.weekday() # 0:Lunes, 2:Miércoles
-
-    # Obtener configuración del tenant
-    bloques_dia = _bloques_del_dia(tenant, dia_semana, duracion_horas)
-
-    for h in bloques_dia:
+    bloques_dia = _bloques_del_dia(tenant, fecha.weekday(), duracion_horas)
+    candidatos = []
+    for bloque in bloques_dia:
         try:
-            hora_obj = datetime.strptime(h, "%H:%M").time()
+            inicio = datetime.combine(fecha, datetime.strptime(bloque, "%H:%M").time())
         except ValueError:
             continue
-            
-        inicio = datetime.combine(fecha, hora_obj)
-        
-        # Validaciones de horario general (08:00-18:00) y feriados
-        if not verificar_disponibilidad(db, tipo_servicio, inicio, duracion_horas, tenant_id):
-            continue
+        termino = calcular_fin_especializado(inicio, duracion_horas) if tipo_servicio == "especializado" else inicio + timedelta(hours=duracion_horas)
+        candidatos.append((bloque, inicio, termino))
+    if not candidatos:
+        return []
 
-        # --- CONTADOR DE CUPOS POR EQUIPO ---
-        termino = inicio + timedelta(hours=duracion_horas)
-        
-        # Contamos cuántos de tus 3 equipos ya están ocupados en este bloque exacto
-        equipos_ocupados = db.query(models.Agendamiento).filter(
-            models.Agendamiento.tenant_id == tenant_id,
-            models.Agendamiento.fecha_inicio < termino,
-            models.Agendamiento.fecha_termino > inicio,
-            models.Agendamiento.estado != "cancelado"
-        ).count()
-
-        # Si hay 3 equipos y solo hay 0, 1 o 2 ocupados, la hora SIGUE DISPONIBLE
-        if equipos_ocupados < len(equipos):
-            horas_disponibles.append(h)
-
-    return horas_disponibles
+    inicio_rango = min(inicio for _, inicio, _ in candidatos)
+    fin_rango = max(termino for _, _, termino in candidatos)
+    reservas = db.query(models.Agendamiento.fecha_inicio, models.Agendamiento.fecha_termino).filter(
+        models.Agendamiento.tenant_id == tenant_id,
+        models.Agendamiento.fecha_inicio < fin_rango,
+        models.Agendamiento.fecha_termino > inicio_rango,
+        models.Agendamiento.estado != "cancelado",
+    ).all()
+    capacidad = max(1, len(equipos_configurados(tenant)))
+    return [
+        bloque for bloque, inicio, termino in candidatos
+        if sum(reserva_inicio < termino and reserva_fin > inicio for reserva_inicio, reserva_fin in reservas) < capacidad
+    ]
 
 
 def carga_equipo_en_dia(db, equipo, fecha):

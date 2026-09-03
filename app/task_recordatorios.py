@@ -2,9 +2,9 @@ from datetime import timedelta
 from app.core.database import SessionLocal
 from app.models import Agendamiento, get_now_chile
 from app.infrastructure.email_utils import enviar_email_base
-def enviar_correo_recordatorio(cliente_email, nombre, fecha, hora, patente):
+def enviar_correo_recordatorio(cliente_email, nombre, fecha, hora):
     """Envía el recordatorio de cita para el día siguiente. Reutiliza enviar_email_base."""
-    asunto = f"⏰ Recordatorio: Tu mantención es mañana ({patente})"
+    asunto = "⏰ Recordatorio: Tu cita es mañana"
 
     html = f"""
     <html>
@@ -16,18 +16,17 @@ def enviar_correo_recordatorio(cliente_email, nombre, fecha, hora, patente):
                             <tr>
                                 <td align="center" style="padding: 30px 0 10px 0;">
                                     <div style="display: inline-block; width: 60px; height: 60px; line-height: 60px; border-radius: 50%; background-color: #fef9c3; color: #f59e0b; font-size: 32px; text-align: center;">⏰</div>
-                                    <h2 style="color:#1e293b; margin: 8px 0 4px 0;">LOCAL</h2>
+                                    <h2 style="color:#1e293b; margin: 8px 0 4px 0;">NOREM</h2>
                                     <p style="color:#64748b; font-size:12px; margin:0; text-transform: uppercase;">Sistema de Agendamiento</p>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding: 30px 40px 40px 40px; text-align: center;">
                                     <h3 style="color:#1e293b; font-size:20px; margin-bottom:10px;">¡Tu cita es mañana!</h3>
-                                    <p style="color:#475569; font-size:16px;">Hola <strong>{nombre}</strong>, te recordamos que tienes una mantención agendada:</p>
+                                    <p style="color:#475569; font-size:16px;">Hola <strong>{nombre}</strong>, te recordamos que tienes una cita agendada:</p>
                                     <div style="background-color:#f8fafc; border-radius:10px; padding:20px; margin:20px 0; text-align:left;">
                                         <p style="margin:5px 0; color:#1e293b;">📅 <strong>Fecha:</strong> {fecha}</p>
                                         <p style="margin:5px 0; color:#1e293b;">🕒 <strong>Hora:</strong> {hora} hrs</p>
-                                        <p style="margin:5px 0; color:#1e293b;">🚗 <strong>Vehículo:</strong> {patente}</p>
                                     </div>
                                     <p style="color:#64748b; font-size:13px; margin-top:20px;">Si tienes algún inconveniente, por favor contáctanos respondiendo este correo.</p>
                                 </td>
@@ -73,7 +72,6 @@ def procesar_agendamientos_manana():
                 cita.nombre, 
                 fecha_str, 
                 hora_str, 
-                cita.patente
             )
             if exito:
                 print(f"✅ Recordatorio enviado a {cita.correo} para la cita de las {hora_str}")

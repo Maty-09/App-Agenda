@@ -51,8 +51,7 @@ def enviar_recordatorios_manana():
                 
             mensaje = (
                 f"Hola {cita.nombre}, te recordamos que mañana tienes una cita agendada "
-                f"a las {cita.fecha_inicio.strftime('%H:%M')} hrs para servicio de {cita.marca}. "
-                "¡Te esperamos!"
+                f"a las {cita.fecha_inicio.strftime('%H:%M')} hrs. ¡Te esperamos!"
             )
             
             try:

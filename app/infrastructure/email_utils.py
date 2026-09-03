@@ -211,7 +211,7 @@ def enviar_prueba_vencida(destinatario: str, nombre: str) -> bool:
     return enviar_email_base(destinatario, "Tu prueba de Norem finalizó", f"<h2>Hola {nombre}, tu prueba de 14 días finalizó.</h2><p>Tu información está resguardada. Activa tu suscripción para continuar usando Norem.</p><p><a href='{enlace}'>Continuar con Norem</a></p>")
 
 def generar_url_mapa(direccion):
-    if not direccion or direccion.strip().lower() in {"taller", "local"}:
+    if not direccion or not direccion.strip():
         return None
     return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(direccion.strip())}"
 
@@ -225,156 +225,70 @@ def debe_enviar_ubicacion_google(agendamiento) -> bool:
     except (TypeError, ValueError, json.JSONDecodeError):
         return False
 
-def enviar_solicitud_confirmacion(agendamiento):
-    """ PASO 1 AUTOMÁTICO: Envía el botón de confirmación """
-    url_confirmar = f"{BASE_URL}/cliente/confirmar/{agendamiento.id}"
-    url_rechazar = f"{BASE_URL}/cliente/rechazar/{agendamiento.id}" # Opcional: añadir esta ruta
 
-    asunto = f"⚠️ Acción Requerida: Confirma tu cita - {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}"
-    contenido_html = f"""
-    <html>
-        <body style="margin:0; padding:0; background-color:#f4f7f6; font-family: 'Segoe UI', Arial, sans-serif;">
-            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="padding: 40px 0;">
-                <tr>
-                    <td align="center">
-                        <table width="500" border="0" cellspacing="0" cellpadding="0" style="background-color:#ffffff; border-radius:15px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-                            <tr>
-                                <td align="center" style="padding: 30px 0 10px 0;">
-                                    <div style="display: inline-block; width: 60px; height: 60px; line-height: 60px; border-radius: 50%; background-color: #e6f7ed; color: #10b981; font-size: 32px; font-weight: bold; text-align: center; margin-bottom: 15px;">✓</div>
-                                    <h2 style="color:#1e293b; margin: 0 0 5px 0; letter-spacing: 1px;">NOREM</h2>
-                                    <p style="color:#64748b; font-size:12px; margin:0; text-transform: uppercase;">Sistema de Agendamiento</p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 40px; text-align: center;">
-                                    <h3 style="color:#1e293b; font-size:20px; margin-bottom:10px;">¿Confirmas tu asistencia?</h3>
-                                    <p style="color:#475569; font-size:16px; line-height:1.6;">
-                                        Hola <strong>{agendamiento.nombre}</strong>, para asegurar el cupo de tu <strong>{f"{agendamiento.marca} ({agendamiento.patente})" if agendamiento.tenant_id != "womenlashcl" else "servicio"}</strong> este {agendamiento.fecha_inicio.strftime('%d/%m')}, pulsa el botón:
-                                    </p>
-                                    <div style="margin-top: 35px;">
-                                        <a href="{url_confirmar}" style="background-color:#10b981; color:#ffffff; padding:18px 35px; text-decoration:none; border-radius:8px; font-weight:bold; font-size:18px; display:inline-block; box-shadow: 0 4px 6px rgba(16,185,129,0.2);">✅ SÍ, CONFIRMO MI HORA</a>
-                                    </div>
-                                    <p style="color:#94a3b8; font-size:12px; margin-top:30px;">Si no puedes asistir, por favor ignora este correo para liberar el cupo.</p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="background-color:#f8fafc; padding:20px; text-align:center; color:#94a3b8; font-size:11px;">
-                                    Este es un mensaje automático de Norem.
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </body>
-    </html>
-    """
-    return enviar_email_base(agendamiento.correo, f"⚠️ Acción Requerida: Confirma tu cita - {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}", contenido_html)
+def _nombre_negocio(agendamiento) -> str:
+    """Obtiene el nombre público elegido por el negocio."""
+    tenant = getattr(agendamiento, "tenant", None)
+    if not tenant:
+        return "Norem"
+    try:
+        config = json.loads(tenant.config_json or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        config = {}
+    return config.get("nombre_publico") or config.get("negocio", {}).get("nombre") or tenant.nombre_empresa or "Norem"
+
+
+def _servicio_principal(agendamiento) -> str:
+    tenant = getattr(agendamiento, "tenant", None)
+    if tenant:
+        try:
+            config = json.loads(tenant.config_json or "{}")
+            servicio = config.get("negocio", {}).get("servicio_principal")
+            if servicio:
+                return str(servicio)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
+    return "cita"
+
+
+def _detalle_cita(agendamiento) -> str:
+    """Detalle neutral para cualquier giro; no expone campos heredados."""
+    fecha = agendamiento.fecha_inicio.strftime("%d/%m/%Y")
+    hora = agendamiento.fecha_inicio.strftime("%H:%M")
+    servicio = html.escape(_servicio_principal(agendamiento))
+    return f"<p><strong>Fecha:</strong> {fecha}</p><p><strong>Hora:</strong> {hora} hrs</p><p><strong>Servicio:</strong> {servicio}</p>"
+
+def enviar_solicitud_confirmacion(agendamiento):
+    """Pide confirmación con información neutral para cualquier negocio."""
+    url_confirmar = f"{BASE_URL}/cliente/confirmar/{agendamiento.id}"
+    negocio = html.escape(_nombre_negocio(agendamiento))
+    nombre = html.escape(agendamiento.nombre)
+    asunto = f"Confirma tu cita · {_nombre_negocio(agendamiento)}"
+    contenido_html = f"""<html><body style="font-family:Arial,sans-serif;color:#1e293b"><h2>{negocio}</h2><h3>¿Confirmas tu cita?</h3><p>Hola <strong>{nombre}</strong>, confirma tu asistencia para reservar tu cupo.</p>{_detalle_cita(agendamiento)}<p style="margin-top:28px"><a href="{url_confirmar}" style="background:#0755bf;color:#fff;padding:14px 22px;border-radius:8px;text-decoration:none;font-weight:bold">Confirmar mi cita</a></p><p>Si no puedes asistir, puedes ignorar este correo.</p><p style="color:#64748b;font-size:12px">Mensaje automático de Norem.</p></body></html>"""
+    return enviar_email_base(agendamiento.correo, asunto, contenido_html)
 
 def enviar_aviso_accion_al_dueno(agendamiento, accion):
     """ Notifica al dueño qué hizo el cliente (ACEPTADA / RECHAZADA) """
-    asunto = f"📢 CITA {accion}: {agendamiento.nombre} - {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}"
-    # Color dinámico: Verde si acepta, Rojo si rechaza
-    color_status = "#10b981" if "ACEPTADA" in accion or "CONFIRMADA" in accion else "#ef4444"
-    servicio_label = "Local" if getattr(agendamiento, 'subtipo', '').lower() == "taller" else getattr(agendamiento, 'subtipo', '').capitalize() or "Servicio"
-    
-    contenido_html = f"""
-    <html>
-        <body style="margin:0; padding:0; background-color:#f1f5f9; font-family: 'Segoe UI', Arial, sans-serif;">
-            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="padding: 30px 0;">
-                <tr>
-                    <td align="center">
-                        <table width="550" border="0" cellspacing="0" cellpadding="0" style="background-color:#ffffff; border-radius:12px; overflow:hidden; border: 1px solid #e2e8f0;">
-                            <tr>
-                                <td style="background-color:#1e293b; padding:20px; text-align:center;">
-                                    <div style="display: inline-block; width: 50px; height: 50px; line-height: 50px; border-radius: 50%; background-color: rgba(255,255,255,0.15); color: #10b981; font-size: 28px; font-weight: bold; text-align: center; margin-bottom: 10px;">✓</div>
-                                    <h2 style="color:#ffffff; margin:0; font-size:18px; letter-spacing:1px;">REPORTE DE SISTEMA</h2>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="padding:30px;">
-                                    <div style="text-align:center; margin-bottom:25px;">
-                                        <span style="background-color:{color_status}; color:white; padding:8px 15px; border-radius:20px; font-weight:bold; font-size:14px;">
-                                            ESTADO: {accion}
-                                        </span>
-                                    </div>
-                                    <table width="100%" style="color:#334155; font-size:15px; border-collapse:collapse;">
-                                        <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Cliente:</strong></td><td style="text-align:right;">{agendamiento.nombre} {agendamiento.apellido}</td></tr>
-                                        <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Vehículo:</strong></td><td style="text-align:right;">{agendamiento.marca} {agendamiento.modelo}</td></tr>
-                                        {"" if agendamiento.tenant_id == "womenlashcl" else f"<tr><td style='padding:8px 0; border-bottom:1px solid #f1f5f9;'><strong>Patente:</strong></td><td style='text-align:right;'>{agendamiento.patente}</td></tr>"}
-                                        <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Fecha/Hora:</strong></td><td style="text-align:right;">{agendamiento.fecha_inicio.strftime('%d-%m-%Y %H:%M')}</td></tr>
-                                        <tr><td style="padding:8px 0; border-bottom:1px solid #f1f5f9;"><strong>Servicio:</strong></td><td style="text-align:right;">{servicio_label}</td></tr>
-                                    </table>
-                                    <div style="margin-top:25px; background-color:#f8fafc; padding:15px; border-radius:8px; font-size:13px; color:#64748b; text-align:center;">
-                                        La base de datos ha sido actualizada automáticamente.
-                                    </div>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </body>
-    </html>
-    """
+    asunto = f"Cita {accion} · {_nombre_negocio(agendamiento)}"
+    contenido_html = f"<h2>Cita {html.escape(accion)}</h2><p><strong>Cliente:</strong> {html.escape(agendamiento.nombre)} {html.escape(agendamiento.apellido or '')}</p>{_detalle_cita(agendamiento)}"
     return enviar_email_base(CORREO_LOCAL, asunto, contenido_html)
 
 def enviar_confirmacion_agendamiento(agendamiento, nota_compartida):
-    """ PASO 2 AUTOMÁTICO: Envía el calendario una vez confirmado """
+    """Envía una confirmación aplicable a todos los giros de negocio."""
     url_mapa = generar_url_mapa(getattr(agendamiento, 'direccion', '')) if debe_enviar_ubicacion_google(agendamiento) else None
     ubicacion_html = ""
     if url_mapa:
-        ubicacion_html = f"""
-            <p style=\"margin:5px 0; color:#1e293b;\">📍 <strong>Ubicación:</strong> {getattr(agendamiento, 'direccion', '')}</p>
-            <div style=\"text-align:center; margin-top:18px;\">
-                <a href=\"{url_mapa}\" style=\"background-color:#2563eb; color:#ffffff; padding:12px 25px; text-decoration:none; border-radius:6px; font-weight:bold; display:inline-block; font-size:14px;\">📍 VER UBICACIÓN EN GOOGLE MAPS</a>
-            </div>
-        """
-    asunto = f"✅ ¡Confirmado! Todo listo para tu cita - {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}"
-    
-    contenido_html = f"""
-    <html>
-        <body style="margin:0; padding:0; background-color:#f4f7f6; font-family: 'Segoe UI', Arial, sans-serif;">
-            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="padding: 40px 0;">
-                <tr>
-                    <td align="center">
-                        <table width="500" border="0" cellspacing="0" cellpadding="0" style="background-color:#ffffff; border-radius:15px; overflow:hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
-                            <tr>
-                                <td align="center" style="padding: 30px 0 10px 0;">
-                                    <div style="display: inline-block; width: 60px; height: 60px; line-height: 60px; border-radius: 50%; background-color: #e6f7ed; color: #10b981; font-size: 32px; font-weight: bold; text-align: center;">✓</div>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="padding:0 40px 40px 40px;">
-                                    <h2 style="color:#1e293b; text-align:center; margin-bottom:20px;">¡Cita Confirmada!</h2>
-                                    <p style="color:#475569; text-align:center;">Hola {agendamiento.nombre}, tu cita ha sido agendada con éxito. Aquí tienes los detalles:</p>
-                                    
-                                    <div style="background-color:#f8fafc; border-radius:10px; padding:20px; margin:25px 0;">
-                                        <p style="margin:5px 0; color:#1e293b;">📅 <strong>Día:</strong> {agendamiento.fecha_inicio.strftime('%d de %B, %Y')}</p>
-                                        <p style="margin:5px 0; color:#1e293b;">🕒 <strong>Hora:</strong> {agendamiento.fecha_inicio.strftime('%H:%M')} hrs</p>
-                                        {ubicacion_html}
-                                    </div>
-                                    
-                                    <p style="color:#64748b; font-size:14px; text-align:center; margin-top:30px;">
-                                        <em>"{nota_compartida}"</em>
-                                    </p>
-                                    <p style="color:#94a3b8; font-size:12px; text-align:center; margin-top:20px; border-top:1px solid #f1f5f9; padding-top:20px;">
-                                        Hemos adjuntado un archivo de calendario a este correo para que puedas agregarlo a tu teléfono.
-                                    </p>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </body>
-    </html>
-    """
+        ubicacion_html = f'<p><strong>Ubicación:</strong> {html.escape(getattr(agendamiento, "direccion", ""))}</p><p><a href="{url_mapa}">Ver ubicación</a></p>'
+    negocio = html.escape(_nombre_negocio(agendamiento))
+    nombre = html.escape(agendamiento.nombre)
+    nota = html.escape(nota_compartida or "")
+    asunto = f"Tu cita está confirmada · {_nombre_negocio(agendamiento)}"
+    contenido_html = f"""<html><body style="font-family:Arial,sans-serif;color:#1e293b"><h2>{negocio}</h2><h3>Tu cita está confirmada</h3><p>Hola {nombre}, tu reserva fue confirmada.</p>{_detalle_cita(agendamiento)}{ubicacion_html}{f'<p>{nota}</p>' if nota else ''}<p>Adjuntamos el evento para que lo agregues a tu calendario.</p><p style="color:#64748b;font-size:12px">Mensaje automático de Norem.</p></body></html>"""
     
     # Crear archivo .ics
     cal = vobject.iCalendar()
     vevent = cal.add('vevent')
-    vevent.add('summary').value = f"Cita: {agendamiento.nombre} {agendamiento.apellido}" if agendamiento.tenant_id == "womenlashcl" else f"Mantención: {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}"
+    vevent.add('summary').value = f"Cita · {_nombre_negocio(agendamiento)}"
     vevent.add('dtstart').value = agendamiento.fecha_inicio
     vevent.add('dtend').value = agendamiento.fecha_termino
     
@@ -383,11 +297,11 @@ def enviar_confirmacion_agendamiento(agendamiento, nota_compartida):
         asunto, 
         contenido_html, 
         adjunto_path=cal.serialize().encode('utf-8'), 
-        adjunto_name=f"cita_{agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}.ics"
+        adjunto_name=f"cita_{agendamiento.id}.ics"
     )
 
 def enviar_correo_cancelacion(agendamiento):
-    asunto = f"❌ Tu cita ha sido cancelada - {agendamiento.patente if agendamiento.tenant_id != 'womenlashcl' else agendamiento.nombre}"
+    asunto = f"Tu cita fue cancelada · {_nombre_negocio(agendamiento)}"
     contenido_html = f"""
     <html>
         <body style="margin:0; padding:0; background-color:#f4f7f6; font-family: 'Segoe UI', Arial, sans-serif;">
@@ -403,7 +317,7 @@ def enviar_correo_cancelacion(agendamiento):
                             <tr>
                                 <td style="padding: 0 40px 40px 40px; text-align: center;">
                                     <h2 style="color:#ef4444;">Cita Cancelada</h2>
-                                    <p style="color:#475569;">Hola {agendamiento.nombre}, te informamos que tu cita para el <strong>{agendamiento.fecha_inicio.strftime('%d-%m-%Y')}</strong> a las <strong>{agendamiento.fecha_inicio.strftime('%H:%M')} hrs</strong> ha sido cancelada.</p>
+                                    <p style="color:#475569;">Hola {html.escape(agendamiento.nombre)}, te informamos que tu cita fue cancelada.</p>{_detalle_cita(agendamiento)}
                                     <p style="color:#64748b; font-size:14px; margin-top:20px;">Si consideras que esto es un error o deseas reagendar, por favor contáctanos.</p>
                                 </td>
                             </tr>
@@ -419,14 +333,8 @@ def enviar_correo_cancelacion(agendamiento):
 
 def enviar_correo_cancelacion_por_bloqueo(agendamiento, motivo: str = None) -> bool:
     """Informa un cierre de día y entrega un enlace para que el cliente reagende."""
-    tipo = agendamiento.tipo_servicio.value if hasattr(agendamiento.tipo_servicio, "value") else str(agendamiento.tipo_servicio)
-    parametros = {"tipo": tipo}
-    if getattr(agendamiento, "subtipo", None):
-        parametros["subtipo"] = "local" if agendamiento.subtipo == "taller" else agendamiento.subtipo
-    if tipo == "especializado" and getattr(agendamiento, "duracion_horas", None):
-        parametros["duracion_horas"] = agendamiento.duracion_horas
-    enlace_reagendar = f"{BASE_URL}/cliente/agendar_web?{urllib.parse.urlencode(parametros)}"
-    detalle_motivo = f" Motivo informado: {motivo}." if motivo else ""
+    enlace_reagendar = f"{BASE_URL}/cliente/{agendamiento.tenant_id}/agendar_web"
+    detalle_motivo = f" Motivo informado: {html.escape(motivo)}." if motivo else ""
     asunto = f"Actualización importante sobre tu cita del {agendamiento.fecha_inicio.strftime('%d/%m')}"
     contenido_html = f"""
     <html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">

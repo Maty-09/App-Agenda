@@ -11,6 +11,12 @@ import requests
 API_URL = "https://api.mercadopago.com"
 
 
+def _webhook_url() -> str:
+    """URL pública a la que Mercado Pago confirma altas y bajas de suscripción."""
+    base_url = (os.getenv("MERCADOPAGO_WEBHOOK_URL") or os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl")).rstrip("/")
+    return f"{base_url}/api/v1/suscripcion/mercadopago/webhook"
+
+
 def _access_token() -> str:
     token = os.getenv("MERCADOPAGO_ACCESS_TOKEN", "").strip()
     if not token:
@@ -28,6 +34,7 @@ def crear_suscripcion_mensual(tenant_id: str, payer_email: str, back_url: str) -
             "external_reference": tenant_id,
             "payer_email": payer_email,
             "back_url": back_url,
+            "notification_url": _webhook_url(),
             "auto_recurring": {
                 "frequency": 1,
                 "frequency_type": "months",

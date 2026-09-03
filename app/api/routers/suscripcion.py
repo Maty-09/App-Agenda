@@ -85,7 +85,9 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(deps.get_d
     """Sincroniza las altas y bajas que Mercado Pago confirma mediante webhook."""
     payload = await request.json()
     data = payload.get("data") or {}
-    preapproval_id = str(data.get("id") or "")
+    # Mercado Pago firma el identificador enviado como query param `data.id`.
+    # Conservamos el fallback al cuerpo para simulaciones y reintentos compatibles.
+    preapproval_id = str(request.query_params.get("data.id") or data.get("id") or "")
     if not mercadopago_utils.firma_webhook_valida(
         signature=request.headers.get("x-signature"),
         request_id=request.headers.get("x-request-id"),

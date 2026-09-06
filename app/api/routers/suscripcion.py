@@ -109,10 +109,19 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(deps.get_d
     if not tenant:
         return {"status": "unknown_tenant"}
 
-    primera_activacion = tenant.estado_suscripcion != "activa" and subscription.get("status") == "authorized"
+    subscription_status = subscription.get("status")
+    primera_activacion = tenant.estado_suscripcion != "activa" and subscription_status == "authorized"
     tenant.mercado_pago_preapproval_id = preapproval_id
-    tenant.plan_actual = "Norem Mensual"
-    tenant.estado_suscripcion = "activa" if subscription.get("status") == "authorized" else "cancelada"
+    # Una preaprobación pendiente es normal mientras el cliente termina el
+    # checkout. No debe cancelar una prueba ni una suscripción ya activa.
+    if subscription_status == "authorized":
+        tenant.plan_actual = "Norem Mensual"
+        tenant.estado_suscripcion = "activa"
+    elif subscription_status in {"cancelled", "paused", "expired"}:
+        tenant.estado_suscripcion = "cancelada"
+    else:
+        db.commit()
+        return {"status": "pending", "mercado_pago_status": subscription_status}
     db.commit()
     if primera_activacion:
         usuario = db.query(models.Usuario).filter(models.Usuario.tenant_id == tenant.id, models.Usuario.rol == "admin").first()

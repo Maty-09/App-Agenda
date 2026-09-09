@@ -679,6 +679,62 @@
     </script>
     {% endif %}
     
+    <!-- Asistente de soporte Norem: guía segura, sin ejecutar cambios en la cuenta. -->
+    <div id="support-chat-window" class="fixed bottom-24 right-5 z-50 flex h-[32rem] w-[calc(100vw-2.5rem)] max-w-sm translate-y-4 flex-col overflow-hidden rounded-2xl border border-blue-100 bg-white opacity-0 shadow-2xl shadow-blue-950/20 pointer-events-none transition-all duration-300">
+        <div class="flex items-center justify-between bg-gradient-to-r from-blue-700 to-blue-950 p-4 text-white">
+            <div class="flex items-center gap-3"><div class="grid h-9 w-9 place-items-center rounded-xl bg-white text-lg font-black text-blue-700">N</div><div><h4 class="text-sm font-extrabold">Asistente Norem</h4><p class="text-xs text-blue-100">Soporte y guía de uso</p></div></div>
+            <button type="button" onclick="toggleSupportChat()" class="text-blue-100 hover:text-white" aria-label="Cerrar asistencia"><i class="fas fa-times"></i></button>
+        </div>
+        <div id="support-chat-history" class="flex flex-1 flex-col gap-3 overflow-y-auto bg-slate-50 p-4 text-sm">
+            <div class="max-w-[88%] self-start rounded-2xl rounded-tl-none border border-slate-200 bg-white p-3 leading-6 text-slate-700 shadow-sm">Hola, soy el asistente de Norem. Puedo orientarte sobre agenda, clientes, tareas, configuración, correos e integración web. ¿Qué necesitas hacer?</div>
+        </div>
+        <form id="support-chat-form" class="flex gap-2 border-t border-slate-100 bg-white p-3">
+            <input id="support-chat-input" maxlength="1200" autocomplete="off" class="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="Escribe tu consulta…">
+            <button type="submit" class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-700 text-white hover:bg-blue-800" aria-label="Enviar consulta"><i class="fas fa-paper-plane text-xs"></i></button>
+        </form>
+    </div>
+    <button type="button" onclick="toggleSupportChat()" class="fixed bottom-6 right-5 z-40 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-blue-600 to-blue-800 text-xl text-white shadow-xl shadow-blue-700/30 transition hover:scale-105" aria-label="Abrir asistente Norem" title="¿Necesitas ayuda?"><i class="fas fa-comment-dots"></i></button>
+    <script>
+        function toggleSupportChat() {
+            const chat = document.getElementById('support-chat-window');
+            const closed = chat.classList.contains('opacity-0');
+            chat.classList.toggle('opacity-0', !closed);
+            chat.classList.toggle('translate-y-4', !closed);
+            chat.classList.toggle('pointer-events-none', !closed);
+            if (closed) document.getElementById('support-chat-input').focus();
+        }
+        function supportBubble(text, mine) {
+            const bubble = document.createElement('div');
+            bubble.className = mine
+                ? 'max-w-[88%] self-end rounded-2xl rounded-tr-none bg-blue-700 p-3 leading-6 text-white shadow-sm'
+                : 'max-w-[88%] self-start rounded-2xl rounded-tl-none border border-slate-200 bg-white p-3 leading-6 text-slate-700 shadow-sm';
+            bubble.textContent = text;
+            document.getElementById('support-chat-history').appendChild(bubble);
+            document.getElementById('support-chat-history').scrollTop = document.getElementById('support-chat-history').scrollHeight;
+            return bubble;
+        }
+        document.getElementById('support-chat-form').addEventListener('submit', async function (event) {
+            event.preventDefault();
+            const input = document.getElementById('support-chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+            supportBubble(message, true);
+            input.value = '';
+            const waiting = supportBubble('Un momento, estoy revisando cómo orientarte…', false);
+            try {
+                const data = new FormData();
+                data.append('mensaje', message);
+                const response = await fetch('/api/v1/support/chat', { method: 'POST', body: data });
+                const result = await response.json();
+                waiting.remove();
+                supportBubble(response.ok ? result.reply : (result.detail || 'No pude procesar tu consulta. Inténtalo nuevamente.'), false);
+            } catch (_) {
+                waiting.remove();
+                supportBubble('No pude conectarme en este momento. Inténtalo nuevamente en unos minutos.', false);
+            }
+        });
+    </script>
+
     <!-- Chart Configuration Script -->
     <script>
         document.addEventListener("DOMContentLoaded", function () {

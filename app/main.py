@@ -30,7 +30,7 @@ from app.infrastructure.webhook import router as webhook_router
 from app.infrastructure.confirmation import router as confirmation_router
 
 # Autenticación JWT API
-from app.api.routers import auth, tareas, dashboard, suscripcion, notificaciones, public_agenda, public_booking
+from app.api.routers import auth, tareas, dashboard, suscripcion, notificaciones, public_agenda, public_booking, support
 
 # Configuración de logs
 logging.basicConfig(level=logging.INFO)
@@ -218,6 +218,7 @@ app.include_router(notificaciones.router, prefix="/api/v1", tags=["Notificacione
 app.include_router(public_agenda.router, prefix="/api/v1/public", tags=["Agenda pública"])
 app.include_router(public_booking.public_router, prefix="/api/public/v1", tags=["API pública"])
 app.include_router(public_booking.admin_router, prefix="/api/v1/public-api", tags=["Configuración API pública"])
+app.include_router(support.router, prefix="/api/v1/support", tags=["Asistente de soporte"])
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 

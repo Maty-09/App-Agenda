@@ -207,8 +207,10 @@ def enviar_suscripcion_activada(destinatario: str, nombre: str) -> bool:
 
 
 def enviar_prueba_vencida(destinatario: str, nombre: str) -> bool:
-    enlace = f"{BASE_URL}/admin/suscripcion"
-    return enviar_email_base(destinatario, "Tu prueba de Norem finalizó", f"<h2>Hola {nombre}, tu prueba de 14 días finalizó.</h2><p>Tu información está resguardada. Activa tu suscripción para continuar usando Norem.</p><p><a href='{enlace}'>Continuar con Norem</a></p>")
+    # El correo se abre habitualmente sin la cookie de Norem. Primero se pide
+    # inicio de sesión y se conserva el destino de suscripción de forma segura.
+    enlace = f"{BASE_URL}/admin/login?next=/admin/suscripcion&trial_finished=1"
+    return enviar_email_base(destinatario, "Tu prueba de Norem finalizó", f"<h2>Hola {nombre}, tu prueba de 14 días finalizó.</h2><p>Tu información está resguardada. Inicia sesión para activar tu suscripción y continuar usando Norem.</p><p><a href='{enlace}'>Iniciar sesión y continuar</a></p>")
 
 def generar_url_mapa(direccion):
     if not direccion or not direccion.strip():

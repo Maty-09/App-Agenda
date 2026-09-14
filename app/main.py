@@ -58,6 +58,17 @@ async def bloquear_prueba_vencida(request: Request, call_next):
     """Mantiene disponible el acceso a suscripción cuando una prueba termina."""
     path = request.url.path
     rutas_permitidas = {"/admin/login", "/admin/logout", "/admin/forgot-password", "/admin/reset-password", "/admin/prueba", "/admin/suscripcion", "/admin/suscripcion/checkout", "/admin/configuracion-inicial", "/admin/onboarding", "/admin/onboarding/finalizar"}
+    # Un enlace de suscripción puede venir desde un correo abierto en otro
+    # navegador o dispositivo, sin la cookie de sesión. Redirigir al login
+    # evita devolver el JSON técnico "No autenticado" a un cliente.
+    if path == "/admin/suscripcion":
+        token = request.cookies.get("access_token", "")
+        if not token.startswith("Bearer "):
+            return RedirectResponse(url="/admin/login?next=/admin/suscripcion", status_code=303)
+        try:
+            jwt.decode(token.split(" ", 1)[1], SECRET_KEY, algorithms=[ALGORITHM])
+        except JWTError:
+            return RedirectResponse(url="/admin/login?next=/admin/suscripcion", status_code=303)
     if path.startswith("/admin") and path not in rutas_permitidas:
         token = request.cookies.get("access_token", "")
         if token.startswith("Bearer "):

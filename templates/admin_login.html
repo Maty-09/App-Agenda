@@ -67,8 +67,15 @@
                 <p class="text-sm font-medium text-emerald-700">Tu contraseña fue actualizada. Ya puedes iniciar sesión.</p>
             </div>
             {% endif %}
+            {% if request.query_params.get('trial_finished') %}
+            <div class="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-3">
+                <i class="fas fa-circle-info text-blue-600 mt-0.5"></i>
+                <p class="text-sm font-medium text-blue-800">Tu prueba finalizó. Inicia sesión para activar tu suscripción y volver a tu operación.</p>
+            </div>
+            {% endif %}
 
             <form method="post" action="/admin/login" class="space-y-5">
+                <input type="hidden" name="next_url" value="{{ next_url or '' }}">
                 <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Usuario / Correo</label>
                     <div class="relative">

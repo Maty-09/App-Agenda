@@ -80,25 +80,44 @@ def verificar_superadmin(cred: CurrentUser) -> None:
 #     LOGIN / LOGOUT
 # =============================
 
+def _destino_post_login(destino: Optional[str]) -> Optional[str]:
+    """Evita redirecciones externas desde enlaces enviados por correo."""
+    if destino == "/admin/suscripcion":
+        return destino
+    return None
+
+
 @router.get("/login", response_class=HTMLResponse)
-def login_form(request: Request):
-    return templates.TemplateResponse("admin_login.html", {"request": request})
+def login_form(request: Request, next: Optional[str] = Query(None)):
+    return templates.TemplateResponse("admin_login.html", {
+        "request": request,
+        "next_url": _destino_post_login(next),
+    })
 
 @router.post("/login")
-def login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    next_url: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    destino_solicitado = _destino_post_login(next_url)
     usuario = db.query(models.Usuario).filter(models.Usuario.email == username).first()
 
     if not usuario or not security.verify_password(password, usuario.password_hash):
         return templates.TemplateResponse("admin_login.html", {
             "request": request,
-            "error": "Correo o contraseÃ±a incorrectos"
+            "error": "Correo o contraseña incorrectos",
+            "next_url": destino_solicitado,
         })
 
     tenant = db.query(models.Tenant).filter(models.Tenant.id == usuario.tenant_id).first()
     if not tenant or tenant.estado_suscripcion == "cancelada":
         return templates.TemplateResponse("admin_login.html", {
             "request": request,
-            "error": "Esta cuenta está desactivada. Contacta a Norem para reactivarla."
+            "error": "Esta cuenta está desactivada. Contacta a Norem para reactivarla.",
+            "next_url": destino_solicitado,
         }, status_code=403)
 
     usuario.ultima_conexion = models.get_now_chile()
@@ -116,7 +135,9 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
 
     tenant = db.query(models.Tenant).filter(models.Tenant.id == usuario.tenant_id).first()
     config_inicio = _leer_config_tenant(tenant) if tenant else {}
-    if config_inicio.get("onboarding_requerido") or not config_inicio.get("configuracion_inicial_completa", True):
+    if destino_solicitado:
+        destino = destino_solicitado
+    elif config_inicio.get("onboarding_requerido") or not config_inicio.get("configuracion_inicial_completa", True):
         destino = "/admin/configuracion-inicial"
     elif not config_inicio.get("onboarding_completo", True):
         destino = "/admin/onboarding"

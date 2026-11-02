@@ -3,6 +3,10 @@
   "version": 2,
   "builds": [
     {
+      "src": "app/static/norem-logo.png",
+      "use": "@vercel/static"
+    },
+    {
       "src": "app/main.py",
       "use": "@vercel/python",
       "config": {
@@ -11,6 +15,10 @@
     }
   ],
   "routes": [
+    {
+      "src": "^/static/norem-logo\\.png$",
+      "dest": "/app/static/norem-logo.png"
+    },
     {
       "src": "/(.*)",
       "dest": "app/main.py"

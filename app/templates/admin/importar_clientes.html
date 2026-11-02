@@ -1,0 +1,63 @@
+{% extends "base_admin.html" %}
+{% block title %}Importar clientes | Norem{% endblock %}
+{% block content %}
+<main class="mx-auto max-w-5xl space-y-6">
+    <a href="/admin/clientes" class="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-900"><i class="fas fa-arrow-left"></i> Volver a clientes</a>
+    <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+        <div class="flex items-start gap-4">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><i class="fas fa-file-import text-xl"></i></div>
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[.18em] text-blue-700">Migración de datos</p>
+                <h1 class="mt-1 text-2xl font-extrabold text-slate-900">Importa tu base de clientes</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Sube un CSV o Excel exportado desde AgendaPro u otro sistema. Primero revisaremos los datos; no se guarda nada hasta que confirmes.</p>
+            </div>
+        </div>
+
+        {% if error %}<div role="alert" class="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800"><i class="fas fa-circle-exclamation mr-2"></i>{{ error }}</div>{% endif %}
+
+        {% if result %}
+        <div role="status" class="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900">
+            <h2 class="font-bold">Importación terminada</h2>
+            <p class="mt-2 text-sm">{{ result.imported }} clientes agregados · {{ result.skipped }} duplicados omitidos · {{ result.invalid }} filas inválidas omitidas.</p>
+            <a href="/admin/clientes" class="mt-4 inline-flex rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-800">Ver directorio</a>
+        </div>
+        {% else %}
+        {% if preview %}
+        <div class="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+            <p class="font-bold"><i class="fas fa-magnifying-glass mr-2"></i>Vista previa: {{ preview.rows|length }} filas válidas en “{{ preview.filename }}”</p>
+            <p class="mt-1">Al confirmar, se agregarán solo clientes nuevos. Los existentes se detectan por RUT o correo y no se sobrescriben.</p>
+            {% if preview.errors %}<p class="mt-2">{{ preview.invalid_count }} filas con problemas (se omitirán). Detalle: {{ preview.errors|join(' · ') }}</p>{% endif %}
+        </div>
+        <div class="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="p-3">Nombre</th><th class="p-3">RUT / ID</th><th class="p-3">Correo</th><th class="p-3">Teléfono</th></tr></thead>
+                <tbody class="divide-y divide-slate-100">{% for row in preview.rows[:8] %}<tr><td class="p-3">{{ row.nombre }} {{ row.apellido }}</td><td class="p-3">{{ row.rut }}</td><td class="p-3">{{ row.correo }}</td><td class="p-3">{{ row.telefono }}</td></tr>{% endfor %}</tbody>
+            </table>
+        </div>
+        <form method="post" action="/admin/clientes/importar/confirmar" enctype="multipart/form-data" class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
+            <input type="hidden" name="preview_token" value="{{ preview.token }}">
+            <label for="confirm-file" class="block text-sm font-bold text-amber-950">Para confirmar, selecciona nuevamente el mismo archivo</label>
+            <p class="mt-1 text-xs text-amber-900">El archivo se procesa temporalmente y no se conserva después de esta solicitud.</p>
+            <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center"><input id="confirm-file" name="archivo" type="file" accept=".csv,.xlsx" required class="block w-full text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-white file:px-4 file:py-2 file:font-semibold file:text-slate-700"><button class="shrink-0 rounded-lg bg-blue-700 px-5 py-3 text-sm font-bold text-white hover:bg-blue-800">Confirmar importación</button></div>
+        </form>
+        {% else %}
+        <form method="post" action="/admin/clientes/importar/vista-previa" enctype="multipart/form-data" class="mt-7 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-6">
+            <label for="client-file" class="block text-sm font-bold text-slate-800">Archivo de clientes (.CSV o .XLSX)</label>
+            <p class="mt-1 text-xs text-slate-500">Máximo 5 MB y 5.000 filas. Debe incluir una columna de nombre y al menos correo o teléfono. Se reconocen encabezados comunes en español e inglés.</p>
+            <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center"><input id="client-file" name="archivo" type="file" accept=".csv,.xlsx" required class="block w-full text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-white file:px-4 file:py-2 file:font-semibold file:text-slate-700"><button class="shrink-0 rounded-lg bg-blue-700 px-5 py-3 text-sm font-bold text-white hover:bg-blue-800"><i class="fas fa-eye mr-2"></i>Revisar archivo</button></div>
+        </form>
+        {% endif %}
+        {% endif %}
+    </section>
+
+    <aside class="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+        <h2 class="font-bold text-slate-900">Antes de importar</h2>
+        <ul class="mt-3 list-inside list-disc space-y-1.5">
+            <li>Exporta los datos desde tu sistema; Norem nunca te pedirá la contraseña de AgendaPro.</li>
+            <li>Los datos se guardan únicamente en la cuenta (tenant) con la que iniciaste sesión.</li>
+            <li>Esta primera versión importa la ficha básica de clientes. No migra reservas, pagos, fichas clínicas ni archivos adjuntos.</li>
+            <li>Los clientes duplicados se omiten y no se modifican los datos existentes.</li>
+        </ul>
+    </aside>
+</main>
+{% endblock %}

@@ -44,8 +44,25 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+
+class PublicApiAwareCORSMiddleware(CORSMiddleware):
+    """Deja que la API pública aplique su allowlist por tenant.
+
+    El CORS global es solo para el frontend local. Si interceptara OPTIONS en
+    /api/public/v1, bloquearía sitios de clientes antes de llegar a la ruta que
+    valida el origen configurado para ese tenant.
+    """
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "")
+        if path == "/api/public/v1" or path.startswith("/api/public/v1/"):
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+
 app.add_middleware(
-    CORSMiddleware,
+    PublicApiAwareCORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], 
     allow_credentials=True,
     allow_methods=["*"],

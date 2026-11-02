@@ -12,6 +12,7 @@ from app.infrastructure.email_utils import (
 )
 from app.core.generar_utm import generar_utm 
 from app.core import models
+from app.core.booking_origin import ORIGEN_AGENDA_WEB, normalizar_origen_web
 from app.infrastructure.notifications import enviar_notificacion
 from sqlalchemy import func
 import json
@@ -110,6 +111,9 @@ def agendar_web(
         except Exception as e:
             mensaje_error = "Error al procesar la fecha."
 
+    embed_mode = request.query_params.get("norem_embed") == "1"
+    embed_site = normalizar_origen_web(request.query_params.get("norem_site")) if embed_mode else None
+
     # 4. RENDER FINAL (Un solo return al final de la función)
     return templates.TemplateResponse("agendar.html", {
         "request": request,
@@ -127,6 +131,8 @@ def agendar_web(
         "nombre_empresa": tenant.nombre_empresa,
         "dias_anticipacion": dias_anticipacion,
         "dias_habiles_config": dias_habiles_config,
+        "embed_mode": embed_mode,
+        "embed_site": embed_site,
         "utm_source": "whatsapp",
         "utm_campaign": f"{tipo}_{subtipo}"
         ,"booking_path": f"/cliente/{tenant_id}/agendar_web" if tenant_id != "default" else "/cliente/agendar_web"
@@ -150,11 +156,16 @@ def dias_habiles_tenant(db: Session, tenant_id: str) -> set:
 @router.post("/{tenant_id}/agendar_web", response_class=HTMLResponse)
 async def recibir_formulario(request: Request, db: Session = Depends(get_db), tenant_id: str = "default"):
     print("\n--- INICIO DE PROCESAMIENTO POST ---")
+    form_data = {}
+    is_web_embed = False
+    embed_site = None
     try:
         if not db.query(models.Tenant.id).filter(models.Tenant.id == tenant_id).first():
             raise HTTPException(status_code=404, detail="Tenant no encontrado")
         form_data = await request.form()
         print(f"Datos recibidos: {dict(form_data)}")
+        is_web_embed = form_data.get("norem_embed") == "1"
+        embed_site = normalizar_origen_web(form_data.get("norem_site")) if is_web_embed else None
         
         tipo_servicio = form_data.get("tipo_servicio")
         subtipo = form_data.get("subtipo")
@@ -195,7 +206,10 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
                     "request": request, "tenant_id": tenant_id,
                     "mensaje_error": "Este día el local se encuentra cerrado. Por favor selecciona otra fecha.",
                     "tipo": tipo_servicio,
-                    "subtipo": subtipo
+                    "subtipo": subtipo,
+                    "embed_mode": is_web_embed,
+                    "embed_site": embed_site,
+                    "booking_path": f"/cliente/{tenant_id}/agendar_web" if tenant_id != "default" else "/cliente/agendar_web",
                 })
         duracion_horas = int(form_data.get("duracion", 2))
         fecha_termino = fecha_cliente + timedelta(hours=duracion_horas)
@@ -353,6 +367,8 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
             fecha_termino=fecha_termino, 
             duracion_horas=duracion_horas,
             nota_interna = nota_interna,
+            utm_source_real=ORIGEN_AGENDA_WEB if is_web_embed else None,
+            utm_link=embed_site,
             estado="pendiente"
         )
         db.add(nueva)
@@ -366,7 +382,8 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
             metadata_json=json.dumps({
                 "agendamiento_id": nueva.id,
                 "fecha": str(nueva.fecha_inicio),
-                "origen": "Web"
+                "origen": ORIGEN_AGENDA_WEB if is_web_embed else "Web",
+                "sitio": embed_site,
             })
         )
         db.add(evento)
@@ -401,7 +418,7 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
             "success": True,
             "horas_disponibles": [],
             "tipo": tipo_servicio,
-            "subtipo": subtipo
+            "subtipo": subtipo,
         })
 
     except Exception as e:
@@ -415,7 +432,10 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
             "mensaje_error": str(e),
             "tipo": form_data.get("tipo_servicio"),
             "subtipo": form_data.get("subtipo"),
-            "fecha_seleccionada": None
+            "fecha_seleccionada": None,
+            "embed_mode": is_web_embed,
+            "embed_site": embed_site,
+            "booking_path": f"/cliente/{tenant_id}/agendar_web" if tenant_id != "default" else "/cliente/agendar_web",
         })
 
 def carga_equipo_en_dia(db: Session, equipo: str, fecha: date) -> int:

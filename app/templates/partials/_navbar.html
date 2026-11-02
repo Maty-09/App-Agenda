@@ -37,10 +37,10 @@
                 {% if current_user %}
                 <span class="hidden sm:block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ current_user.rol }}</span>
                 {% endif %}
-                <button onclick="toggleDarkMode()" type="button" title="Cambiar tema"
+                {% if not disable_theme_toggle|default(false) %}<button onclick="toggleDarkMode()" type="button" title="Cambiar tema"
                    class="theme-toggle-btn w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-amber-400 flex items-center justify-center transition shadow-sm">
                     <i class="fas fa-moon text-sm"></i>
-                </button>
+                </button>{% endif %}
                 <a href="/admin/logout" title="Cerrar sesión"
                    class="w-9 h-9 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 text-slate-500 dark:text-slate-400 flex items-center justify-center transition">
                     <i class="fas fa-arrow-right-from-bracket text-sm"></i>

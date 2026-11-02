@@ -63,7 +63,7 @@ def widget_agenda(tenant_id: str, db: Session = Depends(get_db)):
     script = f'''(function(){{
   var script=document.currentScript, base=new URL(script.src).origin;
   var frame=document.createElement('iframe');
-  frame.src=base+'/cliente/{tenant_id}/agendar_web'; frame.title='Agenda online';
+  frame.src=base+'/cliente/{tenant_id}/agendar_web?norem_embed=1&norem_site='+encodeURIComponent(window.location.origin); frame.title='Agenda online';
   frame.style.cssText='width:100%;min-height:780px;border:0;border-radius:16px;';
   script.parentNode.insertBefore(frame,script.nextSibling);
 }})();'''

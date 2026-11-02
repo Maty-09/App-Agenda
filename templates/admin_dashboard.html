@@ -135,6 +135,20 @@
                 </div>
             </div>
 
+            <!-- Card: Agenda directa desde el sitio integrado -->
+            <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Desde tu página web</span>
+                    <div class="w-7 h-7 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center">
+                        <i class="fas fa-globe text-xs"></i>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-2xl font-black text-sky-600 leading-none mb-1">{{ stats.agendas_desde_web }}</h3>
+                    <p class="text-[10px] text-slate-400">Reservas por la agenda integrada</p>
+                </div>
+            </div>
+
             <!-- Card: Confirmados -->
             <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm card-glow flex flex-col justify-between">
                 <div class="flex items-center justify-between mb-3">
@@ -200,6 +214,37 @@
                 </div>
             </div>
 
+        </section>
+
+        <!-- Reservas atribuidas a la agenda embebida/API usada desde el sitio del tenant -->
+        <section class="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm mb-8">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                        <i class="fas fa-globe text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-900">Agenda directa desde tu web</h3>
+                        <p class="text-xs text-slate-500">Reservas generadas por la integración de Norem</p>
+                    </div>
+                </div>
+                <span class="px-3 py-1.5 rounded-full bg-sky-50 text-sky-700 text-xs font-bold">{{ stats.agendas_desde_web }} en el período seleccionado</span>
+            </div>
+            <div class="divide-y divide-slate-100">
+                {% for cita in listas.web_directas %}
+                <div class="py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                        <p class="text-sm font-bold text-slate-800">{{ cita.nombre }} {{ cita.apellido }}</p>
+                        <p class="text-xs text-slate-500">{{ cita.fecha_inicio.strftime('%d-%m-%Y %H:%M') if cita.fecha_inicio else 'Sin fecha' }} · {{ cita.estado|capitalize }}</p>
+                    </div>
+                    <span class="text-xs text-sky-700 bg-sky-50 rounded-lg px-2.5 py-1.5 self-start sm:self-auto">
+                        <i class="fas fa-globe mr-1"></i>{{ cita.utm_link or 'Sitio web integrado' }}
+                    </span>
+                </div>
+                {% else %}
+                <p class="text-sm text-slate-400 py-3">Aún no hay reservas registradas desde la integración web.</p>
+                {% endfor %}
+            </div>
         </section>
 
         <!-- Top 10 Tareas Urgentes (Fase 3: Prominencia) -->

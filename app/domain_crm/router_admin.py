@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, Request, HTTPException, Query, Form, Body
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, text, or_
 from app.core.database import SessionLocal
 from app.core import models, schemas, mercadopago_utils
+from app.core.booking_origin import ORIGEN_AGENDA_WEB
 from typing import List, Optional, Tuple
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 import json
@@ -82,16 +83,17 @@ def verificar_superadmin(cred: CurrentUser) -> None:
 
 def _destino_post_login(destino: Optional[str]) -> Optional[str]:
     """Evita redirecciones externas desde enlaces enviados por correo."""
-    if destino == "/admin/suscripcion":
+    if destino in {"/admin/suscripcion", "/admin/api-publica"}:
         return destino
     return None
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_form(request: Request, next: Optional[str] = Query(None)):
+def login_form(request: Request, next: Optional[str] = Query(None), next_url: Optional[str] = Query(None)):
+    destino = _destino_post_login(next_url) or _destino_post_login(next)
     return templates.TemplateResponse("admin_login.html", {
         "request": request,
-        "next_url": _destino_post_login(next),
+        "next_url": destino,
     })
 
 @router.post("/login")
@@ -1354,6 +1356,15 @@ def get_dashboard(
         models.Tarea.fecha_limite < ahora.replace(tzinfo=None), 
         models.Tarea.estado.notin_(["Completada", "Cancelada"])
     ).count()
+
+    filtro_agenda_web = or_(
+        models.Agendamiento.utm_source_real == ORIGEN_AGENDA_WEB,
+        models.Agendamiento.nota_interna == "Reserva creada desde API pública",
+    )
+    agendas_desde_web = query.filter(filtro_agenda_web).count()
+    lista_agendas_web = query.filter(
+        filtro_agenda_web
+    ).order_by(models.Agendamiento.fecha_inicio.desc()).limit(10).all()
     
     # Capacidad Futura (Mejora 7)
     CAPACIDAD_DIARIA = 8
@@ -1488,9 +1499,9 @@ def get_dashboard(
     
     # Datos mensuales para ver tendencia (Ajustado para PostgreSQL)
     tendencia_raw = query.with_entities(
-        func.to_char(models.Agendamiento.fecha_inicio, 'YYYY-MM'),
+        func.to_char(models.Agendamiento.fecha_inicio, 'YYYY-MM').label("mes"),
         func.count(models.Agendamiento.id)
-    ).group_by(func.to_char(models.Agendamiento.fecha_inicio, 'YYYY-MM')).order_by(func.to_char(models.Agendamiento.fecha_inicio, 'YYYY-MM').asc()).all()
+    ).group_by(text("1")).order_by(text("1")).all()
     
     tendencia_labels = [str(mes) for mes, _ in tendencia_raw if mes]
     tendencia_valores = [count for _, count in tendencia_raw if count]
@@ -1529,6 +1540,7 @@ def get_dashboard(
         "agendas_mes": agendas_mes,
         "tareas_activas": tareas_activas,
         "tareas_vencidas": tareas_vencidas,
+        "agendas_desde_web": agendas_desde_web,
         "capacidad": capacidad,
         "horizonte_reservas": horizonte_reservas,
         "disponibilidad_semana": disponibilidad_semana,
@@ -1551,7 +1563,8 @@ def get_dashboard(
         "confirmadas": lista_confirmadas,
         "pendientes": lista_pendientes,
         "canceladas": lista_canceladas,
-        "top_tareas": top_tareas
+        "top_tareas": top_tareas,
+        "web_directas": lista_agendas_web,
     }
 
     return templates.TemplateResponse(
@@ -1575,6 +1588,31 @@ def listar_tenants(request: Request, db: Session = Depends(get_db), cred: Curren
     tenants_data = []
     for t in tenants_raw:
         admin_user = db.query(models.Usuario).filter(models.Usuario.tenant_id == t.id, models.Usuario.rol == "admin").first()
+        try:
+            tenant_config = json.loads(t.config_json or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            tenant_config = {}
+        public_api = tenant_config.get("public_api", {})
+        if not isinstance(public_api, dict):
+            public_api = {}
+        allowed_origins = public_api.get("allowed_origins", [])
+        if not isinstance(allowed_origins, list):
+            allowed_origins = []
+        allowed_origins = [str(origin).strip() for origin in allowed_origins if str(origin).strip()]
+        api_configurada = bool(public_api.get("enabled") and allowed_origins)
+        integracion_query = db.query(models.Agendamiento).filter(
+            models.Agendamiento.tenant_id == t.id,
+            models.Agendamiento.utm_source_real.in_([ORIGEN_AGENDA_WEB, "API pública"]),
+        )
+        reservas_api = integracion_query.count()
+        if not allowed_origins and reservas_api:
+            allowed_origins = [origin for (origin,) in db.query(
+                models.Agendamiento.utm_link
+            ).filter(
+                models.Agendamiento.tenant_id == t.id,
+                models.Agendamiento.utm_source_real.in_([ORIGEN_AGENDA_WEB, "API pública"]),
+                models.Agendamiento.utm_link.isnot(None),
+            ).distinct().limit(5).all() if origin]
         tenants_data.append({
             "id": t.id,
             "nombre_empresa": t.nombre_empresa,
@@ -1589,12 +1627,17 @@ def listar_tenants(request: Request, db: Session = Depends(get_db), cred: Curren
                 and admin_user.ultima_conexion
                 and admin_user.ultima_conexion >= limite_sesion
             ),
+            "api_configurada": api_configurada,
+            "api_en_uso": reservas_api > 0,
+            "api_origenes": allowed_origins,
+            "reservas_api": reservas_api,
         })
     
     return templates.TemplateResponse("admin_tenants.html", {
         "request": request,
         "tenants": tenants_data,
-        "current_user": cred
+        "current_user": cred,
+        "disable_theme_toggle": True,
     })
 
 

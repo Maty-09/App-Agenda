@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core import models
+from app.core.booking_origin import ORIGEN_AGENDA_WEB, normalizar_origen_web
 from app.domain_agenda.router_cliente import Recursos, obtener_horas_disponibles
 
 public_router = APIRouter()
@@ -281,6 +282,7 @@ def create_public_booking(
 ):
     tenant = _get_tenant_or_404(db, tenant_id)
     _, headers = _validate_public_access(request, tenant)
+    site_origin = normalizar_origen_web(request.headers.get("origin"))
     _enforce_booking_rate_limit(request, tenant_id)
 
     if payload.tipo_servicio not in Recursos:
@@ -354,6 +356,8 @@ def create_public_booking(
         duracion_horas=max(1, math.ceil(minutos / 60)),
         estado="pendiente",
         nota_interna="Reserva creada desde API pública",
+        utm_source_real=ORIGEN_AGENDA_WEB if site_origin else "API pública",
+        utm_link=site_origin,
     )
     db.add(booking)
     db.flush()
@@ -361,7 +365,11 @@ def create_public_booking(
         tenant_id=tenant_id,
         cliente_id=client.id,
         tipo_evento="RESERVA",
-        metadata_json=json.dumps({"agendamiento_id": booking.id, "origen": "API pública"}),
+        metadata_json=json.dumps({
+            "agendamiento_id": booking.id,
+            "origen": ORIGEN_AGENDA_WEB if site_origin else "API pública",
+            "sitio": site_origin,
+        }),
     ))
     db.commit()
     db.refresh(booking)

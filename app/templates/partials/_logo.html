@@ -3,9 +3,7 @@
 {% set text_color = 'text-white' if variant == 'dark' else 'text-slate-900' %}
 {% if size == 'sm' %}
 <div class="flex items-center gap-2.5" aria-label="Norem">
-    <span class="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-[#0b55c5] to-[#07347d] text-lg font-black italic text-white shadow-md shadow-blue-700/20 shrink-0 ring-1 ring-blue-400/30" aria-hidden="true">
-        N
-    </span>
+    <img src="/static/norem-logo.png" alt="" class="h-9 w-9 shrink-0 rounded-xl object-contain shadow-sm ring-1 ring-slate-200">
     <span class="{{ text_sizes[size] }} font-extrabold {{ text_color }} tracking-[-0.03em]">Norem</span>
 </div>
 {% else %}

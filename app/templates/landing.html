@@ -56,6 +56,21 @@
             .demo-glow { animation-duration: 7s; animation-iteration-count: 2; }
             .demo-toast { animation-duration: 8s; animation-iteration-count: 2; }
         }
+        @keyframes integration-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+        @keyframes integration-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, .35); } 50% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); } }
+        @keyframes integration-arrive { 0%, 14% { opacity: 0; transform: translateY(12px) scale(.96); } 28%, 82% { opacity: 1; transform: translateY(0) scale(1); } 96%, 100% { opacity: 0; transform: translateY(-8px) scale(.98); } }
+        .integration-float { animation: integration-float 5s ease-in-out infinite; }
+        .integration-pulse { animation: integration-pulse 2.2s ease-out infinite; }
+        .integration-arrive { animation: integration-arrive 6s ease-in-out infinite; }
+        .feature-option { transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease, transform .2s ease; }
+        .feature-option:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(15, 45, 95, .08); }
+        .feature-option[aria-pressed="true"] { border-color: #bfdbfe; background-color: #eff6ff; box-shadow: inset 0 0 0 1px #dbeafe; }
+        .feature-option[aria-pressed="true"] .feature-index { color: #0d51be; }
+        .feature-option[aria-pressed="true"] .feature-icon { background-color: #fff; box-shadow: 0 1px 3px rgba(15, 45, 95, .12); }
+        .feature-detail-enter { animation: feature-detail-enter .28s ease both; }
+        @keyframes feature-detail-enter { from { opacity: .35; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+        @media (prefers-reduced-motion: reduce) { .integration-float, .integration-pulse, .integration-arrive { animation: none !important; } }
+        @media (prefers-reduced-motion: reduce) { .feature-option, .feature-option:hover { transition: none; transform: none; } .feature-detail-enter { animation: none; } }
     </style>
 </head>
 <body class="bg-white font-sans text-slate-800 antialiased">
@@ -69,6 +84,7 @@
                 <a href="#como-funciona" class="transition hover:text-norem-600">Cómo funciona</a>
                 <a href="#herramientas" class="transition hover:text-norem-600">Herramientas</a>
                 <a href="#para-ti" class="transition hover:text-norem-600">Para quién es</a>
+                <a href="#integracion-web" class="transition hover:text-norem-600">Integra tu web</a>
                 <a href="#precios" class="transition hover:text-norem-600">Precios</a>
             </nav>
             <div class="flex items-center gap-2"><a href="https://agenda.norem.cl/admin/login" class="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 hover:text-norem-700">Acceder</a><a href="https://agenda.norem.cl/admin/prueba" class="rounded-xl bg-norem-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-norem-700 focus:outline-none focus:ring-4 focus:ring-blue-100">Probar gratis</a></div>
@@ -139,28 +155,88 @@
             </div>
         </section>
 
-        <section class="border-y border-slate-100 bg-white py-20 sm:py-24">
+        <section class="border-y border-blue-100 bg-blue-50/50 py-20 sm:py-24" aria-labelledby="comparacion-title">
             <div class="mx-auto max-w-7xl px-5 sm:px-8">
-                <div class="grid gap-12 lg:grid-cols-[.8fr_1.2fr] lg:items-start">
-                    <div><p class="text-sm font-bold uppercase tracking-[.18em] text-norem-600">El recorrido completo</p><h2 class="mt-3 font-display text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">Desde el primer contacto hasta la próxima atención.</h2><p class="mt-5 leading-8 text-slate-600">Una experiencia pensada para negocios de servicios que necesitan responder rápido, trabajar coordinados y mantener a sus clientes informados.</p></div>
-                    <ol class="grid gap-4 sm:grid-cols-2">
-                        <li class="flex gap-4 rounded-2xl border border-slate-100 p-5"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-norem-600 text-sm font-bold text-white">1</span><div><h3 class="font-bold text-slate-900">Formulario a medida</h3><p class="mt-1 text-sm leading-6 text-slate-600">Configura los datos que necesitas solicitar al momento de agendar.</p></div></li>
-                        <li class="flex gap-4 rounded-2xl border border-slate-100 p-5"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-norem-600 text-sm font-bold text-white">2</span><div><h3 class="font-bold text-slate-900">Horarios disponibles</h3><p class="mt-1 text-sm leading-6 text-slate-600">Evita cruces mostrando solo las alternativas que realmente puedes atender.</p></div></li>
-                        <li class="flex gap-4 rounded-2xl border border-slate-100 p-5"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-norem-600 text-sm font-bold text-white">3</span><div><h3 class="font-bold text-slate-900">Confirmaciones y recordatorios</h3><p class="mt-1 text-sm leading-6 text-slate-600">Acompaña cada reserva con confirmaciones y seguimiento oportuno.</p></div></li>
-                        <li class="flex gap-4 rounded-2xl border border-slate-100 p-5"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-norem-600 text-sm font-bold text-white">4</span><div><h3 class="font-bold text-slate-900">Historial y próximas acciones</h3><p class="mt-1 text-sm leading-6 text-slate-600">Consulta la ficha de cada cliente, agrega notas y convierte pendientes en tareas.</p></div></li>
-                    </ol>
+                <div class="mx-auto max-w-3xl text-center"><p class="text-sm font-bold uppercase tracking-[.18em] text-norem-600">La diferencia en el día a día</p><h2 id="comparacion-title" class="mt-3 font-display text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">De coordinar todo a mano a tener tu operación a la vista.</h2><p class="mt-4 leading-7 text-slate-600">Norem reúne reservas, clientes y tareas para que sepas qué está pasando y cuál es el siguiente paso.</p></div>
+                <div class="mt-10 grid items-stretch gap-3 md:grid-cols-[1fr_auto_1fr] md:gap-0" aria-label="Comparación entre trabajar sin Norem y trabajar con Norem">
+                    <article class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+                        <div class="flex items-center justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-[.16em] text-slate-500">Sin Norem</p><h3 class="mt-2 text-xl font-extrabold text-slate-900">Todo por separado</h3></div><span class="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-xl text-slate-500" aria-hidden="true">–</span></div>
+                        <ul class="mt-6 space-y-4">
+                            <li class="flex gap-3"><span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-100 text-sm font-bold text-slate-500" aria-hidden="true">–</span><span><strong class="block text-sm text-slate-800">Reservas dispersas</strong><span class="mt-0.5 block text-sm leading-5 text-slate-500">Mensajes, llamadas y cambios en distintos lugares.</span></span></li>
+                            <li class="flex gap-3"><span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-100 text-sm font-bold text-slate-500" aria-hidden="true">–</span><span><strong class="block text-sm text-slate-800">Datos difíciles de encontrar</strong><span class="mt-0.5 block text-sm leading-5 text-slate-500">Notas e historial repartidos entre conversaciones.</span></span></li>
+                            <li class="flex gap-3"><span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-100 text-sm font-bold text-slate-500" aria-hidden="true">–</span><span><strong class="block text-sm text-slate-800">Pendientes de memoria</strong><span class="mt-0.5 block text-sm leading-5 text-slate-500">El equipo debe recordar qué hacer y cuándo.</span></span></li>
+                            <li class="flex gap-3"><span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-100 text-sm font-bold text-slate-500" aria-hidden="true">–</span><span><strong class="block text-sm text-slate-800">Poca visibilidad del día</strong><span class="mt-0.5 block text-sm leading-5 text-slate-500">Cuesta tener una vista común de lo que sigue.</span></span></li>
+                        </ul>
+                    </article>
+                    <div class="z-10 grid h-10 w-10 place-items-center justify-self-center rounded-full border border-blue-100 bg-white text-xs font-extrabold text-norem-600 shadow-sm md:my-auto">VS</div>
+                    <article class="rounded-3xl border border-blue-200 bg-white p-6 shadow-lg shadow-blue-950/5 sm:p-8">
+                        <div class="flex items-center justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-[.16em] text-norem-600">Con Norem</p><h3 class="mt-2 text-xl font-extrabold text-slate-950">Todo conectado</h3></div><span class="grid h-11 w-11 place-items-center rounded-xl bg-blue-100 text-xl text-norem-700" aria-hidden="true">✓</span></div>
+                        <ul class="mt-6 space-y-4">
+                            <li class="flex gap-3"><span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-norem-700" aria-hidden="true">✓</span><span><strong class="block text-sm text-slate-900">Reservas en una agenda</strong><span class="mt-0.5 block text-sm leading-5 text-slate-600">Disponibilidad y atenciones centralizadas.</span></span></li>
+                            <li class="flex gap-3"><span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-norem-700" aria-hidden="true">✓</span><span><strong class="block text-sm text-slate-900">Ficha para cada cliente</strong><span class="mt-0.5 block text-sm leading-5 text-slate-600">Datos, notas e historial en un mismo lugar.</span></span></li>
+                            <li class="flex gap-3"><span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-norem-700" aria-hidden="true">✓</span><span><strong class="block text-sm text-slate-900">Tareas con seguimiento</strong><span class="mt-0.5 block text-sm leading-5 text-slate-600">Pendientes asignados y estados visibles.</span></span></li>
+                            <li class="flex gap-3"><span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-norem-700" aria-hidden="true">✓</span><span><strong class="block text-sm text-slate-900">Una visión compartida</strong><span class="mt-0.5 block text-sm leading-5 text-slate-600">Agenda y actividad para decidir qué sigue.</span></span></li>
+                        </ul>
+                    </article>
                 </div>
             </div>
         </section>
 
         <section id="herramientas" class="py-20 sm:py-28">
-            <div class="mx-auto grid max-w-7xl gap-12 px-5 sm:px-8 lg:grid-cols-[.85fr_1.15fr] lg:items-center">
-                <div><p class="text-sm font-bold uppercase tracking-[.18em] text-norem-600">Una plataforma</p><h2 class="mt-3 font-display text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">Las herramientas que tu operación necesita, en un mismo lugar.</h2><p class="mt-5 max-w-xl leading-8 text-slate-600">Norem conecta la información esencial de tu negocio para que puedas tomar decisiones y responder rápido.</p><a href="https://agenda.norem.cl/admin/login" class="mt-8 inline-flex font-bold text-norem-600 transition hover:text-norem-700">Acceder a la plataforma <span class="ml-2">→</span></a></div>
-                <div class="grid gap-4 sm:grid-cols-2">
-                    <div class="rounded-2xl border border-blue-100 bg-blue-50 p-6"><div class="text-2xl">▣</div><h3 class="mt-5 font-bold text-slate-900">Agenda y disponibilidad</h3><p class="mt-2 text-sm leading-6 text-slate-600">Agenda servicios, reprograma y bloquea períodos cuando lo necesites.</p></div>
-                    <div class="rounded-2xl border border-slate-100 p-6"><div class="text-2xl">◎</div><h3 class="mt-5 font-bold text-slate-900">Ficha de clientes</h3><p class="mt-2 text-sm leading-6 text-slate-600">Información, notas e historial de atenciones en una sola vista.</p></div>
-                    <div class="rounded-2xl border border-slate-100 p-6"><div class="text-2xl">↗</div><h3 class="mt-5 font-bold text-slate-900">Equipo y tareas</h3><p class="mt-2 text-sm leading-6 text-slate-600">Asigna pendientes y mantén el trabajo diario coordinado.</p></div>
-                    <div class="rounded-2xl border border-slate-100 p-6"><div class="text-2xl">✦</div><h3 class="mt-5 font-bold text-slate-900">Panel e inteligencia</h3><p class="mt-2 text-sm leading-6 text-slate-600">Revisa tu operación y recibe apoyo para priorizar acciones.</p></div>
+            <div class="mx-auto max-w-7xl px-5 sm:px-8">
+                <div class="grid gap-6 lg:grid-cols-[1.1fr_.9fr] lg:items-end">
+                    <div><p class="text-sm font-bold uppercase tracking-[.18em] text-norem-600">Una plataforma</p><h2 class="mt-3 max-w-2xl font-display text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">Las herramientas que tu operación necesita, en un mismo lugar.</h2></div>
+                    <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-end sm:justify-between"><p class="max-w-xl leading-7 text-slate-600">Explora cada herramienta para ver cómo te ayuda a mantener el negocio organizado.</p><a href="https://agenda.norem.cl/admin/login" class="shrink-0 font-bold text-norem-600 transition hover:text-norem-700">Acceder <span class="ml-1" aria-hidden="true">→</span></a></div>
+                </div>
+                <div class="mt-9 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" role="group" aria-label="Selecciona una herramienta de Norem">
+                    <button type="button" class="feature-option flex min-h-40 flex-col rounded-2xl border border-slate-100 bg-white p-5 text-left focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-200" data-feature="agenda" aria-pressed="true" aria-controls="feature-details"><span class="flex items-center justify-between"><span class="feature-icon grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-xl text-norem-700" aria-hidden="true">▣</span><span class="feature-index text-xs font-bold text-slate-400">01</span></span><span class="mt-4 block font-bold text-slate-900">Agenda y disponibilidad</span><span class="mt-1 block text-sm leading-5 text-slate-600">Organiza servicios y horarios.</span></button>
+                    <button type="button" class="feature-option flex min-h-40 flex-col rounded-2xl border border-slate-100 bg-white p-5 text-left focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-200" data-feature="clientes" aria-pressed="false" aria-controls="feature-details"><span class="flex items-center justify-between"><span class="feature-icon grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-xl text-norem-700" aria-hidden="true">◎</span><span class="feature-index text-xs font-bold text-slate-400">02</span></span><span class="mt-4 block font-bold text-slate-900">Ficha de clientes</span><span class="mt-1 block text-sm leading-5 text-slate-600">Mantén cada relación a la vista.</span></button>
+                    <button type="button" class="feature-option flex min-h-40 flex-col rounded-2xl border border-slate-100 bg-white p-5 text-left focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-200" data-feature="equipo" aria-pressed="false" aria-controls="feature-details"><span class="flex items-center justify-between"><span class="feature-icon grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-xl text-norem-700" aria-hidden="true">↗</span><span class="feature-index text-xs font-bold text-slate-400">03</span></span><span class="mt-4 block font-bold text-slate-900">Equipo y tareas</span><span class="mt-1 block text-sm leading-5 text-slate-600">Coordina quién hace qué y cuándo.</span></button>
+                    <button type="button" class="feature-option flex min-h-40 flex-col rounded-2xl border border-slate-100 bg-white p-5 text-left focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-200" data-feature="panel" aria-pressed="false" aria-controls="feature-details"><span class="flex items-center justify-between"><span class="feature-icon grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-xl text-norem-700" aria-hidden="true">✦</span><span class="feature-index text-xs font-bold text-slate-400">04</span></span><span class="mt-4 block font-bold text-slate-900">Panel e inteligencia</span><span class="mt-1 block text-sm leading-5 text-slate-600">Entiende tu operación y prioriza.</span></button>
+                </div>
+                <section id="feature-details" class="mt-4 rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-white p-6 shadow-sm sm:p-8" aria-live="polite" aria-labelledby="feature-detail-title">
+                    <div id="feature-detail-content" class="grid gap-6 lg:grid-cols-[.9fr_1.1fr] lg:items-center">
+                        <div><div class="flex items-center gap-3"><span id="feature-detail-icon" class="grid h-11 w-11 place-items-center rounded-xl bg-white text-xl text-norem-700 shadow-sm" aria-hidden="true">▣</span><p class="text-xs font-bold uppercase tracking-[.16em] text-norem-600">Herramienta seleccionada</p></div><h3 id="feature-detail-title" class="mt-4 text-xl font-extrabold text-slate-950">Agenda y disponibilidad</h3><p id="feature-detail-copy" class="mt-2 max-w-xl text-sm leading-6 text-slate-600">Administra la agenda de tu negocio desde un solo lugar y comparte una experiencia de reserva clara con tus clientes.</p></div>
+                        <ul id="feature-detail-points" class="grid gap-3 text-sm text-slate-700 sm:grid-cols-2"><li class="flex gap-2 rounded-xl bg-white/80 p-3"><span class="font-bold text-norem-600" aria-hidden="true">✓</span>Configura servicios y horarios.</li><li class="flex gap-2 rounded-xl bg-white/80 p-3"><span class="font-bold text-norem-600" aria-hidden="true">✓</span>Revisa reservas y disponibilidad.</li><li class="flex gap-2 rounded-xl bg-white/80 p-3"><span class="font-bold text-norem-600" aria-hidden="true">✓</span>Reprograma o bloquea períodos.</li></ul>
+                    </div>
+                </section>
+            </div>
+        </section>
+
+        <section id="integracion-web" class="border-y border-blue-100 bg-blue-50/60 px-5 py-20 sm:px-8 sm:py-24">
+            <div class="mx-auto grid max-w-7xl gap-14 lg:grid-cols-[.9fr_1.1fr] lg:items-center">
+                <div>
+                    <p class="text-sm font-bold uppercase tracking-[.18em] text-norem-600">Integración web</p>
+                    <h2 class="mt-3 font-display text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">Integra Norem en tu web y recibe reservas directas.</h2>
+                    <p class="mt-5 max-w-xl leading-8 text-slate-600">Tus clientes agendan desde tu propia página y cada reserva llega a tu cuenta Norem con tus horarios y reglas. El código y los datos reales de API se generan para tu negocio; no tienes que inventar ni buscar un tenant ID.</p>
+                    <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+                        <a href="https://agenda.norem.cl/admin/prueba" class="inline-flex items-center justify-center rounded-xl bg-norem-600 px-6 py-3.5 font-bold text-white shadow-glow transition hover:-translate-y-0.5 hover:bg-norem-700">Probar e integrar mi web · 14 días <span class="ml-2" aria-hidden="true">→</span></a>
+                        <a href="https://agenda.norem.cl/admin/login?next_url=%2Fadmin%2Fapi-publica" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-6 py-3.5 font-bold text-slate-700 transition hover:border-blue-200 hover:text-norem-700">Ya tengo cuenta: abrir API</a>
+                    </div>
+                    <a href="https://www.altiusignite.com/" target="_blank" rel="noopener noreferrer" class="group mt-6 flex items-center gap-3 rounded-2xl border border-blue-100 bg-white/90 p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
+                        <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-50 font-display text-lg font-extrabold text-norem-700" aria-hidden="true">A</span>
+                        <span class="min-w-0 flex-1"><span class="block text-[11px] font-bold uppercase tracking-[.14em] text-norem-600">Caso de uso · En funcionamiento</span><span class="mt-1 block font-bold text-slate-900">Altius Ignite</span><span class="block text-sm leading-5 text-slate-600">Agenda online de Norem integrada en su sitio web.</span></span>
+                        <span class="shrink-0 text-lg text-norem-600 transition group-hover:translate-x-1" aria-hidden="true">↗</span>
+                    </a>
+                    <p class="mt-4 text-xs leading-5 text-slate-500">Prueba gratis sin tarjeta. Al terminar los 14 días, activa la suscripción de $14.990 CLP/mes para continuar usando Norem.</p>
+                </div>
+                <div class="relative isolate mx-auto w-full max-w-2xl py-5 sm:px-5">
+                    <div class="grid-glow absolute inset-0 -z-10 rounded-[2.5rem] opacity-70"></div>
+                    <div class="hero-orb absolute -right-10 -top-14 -z-10 h-56 w-56"></div>
+                    <div class="integration-float rounded-[2rem] border border-white bg-white p-4 shadow-[0_28px_80px_rgba(15,45,95,.18)] sm:p-5" aria-label="Vista ilustrativa de una reserva llegando desde la web del cliente a Norem">
+                        <div class="relative mt-4 grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+                            <div class="rounded-2xl border border-slate-100 bg-slate-50 p-4"><div class="flex items-center gap-3"><span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 text-lg text-norem-700" aria-hidden="true">⌘</span><div><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Tu página</p><p class="mt-1 font-bold text-slate-800">Cliente agenda</p></div></div><div class="mt-4 flex gap-1.5"><span class="h-1.5 w-1/3 rounded-full bg-blue-200"></span><span class="h-1.5 w-1/4 rounded-full bg-slate-200"></span><span class="h-1.5 w-1/5 rounded-full bg-slate-200"></span></div></div>
+                            <div class="hidden text-2xl font-light text-blue-400 sm:block" aria-hidden="true">→</div>
+                            <div class="rounded-2xl border border-blue-100 bg-blue-50/70 p-4"><div class="flex items-center gap-3"><span class="grid h-10 w-10 place-items-center rounded-xl bg-norem-600 text-lg text-white" aria-hidden="true">✓</span><div><p class="text-xs font-bold uppercase tracking-wider text-norem-600">Norem</p><p class="mt-1 font-bold text-slate-800">Agenda actualizada</p></div></div><div class="mt-4 flex h-1.5 gap-1.5"><span class="w-1/4 rounded-full bg-blue-300"></span><span class="w-1/3 rounded-full bg-blue-500"></span><span class="w-1/5 rounded-full bg-blue-200"></span></div></div>
+                            <div class="integration-arrive absolute -right-2 -top-3 rounded-xl border border-emerald-100 bg-white px-3 py-2 shadow-lg sm:right-2 sm:top-1/2"><p class="flex items-center gap-2 text-xs font-bold text-slate-700"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>Nueva reserva recibida</p></div>
+                        </div>
+                        <div class="mt-4 flex items-center gap-3 rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-norem-700"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-blue-600" aria-hidden="true">✓</span>Tu equipo siempre sabe qué sigue.</div>
+                    </div>
+                    <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                        <article class="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg"><span class="grid h-9 w-9 place-items-center rounded-xl bg-blue-100 font-display font-extrabold text-norem-700">1</span><h3 class="mt-4 font-bold text-slate-900">Crea tu prueba</h3><p class="mt-1 text-xs leading-5 text-slate-600">14 días para configurar tu negocio.</p></article>
+                        <article class="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg"><span class="grid h-9 w-9 place-items-center rounded-xl bg-blue-100 font-display font-extrabold text-norem-700">2</span><h3 class="mt-4 font-bold text-slate-900">Conecta tu dominio</h3><p class="mt-1 text-xs leading-5 text-slate-600">Autoriza tu propio sitio web.</p></article>
+                        <article class="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg"><span class="grid h-9 w-9 place-items-center rounded-xl bg-blue-100 font-display font-extrabold text-norem-700">3</span><h3 class="mt-4 font-bold text-slate-900">Copia y pega</h3><p class="mt-1 text-xs leading-5 text-slate-600">Agenda lista o API pública.</p></article>
+                    </div>
                 </div>
             </div>
         </section>
@@ -187,6 +263,62 @@
             }, { threshold: 0.12, rootMargin: '0px 0px -24px 0px' });
             revealItems.forEach(item => revealObserver.observe(item));
         }
+        (() => {
+            const featureContent = {
+                agenda: {
+                    icon: '▣',
+                    title: 'Agenda y disponibilidad',
+                    copy: 'Administra la agenda de tu negocio desde un solo lugar y comparte una experiencia de reserva clara con tus clientes.',
+                    points: ['Configura servicios y horarios.', 'Revisa reservas y disponibilidad.', 'Reprograma o bloquea períodos.']
+                },
+                clientes: {
+                    icon: '◎',
+                    title: 'Ficha de clientes',
+                    copy: 'Conserva en una sola vista los datos importantes y el contexto de cada relación con tus clientes.',
+                    points: ['Consulta datos de contacto.', 'Agrega notas para dar seguimiento.', 'Revisa el historial de atenciones.']
+                },
+                equipo: {
+                    icon: '↗',
+                    title: 'Equipo y tareas',
+                    copy: 'Ordena el trabajo diario para que las responsabilidades y los pendientes sean más fáciles de seguir.',
+                    points: ['Asigna tareas al equipo.', 'Consulta estados y vencimientos.', 'Mantén visibles los próximos pasos.']
+                },
+                panel: {
+                    icon: '✦',
+                    title: 'Panel e inteligencia',
+                    copy: 'Revisa el estado de tu operación y encuentra más rápido qué necesita atención. Las funciones del copiloto dependen de que la IA esté configurada en la cuenta.',
+                    points: ['Consulta indicadores y actividad.', 'Detecta pendientes que requieren atención.', 'Usa el copiloto cuando esté habilitado.']
+                }
+            };
+            const cards = document.querySelectorAll('[data-feature]');
+            const title = document.getElementById('feature-detail-title');
+            const copy = document.getElementById('feature-detail-copy');
+            const points = document.getElementById('feature-detail-points');
+            const icon = document.getElementById('feature-detail-icon');
+            const content = document.getElementById('feature-detail-content');
+            if (!cards.length || !title || !copy || !points || !icon || !content) return;
+            cards.forEach((card) => card.addEventListener('click', () => {
+                const selected = featureContent[card.dataset.feature];
+                if (!selected) return;
+                cards.forEach((item) => item.setAttribute('aria-pressed', String(item === card)));
+                icon.textContent = selected.icon;
+                title.textContent = selected.title;
+                copy.textContent = selected.copy;
+                points.replaceChildren(...selected.points.map((point) => {
+                    const li = document.createElement('li');
+                    li.className = 'flex gap-2 rounded-xl bg-white/80 p-3';
+                    const check = document.createElement('span');
+                    check.className = 'font-bold text-norem-600';
+                    check.setAttribute('aria-hidden', 'true');
+                    check.textContent = '✓';
+                    li.append(check, document.createTextNode(point));
+                    return li;
+                }));
+                content.classList.remove('feature-detail-enter');
+                void content.offsetWidth;
+                content.classList.add('feature-detail-enter');
+            }));
+        })();
     </script>
 </body>
 </html>

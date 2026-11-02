@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum,Time, ForeignKey, Date, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum,Time, ForeignKey, Date, UniqueConstraint, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -57,6 +57,7 @@ class Cliente(Base):
     agendamientos = relationship("Agendamiento", back_populates="cliente")
     timeline = relationship("TimelineEvent", back_populates="cliente")
     tareas = relationship("Tarea", back_populates="cliente")
+    valores_campos = relationship("ValorCampoCliente", back_populates="cliente", cascade="all, delete-orphan")
     tenant = relationship("Tenant")
     __table_args__ = (UniqueConstraint("tenant_id", "rut", name="uq_clientes_tenant_rut"),)
 
@@ -220,5 +221,38 @@ class RespuestaCampo(Base):
     # El back_populates debe apuntar al nombre de la relación en Agendamiento
     agendamiento = relationship("Agendamiento", back_populates="respuestas_dinamicas")
     campo = relationship("CampoFormulario", back_populates="respuestas")
+
+
+class CampoCliente(Base):
+    """Schema configurable de la ficha de clientes, aislado por tenant."""
+    __tablename__ = "campos_cliente"
+    __table_args__ = (UniqueConstraint("tenant_id", "clave", name="uq_campos_cliente_tenant_clave"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    clave = Column(String(80), nullable=False)
+    etiqueta = Column(String(120), nullable=False)
+    tipo = Column(String(20), nullable=False, default="text")
+    opciones_json = Column(Text, nullable=True)
+    requerido = Column(Boolean, nullable=False, default=False)
+    activo = Column(Boolean, nullable=False, default=True)
+    orden = Column(Integer, nullable=False, default=0)
+
+    valores = relationship("ValorCampoCliente", back_populates="campo", cascade="all, delete-orphan")
+
+
+class ValorCampoCliente(Base):
+    """Valor de un campo de ficha para un cliente del mismo tenant."""
+    __tablename__ = "valores_campos_cliente"
+    __table_args__ = (UniqueConstraint("tenant_id", "cliente_id", "campo_id", name="uq_valores_campo_cliente_scope"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id", ondelete="CASCADE"), nullable=False, index=True)
+    campo_id = Column(Integer, ForeignKey("campos_cliente.id", ondelete="CASCADE"), nullable=False, index=True)
+    valor = Column(Text, nullable=True)
+
+    cliente = relationship("Cliente", back_populates="valores_campos")
+    campo = relationship("CampoCliente", back_populates="valores")
 
 

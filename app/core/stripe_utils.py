@@ -5,12 +5,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_mock_key")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
-# IDs de Precios (Deberían estar en Stripe Dashboard)
-STRIPE_PRICE_STARTER = os.getenv("STRIPE_PRICE_STARTER", "price_starter_mock")
-STRIPE_PRICE_PRO = os.getenv("STRIPE_PRICE_PRO", "price_pro_mock")
-STRIPE_PRICE_BUSINESS = os.getenv("STRIPE_PRICE_BUSINESS", "price_business_mock")
+# IDs de precios configurados en el panel de Stripe; no usar IDs ficticios.
+STRIPE_PRICE_STARTER = os.getenv("STRIPE_PRICE_STARTER")
+STRIPE_PRICE_PRO = os.getenv("STRIPE_PRICE_PRO")
+STRIPE_PRICE_BUSINESS = os.getenv("STRIPE_PRICE_BUSINESS")
 STRIPE_PRICE_NOREM_MENSUAL = os.getenv("STRIPE_PRICE_NOREM_MENSUAL")
 
 def create_checkout_session(tenant_id: str, plan: str, success_url: str, cancel_url: str):
@@ -21,6 +21,9 @@ def create_checkout_session(tenant_id: str, plan: str, success_url: str, cancel_
         price_id = STRIPE_PRICE_PRO
     elif plan == "Business":
         price_id = STRIPE_PRICE_BUSINESS
+
+    if not stripe.api_key or not price_id:
+        raise RuntimeError(f"Stripe no está configurado para el plan {plan}.")
         
     try:
         session = stripe.checkout.Session.create(
@@ -56,6 +59,8 @@ def create_norem_monthly_checkout_session(tenant_id: str, success_url: str, canc
 
 def verify_webhook_signature(payload: bytes, sig_header: str):
     """Verifica la firma del Webhook de Stripe."""
+    if not STRIPE_WEBHOOK_SECRET:
+        raise RuntimeError("STRIPE_WEBHOOK_SECRET no está configurado.")
     try:
         event = stripe.Webhook.construct_event(
             payload, sig_header, STRIPE_WEBHOOK_SECRET

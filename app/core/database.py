@@ -21,14 +21,24 @@ if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
 
 # Specific args for SQLite
 connect_args = {}
+pool_options = {}
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False, "timeout": 15}
+elif os.getenv("VERCEL") == "1":
+    # Limita conexiones por instancia: el pool predeterminado de SQLAlchemy
+    # puede multiplicar conexiones al escalar funciones serverless.
+    pool_options = {
+        "pool_size": int(os.getenv("DB_POOL_SIZE", "1")),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "0")),
+        "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "10")),
+    }
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args=connect_args,
     pool_pre_ping=True,
     pool_recycle=300,
+    **pool_options,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

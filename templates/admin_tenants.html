@@ -50,6 +50,7 @@
                         <tr class="bg-slate-50 border-b border-slate-200">
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">ID Tenant</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Nombre Empresa</th>
+                            <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Integración web</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Plan</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Administrador</th>
                             <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Sesi&oacute;n</th>
@@ -72,6 +73,21 @@
                             </td>
                             <td class="py-4 px-6">
                                 <span class="text-sm font-medium text-slate-900">{{ t.nombre_empresa }}</span>
+                            </td>
+                            <td class="py-4 px-6">
+                                {% if t.api_en_uso %}
+                                <div class="inline-flex flex-col items-start gap-1">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Reservas web/API · {{ t.reservas_api }}</span>
+                                    {% if t.api_origenes %}<span class="max-w-48 truncate text-[11px] text-slate-500" title="{{ t.api_origenes|join(', ') }}">{{ t.api_origenes|join(', ') }}</span>{% endif %}
+                                </div>
+                                {% elif t.api_configurada %}
+                                <div class="inline-flex flex-col items-start gap-1">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-800"><i class="fas fa-link text-[10px]"></i>API habilitada · sin reservas aún</span>
+                                    <span class="max-w-48 truncate text-[11px] text-slate-500" title="{{ t.api_origenes|join(', ') }}">{{ t.api_origenes|join(', ') }}</span>
+                                </div>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600"><i class="fas fa-minus-circle text-[10px]"></i>Sin actividad detectada</span>
+                                {% endif %}
                             </td>
                             <td class="py-4 px-6">
                                 <span class="text-sm font-medium text-slate-600">{{ t.plan_actual }}</span>
@@ -136,7 +152,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="9" class="py-12 text-center text-slate-500 font-medium">
+                            <td colspan="10" class="py-12 text-center text-slate-500 font-medium">
                                 No hay tenants registrados en el sistema.
                             </td>
                         </tr>

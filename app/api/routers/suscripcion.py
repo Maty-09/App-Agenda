@@ -4,6 +4,7 @@ from app.core import models, stripe_utils, mercadopago_utils
 from app.api import deps
 from app.infrastructure.email_utils import enviar_aviso_nueva_suscripcion, enviar_suscripcion_activada
 import stripe
+import os
 
 router = APIRouter()
 
@@ -17,15 +18,19 @@ def create_checkout(
     if plan not in ["Starter", "Pro", "Business"]:
         raise HTTPException(status_code=400, detail="Plan inválido")
         
-    success_url = "http://localhost:5173/dashboard?pago=exito"
-    cancel_url = "http://localhost:5173/dashboard?pago=cancelado"
+    base_url = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
+    success_url = f"{base_url}/admin/suscripcion"
+    cancel_url = f"{base_url}/admin/suscripcion?estado=cancelado"
     
-    checkout_url = stripe_utils.create_checkout_session(
-        tenant_id=current_user.tenant_id,
-        plan=plan,
-        success_url=success_url,
-        cancel_url=cancel_url
-    )
+    try:
+        checkout_url = stripe_utils.create_checkout_session(
+            tenant_id=current_user.tenant_id,
+            plan=plan,
+            success_url=success_url,
+            cancel_url=cancel_url
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Pagos con tarjeta no están configurados.") from exc
     
     if not checkout_url:
         raise HTTPException(status_code=500, detail="No se pudo contactar a Stripe")
@@ -43,8 +48,10 @@ async def stripe_webhook(request: Request, db: Session = Depends(deps.get_db)):
         
     try:
         event = stripe_utils.verify_webhook_signature(payload, sig_header)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Webhook de Stripe no configurado.") from exc
+    except (ValueError, stripe.error.SignatureVerificationError) as exc:
+        raise HTTPException(status_code=400, detail="Firma o contenido del webhook inválido.") from exc
         
     # Manejar el evento
     if event['type'] == 'checkout.session.completed':

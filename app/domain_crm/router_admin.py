@@ -398,17 +398,22 @@ def iniciar_checkout_suscripcion(
 ):
     if cred.rol != "admin":
         raise HTTPException(status_code=403, detail="Solo el administrador puede contratar la suscripción.")
+    tenant_actual = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    if tenant_actual and tenant_actual.estado_suscripcion == "activa" and (
+        tenant_actual.mercado_pago_preapproval_id or tenant_actual.stripe_subscription_id
+    ):
+        # Evita una segunda suscripción (y un doble cobro) para un negocio que ya paga.
+        return RedirectResponse("/admin/suscripcion", status_code=status.HTTP_303_SEE_OTHER)
     if os.getenv("MERCADOPAGO_ACCESS_TOKEN"):
         try:
-            checkout_url, preapproval_id = mercadopago_utils.crear_suscripcion_mensual(
+            # El id de la suscripción se guarda recién cuando Mercado Pago la
+            # autoriza (webhook). Así un intento abandonado nunca reemplaza a la
+            # suscripción vigente ni puede cancelarla al vencer.
+            checkout_url, _ = mercadopago_utils.crear_suscripcion_mensual(
                 tenant_id=cred.tenant_id,
                 payer_email=cred.email,
                 back_url=f"{SYSTEM_BASE_URL}/admin/suscripcion?estado=pendiente",
             )
-            tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
-            if tenant:
-                tenant.mercado_pago_preapproval_id = preapproval_id
-                db.commit()
             return RedirectResponse(checkout_url, status_code=status.HTTP_303_SEE_OTHER)
         except RuntimeError as exc:
             tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()

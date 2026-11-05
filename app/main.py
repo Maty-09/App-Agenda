@@ -92,7 +92,13 @@ async def bloquear_prueba_vencida(request: Request, call_next):
                     db = SessionLocal()
                     try:
                         tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
-                        if tenant and tenant.estado_suscripcion == "prueba" and tenant.trial_fin and tenant.trial_fin < models.get_now_chile():
+                        prueba_vencida = bool(
+                            tenant and tenant.estado_suscripcion == "prueba"
+                            and tenant.trial_fin and tenant.trial_fin < models.get_now_chile()
+                        )
+                        # Una cuenta con pago fallido o suscripción terminada puede
+                        # entrar, pero sólo para volver a pagar.
+                        if prueba_vencida or (tenant and tenant.estado_suscripcion == "impaga"):
                             return RedirectResponse(url="/admin/suscripcion", status_code=303)
                     finally:
                         db.close()

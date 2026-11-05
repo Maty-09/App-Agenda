@@ -5,6 +5,9 @@ from app.api import deps
 from app.infrastructure.email_utils import enviar_aviso_nueva_suscripcion, enviar_suscripcion_activada
 import stripe
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -53,48 +56,86 @@ async def stripe_webhook(request: Request, db: Session = Depends(deps.get_db)):
     except (ValueError, stripe.error.SignatureVerificationError) as exc:
         raise HTTPException(status_code=400, detail="Firma o contenido del webhook inválido.") from exc
         
-    # Manejar el evento
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        tenant_id = session.get('client_reference_id')
-        customer_id = session.get('customer')
-        subscription_id = session.get('subscription')
-        
-        # Actualizar base de datos
-        tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
-        if tenant:
-            primera_activacion = tenant.estado_suscripcion != "activa"
-            tenant.stripe_customer_id = customer_id
-            tenant.stripe_subscription_id = subscription_id
-            tenant.estado_suscripcion = "activa"
-            tenant.plan_actual = session.get("metadata", {}).get("plan", "Norem Mensual")
-            db.commit()
-            if primera_activacion:
-                usuario = db.query(models.Usuario).filter(models.Usuario.tenant_id == tenant.id, models.Usuario.rol == "admin").first()
-                if usuario:
-                    enviar_suscripcion_activada(usuario.email, usuario.nombre)
-                    enviar_aviso_nueva_suscripcion(tenant, usuario, "Stripe")
-                tenant.suscripcion_notificada_at = models.get_now_chile()
-                db.commit()
-            
-    elif event['type'] == 'customer.subscription.deleted':
-        subscription = event['data']['object']
-        tenant = db.query(models.Tenant).filter(models.Tenant.stripe_subscription_id == subscription.id).first()
-        if tenant:
-            tenant.estado_suscripcion = "cancelada"
-            db.commit()
-            
+    _procesar_evento_stripe(event, db)
     return {"status": "success"}
+
+
+ESTADOS_STRIPE_IMPAGOS = {"past_due", "unpaid", "incomplete_expired", "canceled"}
+
+
+def _notificar_activacion(db: Session, tenant: models.Tenant, origen: str) -> None:
+    """Correos de bienvenida. Un fallo de correo no debe revertir el pago."""
+    try:
+        usuario = db.query(models.Usuario).filter(models.Usuario.tenant_id == tenant.id, models.Usuario.rol == "admin").first()
+        if usuario:
+            enviar_suscripcion_activada(usuario.email, usuario.nombre)
+            enviar_aviso_nueva_suscripcion(tenant, usuario, origen)
+        tenant.suscripcion_notificada_at = models.get_now_chile()
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("subscription_activation_email_failed tenant_id=%s", tenant.id)
+
+
+def _tenant_por_suscripcion_stripe(db: Session, subscription_id) -> models.Tenant | None:
+    if not subscription_id:
+        return None
+    return db.query(models.Tenant).filter(models.Tenant.stripe_subscription_id == subscription_id).first()
+
+
+def _procesar_evento_stripe(event, db: Session) -> None:
+    tipo = event["type"]
+    objeto = event["data"]["object"]
+
+    if tipo == "checkout.session.completed":
+        tenant = db.query(models.Tenant).filter(models.Tenant.id == objeto.get("client_reference_id")).first()
+        if not tenant:
+            return
+        primera_activacion = tenant.estado_suscripcion != "activa"
+        tenant.stripe_customer_id = objeto.get("customer")
+        tenant.stripe_subscription_id = objeto.get("subscription")
+        tenant.estado_suscripcion = "activa"
+        tenant.plan_actual = (objeto.get("metadata") or {}).get("plan", "Norem Mensual")
+        db.commit()
+        if primera_activacion:
+            _notificar_activacion(db, tenant, "Stripe")
+
+    elif tipo in {"customer.subscription.updated", "customer.subscription.deleted"}:
+        # Sólo cuenta la suscripción vigente del negocio; las antiguas se ignoran.
+        tenant = _tenant_por_suscripcion_stripe(db, objeto.get("id"))
+        if not tenant or tenant.estado_suscripcion == "cancelada":
+            return
+        estado = "canceled" if tipo == "customer.subscription.deleted" else objeto.get("status")
+        if estado in ESTADOS_STRIPE_IMPAGOS:
+            tenant.estado_suscripcion = "impaga"
+        elif estado in {"active", "trialing"}:
+            tenant.estado_suscripcion = "activa"
+        db.commit()
+
+    elif tipo in {"invoice.payment_failed", "invoice.paid"}:
+        tenant = _tenant_por_suscripcion_stripe(db, objeto.get("subscription"))
+        if not tenant or tenant.estado_suscripcion == "cancelada":
+            return
+        if tipo == "invoice.payment_failed":
+            tenant.estado_suscripcion = "impaga"
+        elif tenant.estado_suscripcion == "impaga":
+            tenant.estado_suscripcion = "activa"
+        db.commit()
 
 
 @router.post("/mercadopago/webhook")
 async def mercadopago_webhook(request: Request, db: Session = Depends(deps.get_db)):
     """Sincroniza las altas y bajas que Mercado Pago confirma mediante webhook."""
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except ValueError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
     data = payload.get("data") or {}
     # Mercado Pago firma el identificador enviado como query param `data.id`.
     # Conservamos el fallback al cuerpo para simulaciones y reintentos compatibles.
-    preapproval_id = str(request.query_params.get("data.id") or data.get("id") or "")
+    preapproval_id = str(request.query_params.get("data.id") or data.get("id") or request.query_params.get("id") or "")
     if not mercadopago_utils.firma_webhook_valida(
         signature=request.headers.get("x-signature"),
         request_id=request.headers.get("x-request-id"),
@@ -102,7 +143,7 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(deps.get_d
     ):
         raise HTTPException(status_code=401, detail="Firma de Mercado Pago inválida")
 
-    event_type = payload.get("type") or payload.get("topic")
+    event_type = payload.get("type") or payload.get("topic") or request.query_params.get("type") or request.query_params.get("topic")
     if event_type not in {"subscription_preapproval", "preapproval"}:
         return {"status": "ignored"}
 
@@ -115,26 +156,32 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(deps.get_d
     tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
     if not tenant:
         return {"status": "unknown_tenant"}
+    if tenant.estado_suscripcion == "cancelada":
+        # Cuenta desactivada manualmente por Norem: los pagos no la reactivan solos.
+        return {"status": "ignored", "motivo": "cuenta_desactivada"}
 
     subscription_status = subscription.get("status")
-    primera_activacion = tenant.estado_suscripcion != "activa" and subscription_status == "authorized"
-    tenant.mercado_pago_preapproval_id = preapproval_id
-    # Una preaprobación pendiente es normal mientras el cliente termina el
-    # checkout. No debe cancelar una prueba ni una suscripción ya activa.
+    es_vigente = tenant.mercado_pago_preapproval_id == preapproval_id
+
     if subscription_status == "authorized":
+        primera_activacion = tenant.estado_suscripcion != "activa"
+        tenant.mercado_pago_preapproval_id = preapproval_id
         tenant.plan_actual = "Norem Mensual"
         tenant.estado_suscripcion = "activa"
-    elif subscription_status in {"cancelled", "paused", "expired"}:
-        tenant.estado_suscripcion = "cancelada"
-    else:
         db.commit()
-        return {"status": "pending", "mercado_pago_status": subscription_status}
-    db.commit()
-    if primera_activacion:
-        usuario = db.query(models.Usuario).filter(models.Usuario.tenant_id == tenant.id, models.Usuario.rol == "admin").first()
-        if usuario:
-            enviar_suscripcion_activada(usuario.email, usuario.nombre)
-            enviar_aviso_nueva_suscripcion(tenant, usuario, "Mercado Pago")
-        tenant.suscripcion_notificada_at = models.get_now_chile()
+        if primera_activacion:
+            _notificar_activacion(db, tenant, "Mercado Pago")
+        return {"status": "success"}
+
+    if subscription_status in {"cancelled", "paused", "expired"}:
+        # Un intento de pago viejo o abandonado no puede afectar a la
+        # suscripción que el negocio tiene vigente.
+        if not es_vigente:
+            return {"status": "ignored", "motivo": "suscripcion_no_vigente"}
+        tenant.estado_suscripcion = "impaga"
         db.commit()
-    return {"status": "success"}
+        return {"status": "success"}
+
+    # Una preaprobación pendiente es normal mientras el cliente termina el
+    # checkout. No debe cancelar una prueba ni una suscripción ya activa.
+    return {"status": "pending", "mercado_pago_status": subscription_status}

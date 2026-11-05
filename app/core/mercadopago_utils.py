@@ -78,6 +78,9 @@ def firma_webhook_valida(
     timestamp, received_hash = parts.get("ts"), parts.get("v1")
     if not timestamp or not received_hash:
         return False
-    manifest = f"id:{data_id};request-id:{request_id};ts:{timestamp};"
+    # Según la documentación de Mercado Pago, un data.id alfanumérico se firma
+    # en minúsculas.
+    data_id_firmado = data_id.lower() if data_id.isalnum() else data_id
+    manifest = f"id:{data_id_firmado};request-id:{request_id};ts:{timestamp};"
     calculated = hmac.new(secret.encode(), manifest.encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(calculated, received_hash)

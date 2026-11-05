@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core import models
 from app.core.database import get_db
+from app.domain_agenda import horarios
 from app.domain_agenda.router_cliente import obtener_horas_disponibles
 
 router = APIRouter()
@@ -35,9 +36,12 @@ def agenda_publica(tenant_id: str, response: Response, db: Session = Depends(get
     reglas = config.get("reglas_negocio", {})
     reglas_publicas = {
         clave: reglas[clave]
-        for clave in ("dias_habiles", "bloques_horarios", "dias_anticipacion")
+        for clave in ("dias_anticipacion", "intervalo_minutos", "atiende_feriados")
         if clave in reglas
     }
+    # Horario efectivo del negocio (incluye configuraciones antiguas convertidas).
+    reglas_publicas["horario_semanal"] = horarios.horario_semanal_texto(config)
+    reglas_publicas["dias_habiles"] = sorted(horarios.dias_abiertos(config))
     base_url = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
     response.headers["Access-Control-Allow-Origin"] = "*"
     return {

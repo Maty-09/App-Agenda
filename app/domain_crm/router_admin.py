@@ -24,7 +24,9 @@ from app.infrastructure.email_utils import (
     enviar_aviso_inicio_prueba,
     enviar_aviso_nueva_suscripcion,
 )
-from app.domain_agenda.router_cliente import Recursos, calcular_fin_especializado
+from app.domain_agenda.router_cliente import Recursos, calcular_fin_especializado, equipos_configurados
+from app.domain_agenda import horarios
+from urllib.parse import quote
 from app.domain_team import crud_team
 import os
 from pathlib import Path
@@ -279,9 +281,10 @@ def guardar_configuracion_inicial(nombre_empresa: str = Form(...), giro: str = F
     inicio = hora_inicio if re.fullmatch(r"\d{2}:\d{2}", hora_inicio) else "09:00"
     fin = hora_fin if re.fullmatch(r"\d{2}:\d{2}", hora_fin) else "18:00"
     config = _leer_config_tenant(tenant)
-    config.update({"configuracion_inicial_completa": True, "onboarding_completo": False, "onboarding_requerido": False, "negocio": {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480))}, "reglas_negocio": {"dias_habiles": dias, "bloques_horarios": {str(dia): [inicio, fin] for dia in dias}}})
+    config.update({"configuracion_inicial_completa": True, "onboarding_completo": False, "onboarding_requerido": False, "negocio": {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480))}, "reglas_negocio": {"dias_habiles": dias, "horario_semanal": {str(dia): ([[inicio, fin]] if dia in dias and inicio < fin else []) for dia in range(7)}}})
     tenant.nombre_empresa, tenant.config_json = nombre_empresa.strip(), json.dumps(config)
-    _campos_contacto_iniciales(db, tenant.id, campos_cliente)
+    # El correo es obligatorio: la reserva lo necesita para enviar la confirmación.
+    _campos_contacto_iniciales(db, tenant.id, campos_cliente if "correo" in campos_cliente else [*campos_cliente, "correo"])
     db.commit()
     return RedirectResponse("/admin/onboarding", status_code=303)
 
@@ -296,7 +299,11 @@ def onboarding_norem(request: Request, db: Session = Depends(get_db), cred: Curr
         return RedirectResponse("/admin/configuracion-inicial", status_code=303)
     if config.get("onboarding_completo"):
         return RedirectResponse("/admin/dashboard", status_code=303)
-    return templates.TemplateResponse("admin_product_onboarding.html", {"request": request, "current_user": cred, "tenant": tenant, "config": config})
+    resumen_horario = [(dia, horarios.describir_horario(config, numero)) for numero, dia in enumerate(horarios.DIAS_SEMANA)]
+    return templates.TemplateResponse("admin_product_onboarding.html", {
+        "request": request, "current_user": cred, "tenant": tenant, "config": config,
+        "resumen_horario": resumen_horario, "duracion_minutos": horarios.duracion_minutos(config),
+    })
 
 
 @router.post("/onboarding/finalizar")
@@ -319,10 +326,9 @@ def configuracion_negocio(request: Request, db: Session = Depends(get_db), cred:
     config_actual = _leer_config_tenant(tenant)
     if not config_actual.get("configuracion_inicial_completa", True):
         return RedirectResponse("/admin/configuracion-inicial", status_code=303)
-    if not config_actual.get("onboarding_completo", True):
-        return RedirectResponse("/admin/onboarding", status_code=303)
+    # Durante la guía de bienvenida el usuario puede entrar a configurar y volver a la guía.
     base_url = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
-    return templates.TemplateResponse("admin_business_config.html", {"request": request, "current_user": cred, "tenant": tenant, "config": config_actual, "dias": _DIAS, "agenda_url": f"{base_url}/cliente/{tenant.id}/agendar_web", "api_url": f"{base_url}/api/v1/public/{tenant.id}/agenda"})
+    return templates.TemplateResponse("admin_business_config.html", {"request": request, "current_user": cred, "tenant": tenant, "config": config_actual, "dias": _DIAS, "horario": horarios.horario_semanal_texto(config_actual), "agenda_url": f"{base_url}/cliente/{tenant.id}/agendar_web", "api_url": f"{base_url}/api/v1/public/{tenant.id}/agenda"})
 
 
 @router.get("/integraciones", response_class=HTMLResponse)
@@ -337,39 +343,57 @@ def api_publica(request: Request, db: Session = Depends(get_db), cred: CurrentUs
     return templates.TemplateResponse("admin_public_api.html", {"request": request, "current_user": cred, "agenda_url": f"{base_url}/cliente/{cred.tenant_id}/agendar_web"})
 
 
-def _hora_valida(valor: str) -> bool:
-    try:
-        datetime.strptime(valor or "", "%H:%M")
-        return True
-    except ValueError:
-        return False
-
-
 @router.post("/configuracion-negocio")
-def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), equipos: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), dias_anticipacion: int = Form(30), pausa_inicio: str = Form(""), pausa_fin: str = Form(""), horas_minimas_anticipacion: int = Form(0), dias_dashboard: int = Form(7), dashboard_widgets: List[str] = Form([]), enviar_ubicacion_google: Optional[str] = Form(None), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+async def guardar_configuracion_negocio(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     if cred.rol not in {"admin", "superadmin"}:
         raise HTTPException(status_code=403, detail="Sólo el administrador puede configurar el negocio.")
     tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada.")
-    config, dias = _leer_config_tenant(tenant), sorted({dia for dia in dias_habiles if 0 <= dia <= 6}) or [0, 1, 2, 3, 4]
-    equipos_config = [equipo.strip() for equipo in equipos.split(",") if equipo.strip()] or ["Agenda principal"]
-    config["negocio"] = {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480)), "equipos": equipos_config}
-    if not (_hora_valida(hora_inicio) and _hora_valida(hora_fin) and hora_inicio < hora_fin):
-        return RedirectResponse("/admin/configuracion-negocio?error=horario", status_code=303)
+    form = await request.form()
+
+    def entero(nombre: str, por_defecto: int, minimo: int, maximo: int) -> int:
+        try:
+            return max(minimo, min(int(form.get(nombre) or por_defecto), maximo))
+        except (TypeError, ValueError):
+            return por_defecto
+
+    nombre_empresa = (form.get("nombre_empresa") or "").strip()
+    if not nombre_empresa:
+        return RedirectResponse("/admin/configuracion-negocio?error=" + quote("Ingresa el nombre del negocio."), status_code=303)
+    horario, errores = horarios.parsear_formulario(form)
+    if errores:
+        return RedirectResponse("/admin/configuracion-negocio?error=" + quote(" ".join(errores[:3])), status_code=303)
+
+    config = _leer_config_tenant(tenant)
+    equipos_config = [equipo.strip() for equipo in (form.get("equipos") or "").split(",") if equipo.strip()] or ["Agenda principal"]
+    config["negocio"] = {
+        "giro": (form.get("giro") or "").strip(),
+        "servicio_principal": (form.get("servicio_principal") or "").strip(),
+        "duracion_minutos": entero("duracion_minutos", 60, 15, 480),
+        "equipos": equipos_config,
+    }
     reglas = config.get("reglas_negocio", {}) if isinstance(config.get("reglas_negocio"), dict) else {}
-    reglas.update({"dias_habiles": dias, "bloques_horarios": {str(dia): [hora_inicio, hora_fin] for dia in dias}, "dias_anticipacion": max(1, min(dias_anticipacion, 365)), "horas_minimas_anticipacion": max(0, min(horas_minimas_anticipacion, 720))})
-    if _hora_valida(pausa_inicio) and _hora_valida(pausa_fin) and pausa_inicio < pausa_fin:
-        reglas["pausa"] = [pausa_inicio, pausa_fin]
-    else:
-        reglas.pop("pausa", None)
+    # El horario semanal reemplaza a los formatos antiguos (bloques fijos y pausa única).
+    for clave in ("bloques_horarios", "pausa"):
+        reglas.pop(clave, None)
+    intervalo = entero("intervalo_minutos", 0, 0, 480)
+    reglas.update({
+        "horario_semanal": horario,
+        "dias_habiles": sorted(int(dia) for dia, tramos in horario.items() if tramos),
+        "intervalo_minutos": intervalo or None,
+        "atiende_feriados": form.get("atiende_feriados") == "1",
+        "dias_anticipacion": entero("dias_anticipacion", 30, 1, 365),
+        "horas_minimas_anticipacion": entero("horas_minimas_anticipacion", 0, 0, 720),
+    })
     config["reglas_negocio"] = reglas
-    config["dashboard"] = {"dias_disponibilidad": max(1, min(dias_dashboard, 28)), "widgets": [widget for widget in dashboard_widgets if widget in {"resumen", "disponibilidad", "tareas", "metricas", "analitica"}]}
+    widgets = [widget for widget in form.getlist("dashboard_widgets") if widget in {"resumen", "disponibilidad", "tareas", "metricas", "analitica"}]
+    config["dashboard"] = {"dias_disponibilidad": entero("dias_dashboard", 7, 1, 28), "widgets": widgets}
     notificaciones = config.get("notificaciones", {})
-    notificaciones["enviar_ubicacion_google"] = enviar_ubicacion_google == "1"
+    notificaciones["enviar_ubicacion_google"] = form.get("enviar_ubicacion_google") == "1"
     config["notificaciones"] = notificaciones
-    config["onboarding_completo"] = True
-    tenant.nombre_empresa, tenant.config_json = nombre_empresa.strip(), json.dumps(config)
+    # La guía de bienvenida se cierra sólo cuando el usuario la da por terminada.
+    tenant.nombre_empresa, tenant.config_json = nombre_empresa, json.dumps(config)
     db.commit()
     return RedirectResponse("/admin/configuracion-negocio?guardado=1", status_code=303)
 
@@ -941,67 +965,43 @@ class ReprogramarCitaSchema(BaseModel):
 
 
 def verificar_disponibilidad_detalle(
-    db: Session, 
-    tipo_servicio: str, 
-    inicio: datetime, 
-    duracion_horas: int, 
+    db: Session,
+    tipo_servicio: str,
+    inicio: datetime,
+    duracion_horas: float,
     excluir_id: Optional[int] = None,
-    tenant_id: str = "default"
+    tenant_id: str = "default",
+    duracion_minutos: Optional[int] = None,
 ) -> Tuple[bool, str]:
-    # 1. Chequear si el día está bloqueado por administración
+    """Valida un cambio de horario hecho por el negocio según SU horario configurado."""
+    inicio = inicio.replace(tzinfo=None)
+    minutos = duracion_minutos if duracion_minutos else int(round(float(duracion_horas) * 60))
+    fin = inicio + timedelta(minutes=minutos)
+
     dia_bloqueado = db.query(models.DiaBloqueado).filter(
         models.DiaBloqueado.fecha == inicio.date(),
         models.DiaBloqueado.tenant_id == tenant_id
     ).first()
     if dia_bloqueado:
-        return False, f"El dÃ­a {inicio.strftime('%d/%m/%Y')} estÃ¡ bloqueado administrativamente ({dia_bloqueado.motivo or 'Cerrado'})."
+        return False, f"El día {inicio.strftime('%d/%m/%Y')} está bloqueado ({dia_bloqueado.motivo or 'Cerrado'})."
 
-    tz_chile = pytz.timezone("America/Santiago")
-    if inicio.tzinfo is None:
-        inicio = tz_chile.localize(inicio)
-
-    # 2. Calcular fin
-    if tipo_servicio == "especializado":
-        fin = calcular_fin_especializado(inicio, duracion_horas)
-    else:
-        fin = inicio + timedelta(hours=duracion_horas)
-
-    h_inicio = inicio.time()
-    h_fin = fin.time()
-    
-    # 3. Horario de atenciÃ³n: 08:00 - 18:00
-    if h_inicio < dt_time(8, 0) or h_fin > dt_time(18, 0):
-        return False, "La cita debe estar dentro del horario de atenciÃ³n permitido (08:00 - 18:00)."
-
-    # 4. Horario de colaciÃ³n: No cruzar 12:00 a 13:00
-    if h_inicio < dt_time(13, 0) and h_fin > dt_time(12, 0):
-        return False, "La cita interfiere con el horario de colaciÃ³n obligatorio (12:00 - 13:00)."
-
-    # 5. Validación de bloques horarios dinámicos
-    dia_semana = inicio.weekday() 
-    hora_str = inicio.strftime("%H:%M")
-
-    # Obtener configuración del tenant
     tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
-    bloques_validos = ["09:00", "13:00", "15:30"] # Default
-    
-    if tenant:
-        try:
-            config = json.loads(tenant.config_json or "{}")
-            if "reglas_negocio" in config and "bloques_horarios" in config["reglas_negocio"]:
-                str_dia = str(dia_semana)
-                if str_dia in config["reglas_negocio"]["bloques_horarios"]:
-                    bloques_validos = config["reglas_negocio"]["bloques_horarios"][str_dia]
-        except Exception:
-            pass
+    config = _leer_config_tenant(tenant) if tenant else {}
 
-    if hora_str not in bloques_validos:
-        return False, f"La hora {hora_str} no está permitida para los días {dia_semana}. Bloques válidos: {', '.join(bloques_validos)}."
+    if horarios.cerrado_por_feriado(config, inicio.date()):
+        return False, f"El {inicio.strftime('%d/%m/%Y')} es feriado ({horarios.nombre_feriado(inicio.date())}) y tu agenda no atiende feriados."
 
-    if tipo_servicio == "domicilio_taller" and duracion_horas != 2:
-        return False, "La duración de este tipo de servicio debe ser de 2 horas."
+    dia_semana = inicio.weekday()
+    if not horarios.cabe_en_horario(config, inicio, fin):
+        horario_dia = horarios.describir_horario(config, dia_semana)
+        nombre_dia = horarios.DIAS_SEMANA[dia_semana]
+        if horario_dia == "Cerrado":
+            return False, f"Tu agenda está cerrada los {nombre_dia.lower()}."
+        return False, (
+            f"La cita ({inicio.strftime('%H:%M')}–{fin.strftime('%H:%M')}) queda fuera de tu horario "
+            f"del {nombre_dia.lower()}: {horario_dia}."
+        )
 
-    # 6. Validar traslapes/capacidad (excluyendo la misma cita)
     query = db.query(models.Agendamiento).filter(
         models.Agendamiento.fecha_inicio < fin,
         models.Agendamiento.fecha_termino > inicio,
@@ -1010,12 +1010,10 @@ def verificar_disponibilidad_detalle(
     )
     if excluir_id is not None:
         query = query.filter(models.Agendamiento.id != excluir_id)
-        
-    agendados_en_bloque = query.count()
-    limite_equipos = len(Recursos.get(tipo_servicio, []))
-    
-    if agendados_en_bloque >= limite_equipos:
-        return False, f"No hay equipos disponibles en este horario (mÃ¡ximo {limite_equipos} citas simultÃ¡neas)."
+
+    limite_equipos = max(1, len(equipos_configurados(tenant)))
+    if query.count() >= limite_equipos:
+        return False, f"No hay equipos disponibles en este horario (máximo {limite_equipos} citas simultáneas)."
 
     return True, ""
 
@@ -1046,27 +1044,30 @@ async def reprogramar_cita(
     # Quitar tzinfo para guardar en sqlite
     inicio_nueva_naive = inicio_nueva.replace(tzinfo=None)
     
-    # Calcular fin
-    if ag.tipo_servicio.value == "especializado":
-        fin_nueva_naive = calcular_fin_especializado(inicio_nueva_naive, ag.duracion_horas)
+    # Mantener la duración real de la cita (puede ser en minutos).
+    if ag.fecha_inicio and ag.fecha_termino and ag.fecha_termino > ag.fecha_inicio:
+        minutos_cita = int((ag.fecha_termino - ag.fecha_inicio).total_seconds() // 60)
     else:
-        fin_nueva_naive = inicio_nueva_naive + timedelta(hours=ag.duracion_horas)
-        
+        minutos_cita = int((ag.duracion_horas or 1) * 60)
+    fin_nueva_naive = inicio_nueva_naive + timedelta(minutes=minutos_cita)
+
     # Verificar disponibilidad
     disponible, msg_error = verificar_disponibilidad_detalle(
         db=db,
-        tipo_servicio=ag.tipo_servicio.value,
+        tipo_servicio=getattr(ag.tipo_servicio, "value", ag.tipo_servicio),
         inicio=inicio_nueva_naive,
-        duracion_horas=ag.duracion_horas,
+        duracion_horas=minutos_cita / 60,
         excluir_id=ag.id,
-        tenant_id=admin.tenant_id
+        tenant_id=admin.tenant_id,
+        duracion_minutos=minutos_cita,
     )
     
     if not disponible:
         return {"status": "error", "message": msg_error}
         
     # Asignar equipo disponible
-    equipos_posibles = Recursos.get(ag.tipo_servicio.value, [])
+    tenant_reprogramar = db.query(models.Tenant).filter(models.Tenant.id == admin.tenant_id).first()
+    equipos_posibles = equipos_configurados(tenant_reprogramar)
     equipo_asignado = None
     
     # 1. Intentar con el equipo actual
@@ -1415,17 +1416,23 @@ def get_dashboard(
     ).order_by(models.Agendamiento.fecha_inicio.desc()).limit(10).all()
     
     # Capacidad Futura (Mejora 7)
-    CAPACIDAD_DIARIA = 8
     tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
     try:
         tenant_config = json.loads(tenant.config_json or "{}")
     except (AttributeError, ValueError, TypeError, json.JSONDecodeError):
         tenant_config = {}
     horizonte_reservas = max(1, min(int(tenant_config.get("reglas_negocio", {}).get("dias_anticipacion", 30)), 365))
+    equipos_tenant = max(1, len(equipos_configurados(tenant)))
+
+    def capacidad_del_dia(dia) -> int:
+        """Citas que caben ese día según el horario y los equipos del negocio."""
+        if horarios.cerrado_por_feriado(tenant_config, dia.date()):
+            return 0
+        return len(horarios.inicios_del_dia(tenant_config, dia.weekday())) * equipos_tenant
+
     def get_capacidad_rango(dias: int):
         fecha_fin = hoy_dt + timedelta(days=dias)
-        dias_habiles = sum(1 for i in range(dias) if (hoy_dt + timedelta(days=i)).weekday() != 6)
-        capacidad_total = dias_habiles * CAPACIDAD_DIARIA
+        capacidad_total = sum(capacidad_del_dia(hoy_dt + timedelta(days=i)) for i in range(dias))
         ocupado = db.query(models.Agendamiento).filter(
             models.Agendamiento.tenant_id == cred.tenant_id,
             models.Agendamiento.fecha_inicio >= hoy_dt.replace(tzinfo=None),
@@ -1441,17 +1448,9 @@ def get_dashboard(
 
     # Disponibilidad dÃ­a a dÃ­a de la semana (Mejora: vista semanal para el cliente interno)
     DIAS_ES = ["Lun", "Mar", "MiÃ©", "Jue", "Vie", "SÃ¡b", "Dom"]
-    try:
-        dias_habiles = {
-            int(dia)
-            for dia in tenant_config.get("reglas_negocio", {}).get("dias_habiles", [0, 1, 2, 3, 4])
-        }
-    except (AttributeError, ValueError, TypeError, json.JSONDecodeError):
-        dias_habiles = {0, 1, 2, 3, 4}
+    dias_habiles = horarios.dias_abiertos(tenant_config) or {0, 1, 2, 3, 4}
 
     def get_disponibilidad_dias(cantidad_dias_habiles: int):
-        import holidays
-        feriados_cl = holidays.country_holidays('CL')
         resultado = []
         dia = hoy_dt
         while len(resultado) < cantidad_dias_habiles:
@@ -1459,8 +1458,8 @@ def get_dashboard(
                 dia += timedelta(days=1)
                 continue
 
-            es_feriado = dia.date() in feriados_cl
-            nombre_feriado = feriados_cl.get(dia.date()) if es_feriado else None
+            es_feriado = horarios.cerrado_por_feriado(tenant_config, dia.date())
+            nombre_feriado = horarios.nombre_feriado(dia.date()) if es_feriado else None
 
             bloqueo = db.query(models.DiaBloqueado).filter(
                 models.DiaBloqueado.tenant_id == cred.tenant_id,
@@ -1473,7 +1472,7 @@ def get_dashboard(
                 models.Agendamiento.estado != "cancelado"
             ).count()
 
-            capacidad_dia = 0 if (bloqueo or es_feriado) else CAPACIDAD_DIARIA
+            capacidad_dia = 0 if (bloqueo or es_feriado) else capacidad_del_dia(dia)
             porcentaje = round((ocupado / capacidad_dia) * 100, 1) if capacidad_dia > 0 else 100
 
             if bloqueo or es_feriado:
@@ -1893,46 +1892,6 @@ def post_setup_superadmin(
 
 
 @router.post("/config/horarios")
-async def guardar_config_horarios(
-    request: Request,
-    db: Session = Depends(get_db),
-    cred: CurrentUser = Depends(verificar_login)
-):
-    form_data = await request.form()
-    
-    dias_habiles = []
-    bloques_horarios = {}
-    
-    for i in range(7):
-        # Si el checkbox está marcado, lo añadimos a días hábiles
-        is_active = form_data.get(f"dia_{i}_activo")
-        if is_active == "1":
-            dias_habiles.append(i)
-            
-            # Recogemos los bloques escritos (ej: "09:00, 13:00")
-            bloques_raw = form_data.get(f"dia_{i}_bloques", "")
-            if bloques_raw.strip():
-                # Limpiar y separar por comas
-                bloques_lista = [b.strip() for b in bloques_raw.split(",") if b.strip()]
-                bloques_horarios[str(i)] = bloques_lista
-            else:
-                # Fallback si lo dejaron vacío pero marcado
-                bloques_horarios[str(i)] = ["09:00", "13:00", "15:30"]
-                
-    tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
-    
-    try:
-        config = json.loads(tenant.config_json or "{}")
-    except Exception:
-        config = {}
-        
-    if "reglas_negocio" not in config:
-        config["reglas_negocio"] = {}
-        
-    config["reglas_negocio"]["dias_habiles"] = dias_habiles
-    config["reglas_negocio"]["bloques_horarios"] = bloques_horarios
-    
-    tenant.config_json = json.dumps(config)
-    db.commit()
-    
-    return RedirectResponse(url="/admin/panel", status_code=303)
+async def guardar_config_horarios(cred: CurrentUser = Depends(verificar_login)):
+    """Editor antiguo de bloques fijos: los horarios ahora se editan en Configuración del negocio."""
+    return RedirectResponse(url="/admin/configuracion-negocio#horarios", status_code=303)

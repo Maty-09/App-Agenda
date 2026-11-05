@@ -2,7 +2,7 @@
 
 > Base de conocimiento para usuarios y para la futura mascota de soporte de Norem.
 >
-> Última actualización: septiembre de 2026.
+> Última actualización: noviembre de 2026.
 
 ## 1. Qué es Norem
 
@@ -22,15 +22,28 @@ Norem está pensado para administradores, equipos de atención y negocios de ser
 
 ## 3. Primeros pasos
 
-Al crear una cuenta de prueba, Norem guía al administrador por una configuración inicial. El orden recomendado es:
+Al crear una cuenta de prueba, Norem guía al administrador por una configuración inicial y luego por una guía de bienvenida. Norem no trae horarios ni formularios fijos: cada negocio parte con lo que elige en estos pasos y puede cambiarlo cuando quiera.
 
-1. Indicar el nombre del negocio, su actividad y servicio principal.
-2. Definir días, horarios de atención y duración estimada de cada atención.
-3. Elegir los datos que se solicitarán a los clientes al reservar.
-4. Revisar la agenda pública.
-5. Entrar al dashboard para gestionar la operación.
+### 3.1 Configuración inicial (al crear la cuenta)
 
-La configuración se puede modificar más adelante. Norem no obliga a usar campos, servicios ni nombres de otros negocios.
+1. **Tu negocio:** nombre, a qué se dedica y servicio principal.
+2. **Cuándo atiendes:** un horario base (inicio y término), los días de atención y la duración estimada de cada atención. Es un punto de partida: en el paso 3.2 podrás definir horarios distintos por día y pausas.
+3. **Datos que pedirás al cliente:** nombre, teléfono e identificación/RUT son opcionales. El **correo electrónico siempre se pide**, porque es donde el cliente recibe la confirmación de su reserva.
+
+### 3.2 Lista de inicio recomendada
+
+Después de la configuración inicial, conviene completar estos pasos en orden. Todos están en **Configuración del negocio**:
+
+| Paso | Dónde | Qué revisar |
+| --- | --- | --- |
+| 1. Horario de atención | Configuración → **Horario de atención** | Días abiertos y cerrados, tramos de cada día, colación, feriados. |
+| 2. Servicio y capacidad | Configuración → **Servicio y capacidad** | Duración de cada atención, equipos o profesionales, cada cuánto empieza un horario y anticipación mínima. |
+| 3. Formulario de reserva | **Calendario** → **Formulario Local** | Agregar o quitar las preguntas que verá el cliente. |
+| 4. Probar la agenda | **Ver agenda pública** | Elegir una fecha y comprobar que aparecen los horarios esperados. |
+| 5. Compartir | Enlace de la agenda | Publicarlo en WhatsApp, Instagram, Google o tu sitio web. |
+| 6. Integrar en tu web (opcional) | Configuración → **API pública** | Autorizar tu dominio y copiar el código. |
+
+**Consejo:** antes de compartir el enlace, haz una reserva de prueba tú mismo y luego cancélala desde el **Calendario**.
 
 ## 4. Módulos de Norem
 
@@ -56,16 +69,19 @@ La agenda muestra las reservas y permite al equipo consultar qué viene después
 2. Busca la fecha de la atención.
 3. Abre la reserva para revisar los datos ingresados por el cliente.
 
-**Disponibilidad:** Norem muestra solo horas que cumplen las reglas del negocio: días hábiles, bloques horarios, duración de la atención, capacidad disponible, días bloqueados y feriados configurados.
+**Disponibilidad:** Norem muestra solo horas que cumplen las reglas que configuró el propio negocio: su horario de atención día por día, la duración de la atención, cada cuánto empieza un horario, la capacidad (equipos), la anticipación mínima, los días bloqueados y si atiende o no en feriados.
 
 Si no aparece una hora, puede ocurrir que:
 
-- El día no esté configurado como día de atención.
-- El horario quede fuera del bloque configurado.
-- No haya capacidad disponible para ese tramo.
+- El día esté marcado como **cerrado** en el horario de atención.
+- La atención completa no quepa dentro de un tramo (por ejemplo, una atención de 2 horas no cabe en un tramo de 09:00 a 10:30).
+- No haya capacidad disponible: todos los equipos ya tienen una reserva a esa hora.
+- La hora esté antes de la **anticipación mínima** (por ejemplo, el negocio exige reservar con 24 horas).
 - El día esté bloqueado.
-- Sea un feriado.
+- Sea un feriado y el negocio no atienda feriados.
 - La fecha quede fuera de la ventana de disponibilidad futura elegida por el negocio.
+
+**Reprogramar una cita:** desde el **Calendario**, el equipo puede mover una reserva a cualquier hora que quede dentro del horario de atención de ese día y tenga un equipo libre. Si la hora queda fuera, Norem muestra el horario de ese día para elegir otra.
 
 ### 4.3 Reservas y agenda pública
 
@@ -101,18 +117,54 @@ Una tarea puede incluir título, responsable, prioridad, estado y fecha límite,
 
 ### 4.6 Configuración del negocio
 
-Desde **Configuración**, el administrador puede ajustar cómo funciona su cuenta. Entre otras cosas puede definir:
+Desde **Configuración del negocio**, el administrador ajusta cómo funciona su cuenta. Está dividida en secciones:
 
-- Nombre y actividad del negocio.
-- Servicio principal y duración de atención.
-- Días y horarios de atención.
-- Ventana de disponibilidad futura.
-- Capacidad o equipo de trabajo, cuando corresponda.
-- Preguntas y campos que se mostrarán en la agenda pública.
+| Sección | Qué se configura |
+| --- | --- |
+| Información del negocio | Nombre, actividad y servicio principal. |
+| Horario de atención | Días abiertos, tramos de cada día y atención en feriados (ver 4.7). |
+| Servicio y capacidad | Duración de cada atención, equipos o profesionales, cada cuánto empieza un horario y anticipación mínima. |
+| Comunicación con clientes | Si las confirmaciones incluyen la dirección y el enlace de Google Maps. |
+| Disponibilidad y dashboard | Hasta cuántos días hacia adelante se puede reservar y cuántos días muestra el dashboard. |
 
-**Regla clave:** los cambios de configuración afectan las reservas futuras y la experiencia de los clientes. Antes de cambiar horarios o campos obligatorios, se recomienda revisar que representen la operación real del negocio.
+**Servicio y capacidad en detalle:**
 
-### 4.7 Formulario de reserva
+- **Duración de cada atención:** de 30 minutos a 8 horas. Es el tiempo que queda ocupado por cada reserva.
+- **Equipos o profesionales:** escríbelos separados por coma (por ejemplo `Box 1, Box 2` o `Ana, Pedro`). Cada uno puede atender una reserva en el mismo horario, así que con dos equipos se aceptan dos reservas a la misma hora.
+- **Cada cuánto empieza un horario:** por defecto, un horario empieza cuando termina el anterior (atenciones de 1 hora → 9:00, 10:00, 11:00…). Si eliges, por ejemplo, "cada 30 min", el cliente podrá reservar a las 9:00, 9:30, 10:00…
+- **Anticipación mínima:** evita reservas de último minuto. Con "24 horas", hoy no se pueden tomar horas para mañana temprano.
+
+**Regla clave:** los cambios de configuración afectan las reservas futuras y la experiencia de los clientes. Las reservas que ya existen no se modifican ni se cancelan solas. Antes de reducir horarios, revisa si tienes reservas en los días que vas a cerrar.
+
+### 4.7 Horario de atención
+
+Cada negocio define su propio horario, día por día. Norem no impone bloques ni horarios fijos.
+
+**Para configurarlo:**
+
+1. Entra a **Configuración del negocio → Horario de atención** (también desde **Calendario → Horarios de Trabajo**).
+2. Marca los días en que atiendes. Los días sin marcar quedan **cerrados**.
+3. En cada día abierto, escribe uno o más **tramos** con hora de inicio y término.
+4. Usa **+ Agregar tramo** para sumar otro tramo al mismo día, o **Quitar** para eliminarlo.
+5. Si varios días tienen el mismo horario, configura uno y usa **Copiar este horario a los demás días abiertos**.
+6. Marca **Atender en feriados** solo si abres los feriados nacionales.
+7. Presiona **Guardar configuración** y revisa tu agenda pública.
+
+**Ejemplos:**
+
+| Necesidad | Cómo se configura |
+| --- | --- |
+| Colación de 13:00 a 14:00 | Dos tramos: 09:00–13:00 y 14:00–18:00. |
+| Sábados medio día | Marca sábado con un tramo 10:00–14:00. |
+| Un día con horario distinto | Cada día tiene sus propios tramos; cambia solo ese día. |
+| Cerrar por vacaciones o un día puntual | No cambies el horario: usa **Bloquear día** en el **Calendario**. |
+| Atenciones de 1 hora cada 30 minutos | Duración "1 hora" y "Cada cuánto empieza un horario: cada 30 min". |
+
+Norem solo ofrece una hora si la atención completa cabe dentro del tramo. Por ejemplo, con atenciones de 2 horas y un tramo de 14:00 a 18:00, se ofrecen las 14:00 y las 16:00.
+
+Si al guardar aparece un mensaje en rojo, revisa que cada tramo termine después de empezar y que haya al menos un día abierto. En ese caso no se guarda ningún cambio.
+
+### 4.8 Formulario de reserva
 
 El formulario de reserva es configurable. El administrador debe solicitar solo la información que necesita.
 
@@ -120,7 +172,9 @@ El formulario de reserva es configurable. El administrador debe solicitar solo l
 
 Si una cuenta no configuró campos como marca, modelo, dirección o equipo, Norem no debe asumirlos ni mostrarlos como obligatorios.
 
-### 4.8 Notificaciones y correos
+**El correo electrónico es indispensable:** sin un campo de correo, el cliente no puede terminar su reserva, porque Norem necesita dónde enviarle la confirmación. No elimines ni desactives ese campo.
+
+### 4.9 Notificaciones y correos
 
 Norem puede enviar comunicaciones relacionadas con una reserva, por ejemplo:
 
@@ -132,7 +186,7 @@ Norem puede enviar comunicaciones relacionadas con una reserva, por ejemplo:
 
 Los correos salen desde la identidad de Norem configurada para la plataforma. Si el cliente no encuentra un mensaje, se debe pedir que revise spam, promociones y que confirme que su correo fue escrito correctamente.
 
-### 4.9 Recuperar contraseña
+### 4.10 Recuperar contraseña
 
 1. En la pantalla de inicio de sesión selecciona **Olvidé mi contraseña**.
 2. Escribe el correo asociado a la cuenta.
@@ -141,13 +195,25 @@ Los correos salen desde la identidad de Norem configurada para la plataforma. Si
 
 Por seguridad, Norem nunca debe solicitar ni recibir la contraseña actual o nueva por chat, correo o WhatsApp.
 
-### 4.10 Plan, prueba y suscripción
+### 4.11 Plan, prueba y suscripción
 
 Las cuentas nuevas pueden iniciar una prueba gratuita de 14 días, sin tarjeta para comenzar. Al terminar la prueba, el administrador puede continuar con una suscripción desde el área **Plan**.
 
+**Estados de la cuenta:**
+
+| Estado | Qué significa | Qué ve el administrador |
+| --- | --- | --- |
+| Prueba | Período gratuito de 14 días. | Todo Norem. En **Plan** aparecen los días restantes. |
+| Prueba terminada | Pasaron los 14 días sin suscripción. | Al entrar, Norem lo lleva a **Plan** para continuar. |
+| Activa | Suscripción pagada al día. | Todo Norem. En **Plan** aparece "Tu suscripción está activa". |
+| Pago pendiente | Un cobro falló o la suscripción se pausó o terminó. | Puede iniciar sesión, pero Norem lo lleva a **Plan** para reactivar el pago. Sus datos siguen guardados. |
+| Desactivada | Cuenta desactivada por Norem. | No puede iniciar sesión; debe contactar a Norem. |
+
+Si ya tienes una suscripción activa, el botón de pago no crea una segunda suscripción, así que no hay riesgo de un doble cobro.
+
 El bot puede explicar el estado visible de la cuenta, la fecha de término de prueba y cómo llegar al área de suscripción. No debe prometer descuentos, cambiar planes, solicitar datos de pago ni confirmar cobros que no aparezcan en el sistema.
 
-### 4.11 Integración web y API pública
+### 4.12 Integración web y API pública
 
 Norem puede integrarse a cualquier página web propia. El administrador puede activar la API pública, autorizar su dominio y usar la agenda configurada en su sitio.
 
@@ -167,7 +233,7 @@ Documentación técnica disponible: [`PUBLIC_API.md`](PUBLIC_API.md).
 
 ### “¿Por qué no veo horarios para reservar?”
 
-Revisa que el negocio atienda ese día, que no sea feriado, que no esté bloqueado, que la fecha esté dentro de la disponibilidad futura y que exista capacidad para el servicio y duración elegidos.
+Revisa en **Configuración → Horario de atención** que ese día esté abierto y que la atención completa quepa en algún tramo. Luego confirma que no sea un feriado (si no atiendes feriados), que el día no esté bloqueado, que la fecha esté dentro de la disponibilidad futura, que se cumpla la anticipación mínima y que haya un equipo libre.
 
 ### “¿Cómo bloqueo un día?”
 
@@ -175,7 +241,27 @@ Entra a la configuración de agenda, selecciona la fecha y registra el motivo si
 
 ### “¿Cómo cambio mi horario de atención?”
 
-Ve a **Configuración**, busca los días y horarios de atención, realiza el ajuste y guarda. Conviene revisar las reservas ya existentes antes de reducir la disponibilidad.
+Ve a **Configuración del negocio → Horario de atención**, ajusta los tramos del día que quieras y guarda. Cada día tiene su propio horario. Conviene revisar las reservas ya existentes antes de reducir la disponibilidad: Norem no las cancela automáticamente.
+
+### “¿Cómo agrego la colación o una pausa?”
+
+Divide el día en dos tramos. Por ejemplo, 09:00–13:00 y 14:00–18:00. Entre las 13:00 y las 14:00 no se ofrecerán horas. Cada día puede tener una pausa distinta.
+
+### “Quiero atender los sábados con otro horario”
+
+Marca **Sábado** en el horario de atención y escribe su tramo, por ejemplo 10:00–14:00. No afecta a los demás días.
+
+### “Quiero que se pueda reservar cada 30 minutos”
+
+En **Servicio y capacidad**, elige “Cada cuánto empieza un horario: cada 30 min”. La duración de la atención no cambia; solo cambian las horas de inicio que se ofrecen.
+
+### “¿Atiendo en feriados?”
+
+Por defecto, los feriados nacionales quedan cerrados. Si atiendes, marca **Atender en feriados** en el horario de atención.
+
+### “Me aparece que mi pago no se pudo procesar”
+
+Entra a **Plan** y continúa con el pago para reactivar la suscripción. Tus datos, clientes y reservas siguen guardados. Si el problema continúa, escálalo a soporte nivel 2.
 
 ### “¿Cómo agrego una pregunta al formulario?”
 
@@ -258,7 +344,11 @@ La mascota no debe:
 
 **Pregunta:** “No veo horas disponibles.”
 
-**Respuesta modelo:** “Te ayudo a revisarlo. Primero confirma que elegiste el servicio y la duración correctos. Si todavía no aparecen horas, revisa en Configuración que ese día esté habilitado, que no esté bloqueado y que la fecha esté dentro de tu disponibilidad futura. ¿En qué fecha estás intentando reservar?”
+**Respuesta modelo:** “Te ayudo a revisarlo. Entra a Configuración del negocio → Horario de atención y confirma que ese día esté abierto y que el tramo sea suficiente para la duración de tu atención. Si está bien, revisa que el día no esté bloqueado, que no sea feriado y que la fecha esté dentro de tu disponibilidad futura. ¿En qué fecha estás intentando reservar?”
+
+**Pregunta:** “Quiero cerrar a la hora de almuerzo.”
+
+**Respuesta modelo:** “Puedes hacerlo en Configuración del negocio → Horario de atención. Divide ese día en dos tramos, por ejemplo 09:00–13:00 y 14:00–18:00, y guarda. Si todos tus días son iguales, usa ‘Copiar este horario a los demás días abiertos’.”
 
 **Pregunta:** “Quiero poner la agenda en mi página.”
 

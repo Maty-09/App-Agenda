@@ -18,7 +18,7 @@ router = APIRouter()
 
 def _tenant_y_config(db: Session, tenant_id: str):
     tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
-    if not tenant:
+    if not tenant or tenant.estado_suscripcion == "cancelada":
         raise HTTPException(status_code=404, detail="Negocio no encontrado")
     try:
         config = json.loads(tenant.config_json or "{}")
@@ -32,11 +32,17 @@ def agenda_publica(tenant_id: str, response: Response, db: Session = Depends(get
     """Entrega la configuración pública y URL de reserva para un sitio externo."""
     tenant, config = _tenant_y_config(db, tenant_id)
     negocio = config.get("negocio", {})
+    reglas = config.get("reglas_negocio", {})
+    reglas_publicas = {
+        clave: reglas[clave]
+        for clave in ("dias_habiles", "bloques_horarios", "dias_anticipacion")
+        if clave in reglas
+    }
     base_url = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
     response.headers["Access-Control-Allow-Origin"] = "*"
     return {
         "negocio": {"id": tenant.id, "nombre": tenant.nombre_empresa, "actividad": negocio.get("giro", ""), "servicio_principal": negocio.get("servicio_principal", ""), "duracion_minutos": negocio.get("duracion_minutos", 60)},
-        "reglas": config.get("reglas_negocio", {}),
+        "reglas": reglas_publicas,
         "booking_url": f"{base_url}/cliente/{tenant.id}/agendar_web",
         "embed_script": f"{base_url}/api/v1/public/{tenant.id}/agenda/widget.js",
     }

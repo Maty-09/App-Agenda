@@ -143,8 +143,6 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
     
     # Evaluar contexto de datos
     contexto_datos = ""
-    es_admin = False
-    
     if db:
         # Detectar si el usuario pregunta por marcas
         if "marcas" in mensaje.lower() or "top" in mensaje.lower():
@@ -154,25 +152,24 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
             for i, m in enumerate(top_marcas):
                 contexto_datos += f"{i+1}. {m['marca']} - {m['citas']} citas\n"
         
-        # Verificar si el teléfono pertenece a un admin
         if telefono:
-            usuario = db.query(models.Usuario).filter(
-                models.Usuario.email.like(f"%{telefono}%") # Simple check, idealmente buscaríamos en DB por telefono real
+            # Los números y los historiales pueden repetirse entre negocios;
+            # cada búsqueda debe quedar acotada al tenant del webhook.
+            cliente = db.query(models.Cliente).filter(
+                models.Cliente.tenant_id == tenant_id,
+                models.Cliente.telefono == telefono,
             ).first()
-            if usuario and usuario.rol == "admin":
-                es_admin = True
-                
-            # Agregar información de citas del cliente al contexto
-            cliente = db.query(models.Cliente).filter(models.Cliente.telefono == telefono).first()
             citas_futuras = []
             if cliente:
                 citas_futuras = db.query(models.Agendamiento).filter(
+                    models.Agendamiento.tenant_id == tenant_id,
                     models.Agendamiento.cliente_id == cliente.id,
                     models.Agendamiento.fecha_inicio >= get_now_chile().replace(tzinfo=None),
                     models.Agendamiento.estado != "cancelado"
                 ).order_by(models.Agendamiento.fecha_inicio.asc()).all()
             else:
                 citas_futuras = db.query(models.Agendamiento).filter(
+                    models.Agendamiento.tenant_id == tenant_id,
                     models.Agendamiento.telefono == telefono,
                     models.Agendamiento.fecha_inicio >= get_now_chile().replace(tzinfo=None),
                     models.Agendamiento.estado != "cancelado"
@@ -219,10 +216,11 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
     }
     
     # Inyectar historial si existe
-    if telefono:
-        if telefono not in historial_global:
-            historial_global[telefono] = []
-        payload["messages"].extend(historial_global[telefono][-6:])
+    history_key = f"{tenant_id or 'sin-tenant'}:{telefono}" if telefono else None
+    if history_key:
+        if history_key not in historial_global:
+            historial_global[history_key] = []
+        payload["messages"].extend(historial_global[history_key][-6:])
         
     payload["messages"].append({"role": "user", "content": mensaje})
     
@@ -233,9 +231,10 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
             respuesta_ia = data["choices"][0]["message"]["content"]
             
             # Guardar en el historial
-            if telefono:
-                historial_global[telefono].append({"role": "user", "content": mensaje})
-                historial_global[telefono].append({"role": "assistant", "content": respuesta_ia})
+            if history_key:
+                historial_global[history_key].append({"role": "user", "content": mensaje})
+                historial_global[history_key].append({"role": "assistant", "content": respuesta_ia})
+                historial_global[history_key] = historial_global[history_key][-12:]
             
             # Parsear intención de agendamiento real (Fase 2)
             import re

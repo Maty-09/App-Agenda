@@ -37,6 +37,30 @@ router = APIRouter()
 SYSTEM_BASE_URL = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
 
 
+def _cookie_secure(request: Request) -> bool:
+    """Exige cookies Secure en producción; permite HTTP en desarrollo local."""
+    return os.getenv("VERCEL") == "1" or request.url.scheme == "https"
+
+
+def _set_session_cookie(response: RedirectResponse, request: Request, token: str) -> None:
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {token}",
+        httponly=True,
+        secure=_cookie_secure(request),
+        samesite="lax",
+        path="/",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+
+def _delete_session_cookie(response: RedirectResponse, request: Request) -> None:
+    response.delete_cookie(
+        "access_token", path="/", secure=_cookie_secure(request),
+        httponly=True, samesite="lax",
+    )
+
+
 def _avisar_activacion_interna(db: Session, tenant: models.Tenant, origen: str) -> None:
     """Notifica al equipo cuando una cuenta pasa a estar activa."""
     administrador = db.query(models.Usuario).filter(
@@ -146,7 +170,7 @@ def login(
     else:
         destino = "/admin/dashboard"
     response = RedirectResponse(url=destino, status_code=status.HTTP_303_SEE_OTHER)
-    response.set_cookie(key="access_token", value=f"Bearer {access_token}", httponly=True)
+    _set_session_cookie(response, request, access_token)
     return response
 
 
@@ -208,7 +232,7 @@ def iniciar_prueba(
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     response = RedirectResponse(url="/admin/configuracion-inicial", status_code=status.HTTP_303_SEE_OTHER)
-    response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True)
+    _set_session_cookie(response, request, token)
     return response
 
 
@@ -456,18 +480,21 @@ def reset_password(
     usuario.sesion_activa = False
     db.commit()
     response = RedirectResponse(url="/admin/login?password_reset=1", status_code=status.HTTP_303_SEE_OTHER)
-    response.delete_cookie("access_token")
+    _delete_session_cookie(response, request)
     return response
 
 
 @router.get("/logout")
-def logout(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
-    usuario = db.query(models.Usuario).filter(models.Usuario.id == cred.id).first()
+def logout(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    usuario = db.query(models.Usuario).filter(
+        models.Usuario.id == cred.id,
+        models.Usuario.tenant_id == cred.tenant_id,
+    ).first()
     if usuario:
         usuario.sesion_activa = False
         db.commit()
     response = RedirectResponse(url="/admin/login", status_code=status.HTTP_303_SEE_OTHER)
-    response.delete_cookie("access_token")
+    _delete_session_cookie(response, request)
     return response
 
 
@@ -499,18 +526,13 @@ def panel_agendamientos(
     except Exception:
         tenant_config = {}
 
-    print("=" * 80)
-    print(f"DEBUG PANEL: subtipo={subtipo}, tipo_servicio={tipo_servicio}, fecha={fecha}")
-
     if subtipo:
         filter_subtipo = subtipo.lower().strip()
         if filter_subtipo == "local":
             filter_subtipo = "taller"
         query = query.filter(models.Agendamiento.subtipo == filter_subtipo)
-        print(f"  -> Filtrando por subtipo: {filter_subtipo}")
     if tipo_servicio:
         query = query.filter(models.Agendamiento.tipo_servicio == tipo_servicio)
-        print(f"  -> Filtrando por tipo_servicio: {tipo_servicio}")
     if fecha:
         try:
             fecha_inicio = datetime.strptime(fecha, "%Y-%m-%d")
@@ -519,19 +541,17 @@ def panel_agendamientos(
                 models.Agendamiento.fecha_inicio >= fecha_inicio,
                 models.Agendamiento.fecha_inicio < fecha_fin
             )
-            print(f"  -> Filtrando por fecha: {fecha}")
         except ValueError:
             pass
 
     agendamientos = query.order_by(models.Agendamiento.id).all()
-    print(f"  -> RESULTADO: {len(agendamientos)} agendamientos encontrados")
-    for ag in agendamientos:
-        print(f"    - ID {ag.id}: {ag.nombre} {ag.apellido} - {ag.fecha_inicio}")
-    print("=" * 80)
-    
-    utm_registro = db.query(models.UTMRegistro).all()
+    utm_registro = db.query(models.UTMRegistro).filter(
+        models.UTMRegistro.tenant_id == cred.tenant_id
+    ).all()
 
-    dias_bloqueados = db.query(models.DiaBloqueado).all()
+    dias_bloqueados = db.query(models.DiaBloqueado).filter(
+        models.DiaBloqueado.tenant_id == cred.tenant_id
+    ).all()
 
     equipos_config = tenant_config.get("negocio", {}).get("equipos", []) or ["Agenda principal"]
     paleta = ["#2563EB", "#059669", "#7C3AED", "#EA580C", "#DB2777"]
@@ -607,10 +627,12 @@ def actualizar_nota(
     cred: CurrentUser = Depends(verificar_login)
 ):
     # Buscamos el registro en la DB usando SQLAlchemy
-    agendamiento = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
+    agendamiento = db.query(models.Agendamiento).filter(
+        models.Agendamiento.id == id,
+        models.Agendamiento.tenant_id == cred.tenant_id,
+    ).first()
     
     if not agendamiento:
-        print(f"Error: No se encontrÃ³ el agendamiento ID {id}")
         return RedirectResponse("/admin/panel", status_code=303)
 
     # Actualizamos la nota interna
@@ -618,10 +640,9 @@ def actualizar_nota(
     
     try:
         db.commit()
-        print(f"Nota del agendamiento {id} actualizada con Ã©xito.")
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"Error al guardar: {e}")
+        logger.error("appointment_note_update_failed tenant_id=%s", cred.tenant_id)
     
     return RedirectResponse("/admin/panel", status_code=303)
 # =============================
@@ -639,7 +660,9 @@ def export_utm(
     
     ws.append(["ID","Origen Link", "Canal","Creado Por","RUT","Nombre","Apellido","Direccion","Patente","Marca","Modelo","Fecha Inicio","Fecha Termino"])
 
-    agendamientos = db.query(models.Agendamiento).order_by(models.Agendamiento.fecha_inicio.desc()).all()
+    agendamientos = db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == cred.tenant_id
+    ).order_by(models.Agendamiento.fecha_inicio.desc()).all()
     
     for a in agendamientos: 
         ws.append([
@@ -676,7 +699,8 @@ def cancelar_agendamiento(
     admin=Depends(verificar_login)
 ):
     ag = db.query(models.Agendamiento).filter(
-        models.Agendamiento.id == id
+        models.Agendamiento.id == id,
+        models.Agendamiento.tenant_id == admin.tenant_id,
     ).first()
 
     if not ag:
@@ -864,9 +888,10 @@ async def reordenar_campos(
         db.commit()
         return {"status": "success", "message": "Orden actualizado"}
     
-    except Exception as e:
+    except Exception:
         db.rollback()
-        return {"status": "error", "message": str(e)}, 500
+        logger.error("form_fields_reorder_failed tenant_id=%s", cred.tenant_id)
+        raise HTTPException(status_code=500, detail="No se pudo guardar el orden de los campos")
 
 
 
@@ -985,7 +1010,10 @@ async def reprogramar_cita(
     db: Session = Depends(get_db),
     admin = Depends(verificar_login)
 ):
-    ag = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
+    ag = db.query(models.Agendamiento).filter(
+        models.Agendamiento.id == id,
+        models.Agendamiento.tenant_id == admin.tenant_id,
+    ).first()
     if not ag:
         return {"status": "error", "message": "Cita no encontrada"}
         
@@ -1028,6 +1056,7 @@ async def reprogramar_cita(
     current_team = ag.equipo
     if current_team in equipos_posibles:
         ocupado = db.query(models.Agendamiento).filter(
+            models.Agendamiento.tenant_id == admin.tenant_id,
             models.Agendamiento.id != ag.id,
             models.Agendamiento.equipo == current_team,
             models.Agendamiento.fecha_inicio < fin_nueva_naive,
@@ -1043,6 +1072,7 @@ async def reprogramar_cita(
             if eq == current_team:
                 continue
             ocupado = db.query(models.Agendamiento).filter(
+                models.Agendamiento.tenant_id == admin.tenant_id,
                 models.Agendamiento.id != ag.id,
                 models.Agendamiento.equipo == eq,
                 models.Agendamiento.fecha_inicio < fin_nueva_naive,
@@ -1070,7 +1100,8 @@ async def reprogramar_cita(
         return {"status": "ok"}
     except Exception as e:
         db.rollback()
-        return {"status": "error", "message": f"Error al guardar en base de datos: {str(e)}"}
+        logger.exception("booking_reschedule_failed", extra={"booking_id": id, "tenant_id": admin.tenant_id})
+        return {"status": "error", "message": "No se pudo guardar la reprogramación. Intenta nuevamente."}
 
 
 @router.post("/reubicar-emergencia/{id}")
@@ -1081,7 +1112,10 @@ async def reubicar_emergencia(
     admin = Depends(verificar_login)
 ):
     nueva_direccion = payload.get("nueva_direccion")
-    ag = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
+    ag = db.query(models.Agendamiento).filter(
+        models.Agendamiento.id == id,
+        models.Agendamiento.tenant_id == admin.tenant_id,
+    ).first()
     
     if not ag:
         return {"status": "error", "message": "No encontrado"}
@@ -1200,7 +1234,10 @@ async def editar_cita_admin(
     db: Session = Depends(get_db),
     admin = Depends(verificar_login)
 ):
-    cita = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
+    cita = db.query(models.Agendamiento).filter(
+        models.Agendamiento.id == id,
+        models.Agendamiento.tenant_id == admin.tenant_id,
+    ).first()
     
     if not cita:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
@@ -1214,11 +1251,10 @@ async def editar_cita_admin(
         cita.duracion_horas = duracion_horas
         
         db.commit()
-        print(f"â Cita ID {id} modificada con Ã©xito: {nueva_fecha_inicio} ({duracion_horas} hrs)")
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"â Error al editar cita: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("appointment_reschedule_failed tenant_id=%s", admin.tenant_id)
+        raise HTTPException(status_code=500, detail="No se pudo actualizar la cita")
         
     return RedirectResponse(url="/admin/panel", status_code=303)
 
@@ -1245,7 +1281,9 @@ def obtener_bloqueos_json(db: Session = Depends(get_db), cred: CurrentUser = Dep
 @router.get("/api/debug/agendamientos")
 def debug_agendamientos(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     """Endpoint de debugging para ver todos los agendamientos"""
-    agendamientos = db.query(models.Agendamiento).all()
+    agendamientos = db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == cred.tenant_id
+    ).all()
     
     resultado = []
     for ag in agendamientos:
@@ -1265,7 +1303,9 @@ def debug_agendamientos(db: Session = Depends(get_db), cred: CurrentUser = Depen
 @router.get("/api/debug/ultimo-agendamiento")
 def debug_ultimo_agendamiento(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     """Endpoint de debugging para ver el Ãºltimo agendamiento guardado"""
-    ultimo = db.query(models.Agendamiento).order_by(models.Agendamiento.id.desc()).first()
+    ultimo = db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == cred.tenant_id
+    ).order_by(models.Agendamiento.id.desc()).first()
     
     if not ultimo:
         return {"error": "No hay agendamientos"}

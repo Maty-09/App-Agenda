@@ -29,16 +29,18 @@ def verificar_login(request: Request) -> CurrentUser:
 
     user_id = payload.get("sub")
     tenant_id = payload.get("tenant_id")
-    rol = payload.get("rol")
-    email = payload.get("email")
-
     if user_id is None or tenant_id is None:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
         raise HTTPException(status_code=401, detail="Token inválido")
 
     db = SessionLocal()
     try:
         usuario = db.query(models.Usuario).filter(
-            models.Usuario.id == int(user_id),
+            models.Usuario.id == user_id,
             models.Usuario.tenant_id == tenant_id,
             models.Usuario.sesion_activa.is_(True),
         ).first()
@@ -50,4 +52,17 @@ def verificar_login(request: Request) -> CurrentUser:
     finally:
         db.close()
 
-    return CurrentUser(id=int(user_id), email=email, tenant_id=tenant_id, rol=rol)
+    # Los permisos y el correo se leen del registro vigente, no de claims
+    # que pueden quedar obsoletos en un JWT todavía válido.
+    return CurrentUser(id=user_id, email=usuario.email, tenant_id=tenant_id, rol=usuario.rol)
+
+
+def verificar_login_opcional(request: Request) -> CurrentUser | None:
+    """Devuelve contexto autenticado si hay sesión válida; nunca otorga privilegios por parámetros del cliente."""
+    token = request.cookies.get("access_token", "")
+    if not token.startswith("Bearer "):
+        return None
+    try:
+        return verificar_login(request)
+    except HTTPException:
+        return None

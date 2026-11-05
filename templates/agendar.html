@@ -12,6 +12,10 @@
 </head>
 <body class="bg-gray-100 font-sans">
 
+{% set es_admin = request.query_params.get('modo') == 'emergencia' %}
+{% set negocio = negocio or {} %}
+{% set ruta_agenda = booking_path|default('/cliente/agendar_web') %}
+{% set qs_reinicio = '?modo=' ~ request.query_params.get('modo', 'normal') ~ ('&norem_embed=1&norem_site=' ~ (embed_site or '')|urlencode if embed_mode else '') %}
 {% set color_principal = 'amber' if request.query_params.get('modo') == 'emergencia' else 'blue' %}
 {% set color_boton = 'bg-amber-600 hover:bg-amber-700' if request.query_params.get('modo') == 'emergencia' else 'bg-blue-600 hover:bg-blue-700' %}
 
@@ -35,12 +39,26 @@
                 <div class="w-24 h-24 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-6 border border-green-100">
                     <i class="fas fa-check-circle text-5xl"></i>
                 </div>
-                <h1 class="text-3xl font-extrabold text-slate-900 mb-4 tracking-tight">¡Agendado con éxito!</h1>
+                <h1 class="text-3xl font-extrabold text-slate-900 mb-4 tracking-tight">¡Solicitud recibida!</h1>
+                {% if fecha_reserva %}
+                <p class="text-slate-600 mb-2">Tu hora quedó reservada para el <strong>{{ fecha_reserva }}</strong> a las <strong>{{ hora_reserva }}</strong>.</p>
+                {% endif %}
+                {% if correo_cliente %}
+                <p class="text-sm text-slate-500 mb-6">Te enviaremos la confirmación a <strong>{{ correo_cliente }}</strong>. Revisa también tu carpeta de spam.</p>
+                {% endif %}
+                <a href="{{ ruta_agenda }}{{ qs_reinicio }}" class="text-sm font-semibold text-blue-600 hover:underline">Agendar otra hora</a>
             </div>
         {% else %}
         
         <h1 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-2">Agenda tu {{ negocio.get('servicio_principal', 'hora') }}</h1>
-        <p class="mb-6 text-center text-sm text-slate-500">{{ nombre_empresa|default('Norem') }}</p>
+        <p class="mb-6 text-center text-sm text-slate-500">{{ nombre_empresa or 'Norem' }}</p>
+
+        {% if mensaje_error %}
+        <div role="alert" class="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <i class="fas fa-circle-exclamation mt-0.5"></i>
+            <span>{{ mensaje_error }}</span>
+        </div>
+        {% endif %}
 
         {% if not fecha_seleccionada %}
         <div class="space-y-6">
@@ -64,7 +82,11 @@
 
         {% if fecha_seleccionada and horas_disponibles and not hora_confirmada %}
         <div class="mt-8 space-y-6">
-            <h2 class="text-lg font-semibold text-gray-700">2️⃣ Selecciona la hora</h2>
+            <div class="flex items-center justify-between gap-3">
+                <h2 class="text-lg font-semibold text-gray-700">2️⃣ Selecciona la hora</h2>
+                <a href="{{ ruta_agenda }}{{ qs_reinicio }}" class="text-sm font-semibold text-blue-600 hover:underline">Cambiar fecha</a>
+            </div>
+            <p class="text-sm text-slate-500">📅 {{ fecha_seleccionada }}</p>
             
             {% if request.query_params.get('modo') == 'emergencia' %}
             <div class="bg-slate-900 p-4 rounded-2xl border-l-8 border-amber-500 mb-4">
@@ -99,25 +121,20 @@
         <div class="mt-8 space-y-6">
             <div class="bg-slate-50 p-4 rounded-xl border border-dashed border-slate-300 flex justify-between items-center text-sm font-bold text-slate-600">
                 <span>📅 {{ fecha_seleccionada }}</span>
-                <span>⏰ {{ hora_confirmada }}</span>
+                <span>⏰ {{ hora_confirmada }}{% if hora_termino %} – {{ hora_termino }}{% endif %}</span>
             </div>
+            <a href="{{ ruta_agenda }}{{ qs_reinicio }}" class="inline-block text-sm font-semibold text-blue-600 hover:underline">Cambiar fecha u hora</a>
 
             <form method="post" action="{{ booking_path|default('/cliente/agendar_web') }}" class="space-y-5">
                 {% if embed_mode %}<input type="hidden" name="norem_embed" value="1"><input type="hidden" name="norem_site" value="{{ embed_site or '' }}">{% endif %}
                 <input type="hidden" name="modo" value="{{ request.query_params.get('modo', 'normal') }}">
-                <input type="hidden" name="modo_emergencia" value="{{ 'true' if es_admin else 'false' }}">
-                
                 <input type="hidden" name="tipo_servicio" value="{{ tipo }}">
                 <input type="hidden" name="subtipo" value="{{ subtipo }}">
                 <input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">
                 <input type="hidden" name="hora" value="{{ hora_confirmada }}">
                 <input type="hidden" name="duracion_horas" value="{{ duracion_horas }}">
                 
-                {% if es_admin %}
-                    <input type="hidden" name="modo_emergencia" value="true">
-                {% else %}
-                    <input type="hidden" name="modo_emergencia" value="false">
-                {% endif %}
+                <input type="hidden" name="modo_emergencia" value="{{ 'true' if es_admin else 'false' }}">
 
                 <div class="space-y-4">
                     {% for campo in campos_dinamicos %}

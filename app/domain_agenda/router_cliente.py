@@ -19,6 +19,7 @@ from app.core.auth_deps import CurrentUser, verificar_login_opcional
 from app.infrastructure.notifications import enviar_notificacion
 from sqlalchemy import func
 import html
+import math
 import json
 import pytz
 import logging
@@ -62,13 +63,21 @@ def _config_tenant(tenant) -> dict:
         return {}
 
 
-def _duracion_config_horas(config: dict) -> int:
-    """Duración estándar del servicio según la configuración del negocio (en horas)."""
+def _duracion_config_horas(config: dict) -> float:
+    """Duración estándar del servicio según la configuración del negocio (en horas).
+
+    Puede ser fraccionaria (p. ej. 0.5 = 30 minutos).
+    """
     try:
         minutos = int(config.get("negocio", {}).get("duracion_minutos", 120))
     except (TypeError, ValueError):
         minutos = 120
-    return max(1, min(8, round(minutos / 60)))
+    return max(15, min(480, minutos)) / 60
+
+
+def _formato_duracion(horas: float) -> str:
+    """Serializa la duración para el formulario sin decimales innecesarios."""
+    return str(int(horas)) if float(horas).is_integer() else f"{horas:g}"
 
 
 def _render_formulario(request: Request, tenant, tenant_id: str, status_code: int = 200, **extra):
@@ -108,7 +117,7 @@ def agendar_web(
     subtipo: str = Query(None),
     fecha: str = Query(None),
     hora: str = Query(None),
-    duracion_horas: int = Query(None),
+    duracion_horas: float = Query(None),
     db: Session = Depends(get_db),
     tenant_id: str = "default"
 ):
@@ -147,7 +156,7 @@ def agendar_web(
     # siempre agenda con la duración configurada para el negocio.
     if duracion_horas is None or request.query_params.get("modo") != "emergencia":
         duracion_horas = _duracion_config_horas(config_negocio)
-    duracion_horas = max(1, min(8, duracion_horas))
+    duracion_horas = max(0.25, min(8, duracion_horas))
 
     horas_disponibles = []
     mensaje_error = None
@@ -184,7 +193,7 @@ def agendar_web(
         "subtipo": subtipo,
         "fecha_seleccionada": fecha_seleccionada,
         "hora_confirmada": hora,
-        "duracion_horas": duracion_horas,
+        "duracion_horas": _formato_duracion(duracion_horas),
         "horas_disponibles": horas_disponibles,
         "hora_termino": hora_termino,
         "mensaje_error": mensaje_error,
@@ -343,11 +352,11 @@ async def recibir_formulario(
         duracion_horas = _duracion_config_horas(_config_tenant(tenant))
         if es_dueno:
             try:
-                duracion_horas = int(form_data.get("duracion_horas") or duracion_horas)
+                duracion_horas = float(form_data.get("duracion_horas") or duracion_horas)
             except (TypeError, ValueError):
                 pass
 
-        if not 1 <= duracion_horas <= 8:
+        if not 0.25 <= duracion_horas <= 8:
             raise HTTPException(status_code=422, detail="La duración solicitada no es válida")
 
         fecha_termino = fecha_inicio + timedelta(hours=duracion_horas)
@@ -428,7 +437,8 @@ async def recibir_formulario(
             equipo=equipo_asignado,
             fecha_inicio=fecha_inicio, 
             fecha_termino=fecha_termino, 
-            duracion_horas=duracion_horas,
+            # Columna legacy entera; las fechas guardan la duración real.
+            duracion_horas=max(1, math.ceil(duracion_horas)),
             nota_interna = nota_interna,
             utm_source_real=ORIGEN_AGENDA_WEB if is_web_embed else None,
             utm_link=embed_site,
@@ -525,6 +535,39 @@ CUPOS_TIPO = {
 }
 
 
+def _reglas_agenda(tenant) -> dict:
+    reglas = _config_tenant(tenant).get("reglas_negocio", {})
+    return reglas if isinstance(reglas, dict) else {}
+
+
+def _pausa_del_negocio(tenant):
+    """Pausa diaria configurada (p. ej. colación) como (inicio, fin) o None."""
+    pausa = _reglas_agenda(tenant).get("pausa")
+    try:
+        inicio, fin = (datetime.strptime(valor, "%H:%M").time() for valor in pausa)
+        return (inicio, fin) if inicio < fin else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _choca_con_pausa(tenant, inicio: datetime, termino: datetime) -> bool:
+    pausa = _pausa_del_negocio(tenant)
+    if not pausa:
+        return False
+    pausa_inicio = datetime.combine(inicio.date(), pausa[0])
+    pausa_fin = datetime.combine(inicio.date(), pausa[1])
+    return inicio < pausa_fin and termino > pausa_inicio
+
+
+def _primer_inicio_permitido(tenant) -> datetime:
+    """Hora actual más la anticipación mínima que exige el negocio (0 por defecto)."""
+    try:
+        horas = max(0, min(int(_reglas_agenda(tenant).get("horas_minimas_anticipacion", 0)), 720))
+    except (TypeError, ValueError):
+        horas = 0
+    return get_now_chile().replace(tzinfo=None) + timedelta(hours=horas)
+
+
 def _bloques_del_dia(tenant, dia_semana, duracion_horas):
     """Acepta bloques legacy y también rangos inicio/término del onboarding."""
     bloques = ["09:00", "13:00", "15:30"]
@@ -534,11 +577,22 @@ def _bloques_del_dia(tenant, dia_semana, duracion_horas):
         if len(bloques) == 2 and bloques[0] < bloques[1]:
             inicio = datetime.strptime(bloques[0], "%H:%M")
             fin = datetime.strptime(bloques[1], "%H:%M")
-            paso = max(30, duracion_horas * 60)
+            paso = timedelta(minutes=max(30, duracion_horas * 60))
+            # Con pausa configurada, la jornada se divide en dos tramos y los
+            # horarios de la tarde parten justo al terminar la pausa.
+            tramos = [(inicio, fin)]
+            pausa = _pausa_del_negocio(tenant)
+            if pausa:
+                pausa_inicio = datetime.combine(inicio.date(), pausa[0])
+                pausa_fin = datetime.combine(inicio.date(), pausa[1])
+                if inicio < pausa_fin and pausa_inicio < fin:
+                    tramos = [(inicio, min(pausa_inicio, fin)), (max(pausa_fin, inicio), fin)]
             salida = []
-            while inicio + timedelta(minutes=paso) <= fin:
-                salida.append(inicio.strftime("%H:%M"))
-                inicio += timedelta(minutes=paso)
+            for tramo_inicio, tramo_fin in tramos:
+                actual = tramo_inicio
+                while actual + paso <= tramo_fin:
+                    salida.append(actual.strftime("%H:%M"))
+                    actual += paso
             return salida
     except (TypeError, ValueError, json.JSONDecodeError):
         pass
@@ -557,15 +611,17 @@ def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_i
 
     bloques_dia = _bloques_del_dia(tenant, fecha.weekday(), duracion_horas)
     candidatos = []
-    ahora_chile = get_now_chile().replace(tzinfo=None)
+    primer_inicio = _primer_inicio_permitido(tenant)
     for bloque in bloques_dia:
         try:
             inicio = datetime.combine(fecha, datetime.strptime(bloque, "%H:%M").time())
         except ValueError:
             continue
-        if inicio < ahora_chile:
+        if inicio < primer_inicio:
             continue
         termino = calcular_fin_especializado(inicio, duracion_horas) if tipo_servicio == "especializado" else inicio + timedelta(hours=duracion_horas)
+        if _choca_con_pausa(tenant, inicio, termino):
+            continue
         candidatos.append((bloque, inicio, termino))
     if not candidatos:
         return []
@@ -630,6 +686,12 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
 
     # Verificamos si la hora requerida está dentro de los bloques permitidos para ese día
     if hora_str not in bloques_validos:
+        return False
+
+    # Reglas propias del negocio: anticipación mínima y pausa diaria.
+    if inicio.replace(tzinfo=None) < _primer_inicio_permitido(tenant):
+        return False
+    if _choca_con_pausa(tenant, inicio.replace(tzinfo=None), fin.replace(tzinfo=None)):
         return False
         
     # 6. Validar traslapes en la DB

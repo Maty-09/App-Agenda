@@ -337,8 +337,16 @@ def api_publica(request: Request, db: Session = Depends(get_db), cred: CurrentUs
     return templates.TemplateResponse("admin_public_api.html", {"request": request, "current_user": cred, "agenda_url": f"{base_url}/cliente/{cred.tenant_id}/agendar_web"})
 
 
+def _hora_valida(valor: str) -> bool:
+    try:
+        datetime.strptime(valor or "", "%H:%M")
+        return True
+    except ValueError:
+        return False
+
+
 @router.post("/configuracion-negocio")
-def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), equipos: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), dias_anticipacion: int = Form(30), dias_dashboard: int = Form(7), dashboard_widgets: List[str] = Form([]), enviar_ubicacion_google: Optional[str] = Form(None), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), equipos: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), dias_anticipacion: int = Form(30), pausa_inicio: str = Form(""), pausa_fin: str = Form(""), horas_minimas_anticipacion: int = Form(0), dias_dashboard: int = Form(7), dashboard_widgets: List[str] = Form([]), enviar_ubicacion_google: Optional[str] = Form(None), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     if cred.rol not in {"admin", "superadmin"}:
         raise HTTPException(status_code=403, detail="Sólo el administrador puede configurar el negocio.")
     tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
@@ -347,7 +355,15 @@ def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = F
     config, dias = _leer_config_tenant(tenant), sorted({dia for dia in dias_habiles if 0 <= dia <= 6}) or [0, 1, 2, 3, 4]
     equipos_config = [equipo.strip() for equipo in equipos.split(",") if equipo.strip()] or ["Agenda principal"]
     config["negocio"] = {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480)), "equipos": equipos_config}
-    config["reglas_negocio"] = {"dias_habiles": dias, "bloques_horarios": {str(dia): [hora_inicio, hora_fin] for dia in dias}, "dias_anticipacion": max(1, min(dias_anticipacion, 365))}
+    if not (_hora_valida(hora_inicio) and _hora_valida(hora_fin) and hora_inicio < hora_fin):
+        return RedirectResponse("/admin/configuracion-negocio?error=horario", status_code=303)
+    reglas = config.get("reglas_negocio", {}) if isinstance(config.get("reglas_negocio"), dict) else {}
+    reglas.update({"dias_habiles": dias, "bloques_horarios": {str(dia): [hora_inicio, hora_fin] for dia in dias}, "dias_anticipacion": max(1, min(dias_anticipacion, 365)), "horas_minimas_anticipacion": max(0, min(horas_minimas_anticipacion, 720))})
+    if _hora_valida(pausa_inicio) and _hora_valida(pausa_fin) and pausa_inicio < pausa_fin:
+        reglas["pausa"] = [pausa_inicio, pausa_fin]
+    else:
+        reglas.pop("pausa", None)
+    config["reglas_negocio"] = reglas
     config["dashboard"] = {"dias_disponibilidad": max(1, min(dias_dashboard, 28)), "widgets": [widget for widget in dashboard_widgets if widget in {"resumen", "disponibilidad", "tareas", "metricas", "analitica"}]}
     notificaciones = config.get("notificaciones", {})
     notificaciones["enviar_ubicacion_google"] = enviar_ubicacion_google == "1"
@@ -720,34 +736,30 @@ def cancelar_agendamiento(
 
 # ENVIAR LINKS POR ADMIN
 @router.get("/links-agenda")
-def obtener_links_agenda(request: Request, admin = Depends(verificar_login)):
-    base_url = SYSTEM_BASE_URL
-
-    if admin.tenant_id == "womenlashcl":
-        links = {
-            "local" : {
-                "label": "Agendar Servicio",
-                "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local"
-            }
+def obtener_links_agenda(request: Request, db: Session = Depends(get_db), admin: CurrentUser = Depends(verificar_login)):
+    """Links de agenda del propio negocio (cada tenant tiene su URL pública)."""
+    agenda = f"{SYSTEM_BASE_URL}/cliente/{admin.tenant_id}/agendar_web"
+    links = {
+        "local": {
+            "label": "Agendar Servicio",
+            "url": f"{agenda}?tipo=domicilio_taller&subtipo=local",
         }
-    else:
-        links = {
-            "domicilio": {
-                "label": "Servicio a Domicilio",
-                "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio"
-                },
-            "local" : {
-                "label": "Servicio en Local",
-                "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local"
-                },
-            "especializado" : {
-                "label": "Equipo Especializado",
-                2: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=2",
-                3: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=3",
-                4: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=4",
-            } 
+    }
+    # El link a domicilio sólo se ofrece si el negocio armó ese formulario.
+    tiene_domicilio = db.query(models.CampoFormulario.id).filter(
+        models.CampoFormulario.tenant_id == admin.tenant_id,
+        models.CampoFormulario.subtipo_servicio == "domicilio",
+        models.CampoFormulario.activo == True,
+    ).first()
+    if tiene_domicilio:
+        links["domicilio"] = {
+            "label": "Servicio a Domicilio",
+            "url": f"{agenda}?tipo=domicilio_taller&subtipo=domicilio",
         }
-
+    links["especializado"] = {
+        "label": "Equipo Especializado",
+        **{horas: f"{agenda}?tipo=especializado&duracion_horas={horas}" for horas in (2, 3, 4)},
+    }
     return links
 # ==========================================
 #   GESTIÃN DE FORMULARIO DINÃMICO
@@ -1322,18 +1334,9 @@ def debug_ultimo_agendamiento(db: Session = Depends(get_db), cred: CurrentUser =
     }
 
 @router.get("/agendar-emergencia-total")
-async def agendar_emergencia(request: Request):
-    """
-    Ruta para el modo sobrecupo. 
-    Redirige al agendamiento web ignorando restricciones (si el formulario lo permite).
-    """
-    base_url = SYSTEM_BASE_URL
-    
-    # Redirigimos al agendamiento de local, pero puedes cambiar el 'tipo' 
-    # o aÃ±adirle un parÃ¡metro 'emergencia=true' para tu lÃ³gica interna.
-    target_url = f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local&modo=emergencia"
-    
-    print(f"DEBUG: Accediendo a Modo Emergencia -> {target_url}")
+async def agendar_emergencia(request: Request, cred: CurrentUser = Depends(verificar_login)):
+    """Modo sobrecupo: abre la agenda del propio negocio en modo dueño."""
+    target_url = f"/cliente/{cred.tenant_id}/agendar_web?tipo=domicilio_taller&subtipo=local&modo=emergencia"
     return RedirectResponse(url=target_url)
 
 

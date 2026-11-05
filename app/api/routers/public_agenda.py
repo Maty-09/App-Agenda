@@ -57,7 +57,7 @@ def disponibilidad_publica(tenant_id: str, response: Response, fecha: str = Quer
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Fecha inválida") from exc
     minutos = config.get("negocio", {}).get("duracion_minutos", 60)
-    horas = obtener_horas_disponibles("domicilio_taller", dia, max(1, round(minutos / 60)), db, tenant.id)
+    horas = obtener_horas_disponibles("domicilio_taller", dia, max(15, min(480, int(minutos))) / 60, db, tenant.id)
     response.headers["Access-Control-Allow-Origin"] = "*"
     return {"fecha": fecha, "horas": horas}
 

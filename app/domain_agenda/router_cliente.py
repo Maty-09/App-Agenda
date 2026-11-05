@@ -14,6 +14,7 @@ from app.infrastructure.email_utils import (
 from app.core.generar_utm import generar_utm 
 from app.core import models
 from app.core.models import get_now_chile
+from app.domain_agenda import horarios
 from app.core.booking_origin import ORIGEN_AGENDA_WEB, normalizar_origen_web
 from app.core.auth_deps import CurrentUser, verificar_login_opcional
 from app.infrastructure.notifications import enviar_notificacion
@@ -98,7 +99,7 @@ def _render_formulario(request: Request, tenant, tenant_id: str, status_code: in
         "negocio": config.get("negocio", {}),
         "nombre_empresa": getattr(tenant, "nombre_empresa", None),
         "dias_anticipacion": dias_anticipacion,
-        "dias_habiles_config": reglas.get("dias_habiles", [0, 1, 2, 3, 4]),
+        "dias_habiles_config": sorted(horarios.dias_abiertos(config)),
         "booking_path": _booking_path(tenant_id),
         "horas_disponibles": [],
         "campos_dinamicos": [],
@@ -130,7 +131,7 @@ def agendar_web(
         config_negocio = {}
     reglas_negocio = config_negocio.get("reglas_negocio", {})
     dias_anticipacion = max(1, min(int(reglas_negocio.get("dias_anticipacion", 30)), 365))
-    dias_habiles_config = reglas_negocio.get("dias_habiles", [0, 1, 2, 3, 4])
+    dias_habiles_config = sorted(horarios.dias_abiertos(config_negocio))
     # 1. NORMALIZACIÓN Y VALIDACIÓN INICIAL
     tipo = tipo.lower().strip() if tipo else "domicilio_taller"
     subtipo = subtipo.lower().strip() if subtipo else "local"
@@ -209,19 +210,10 @@ def agendar_web(
         "booking_path": _booking_path(tenant_id),
     })
 
-import holidays
-feriados_cl = holidays.country_holidays('CL')
-
-
 def dias_habiles_tenant(db: Session, tenant_id: str) -> set:
-    """Días permitidos por tenant (0=lunes … 6=domingo)."""
+    """Días que el negocio atiende (0=lunes … 6=domingo), según su horario semanal."""
     tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
-    try:
-        config = json.loads(tenant.config_json or "{}")
-        dias = config.get("reglas_negocio", {}).get("dias_habiles", [0, 1, 2, 3, 4])
-        return {int(dia) for dia in dias}
-    except (AttributeError, ValueError, TypeError, json.JSONDecodeError):
-        return {0, 1, 2, 3, 4}
+    return horarios.dias_abiertos(_config_tenant(tenant))
 
 @router.post("/agendar_web", response_class=HTMLResponse)
 @router.post("/{tenant_id}/agendar_web", response_class=HTMLResponse)
@@ -527,36 +519,9 @@ Recursos = {
     "especializado": ["Equipo Cristhian", "Equipo Samuel", "Equipo Movil"],
 }
 
-Horarios_base = ["09:00", "13:00", "15:30"]
-
-CUPOS_TIPO = {
-    "especializado": 3,
-    "domicilio_taller": 6
-}
-
-
 def _reglas_agenda(tenant) -> dict:
     reglas = _config_tenant(tenant).get("reglas_negocio", {})
     return reglas if isinstance(reglas, dict) else {}
-
-
-def _pausa_del_negocio(tenant):
-    """Pausa diaria configurada (p. ej. colación) como (inicio, fin) o None."""
-    pausa = _reglas_agenda(tenant).get("pausa")
-    try:
-        inicio, fin = (datetime.strptime(valor, "%H:%M").time() for valor in pausa)
-        return (inicio, fin) if inicio < fin else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _choca_con_pausa(tenant, inicio: datetime, termino: datetime) -> bool:
-    pausa = _pausa_del_negocio(tenant)
-    if not pausa:
-        return False
-    pausa_inicio = datetime.combine(inicio.date(), pausa[0])
-    pausa_fin = datetime.combine(inicio.date(), pausa[1])
-    return inicio < pausa_fin and termino > pausa_inicio
 
 
 def _primer_inicio_permitido(tenant) -> datetime:
@@ -569,34 +534,8 @@ def _primer_inicio_permitido(tenant) -> datetime:
 
 
 def _bloques_del_dia(tenant, dia_semana, duracion_horas):
-    """Acepta bloques legacy y también rangos inicio/término del onboarding."""
-    bloques = ["09:00", "13:00", "15:30"]
-    try:
-        config = json.loads(tenant.config_json or "{}") if tenant else {}
-        bloques = config.get("reglas_negocio", {}).get("bloques_horarios", {}).get(str(dia_semana), bloques)
-        if len(bloques) == 2 and bloques[0] < bloques[1]:
-            inicio = datetime.strptime(bloques[0], "%H:%M")
-            fin = datetime.strptime(bloques[1], "%H:%M")
-            paso = timedelta(minutes=max(30, duracion_horas * 60))
-            # Con pausa configurada, la jornada se divide en dos tramos y los
-            # horarios de la tarde parten justo al terminar la pausa.
-            tramos = [(inicio, fin)]
-            pausa = _pausa_del_negocio(tenant)
-            if pausa:
-                pausa_inicio = datetime.combine(inicio.date(), pausa[0])
-                pausa_fin = datetime.combine(inicio.date(), pausa[1])
-                if inicio < pausa_fin and pausa_inicio < fin:
-                    tramos = [(inicio, min(pausa_inicio, fin)), (max(pausa_fin, inicio), fin)]
-            salida = []
-            for tramo_inicio, tramo_fin in tramos:
-                actual = tramo_inicio
-                while actual + paso <= tramo_fin:
-                    salida.append(actual.strftime("%H:%M"))
-                    actual += paso
-            return salida
-    except (TypeError, ValueError, json.JSONDecodeError):
-        pass
-    return bloques
+    """Horas de inicio que el negocio ofrece ese día según su horario semanal."""
+    return horarios.inicios_del_dia(_config_tenant(tenant), dia_semana, duracion_horas * 60)
 
 
 def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_id="default"):
@@ -604,7 +543,7 @@ def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_i
     tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
     if not tenant or fecha.weekday() not in dias_habiles_tenant(db, tenant_id):
         return []
-    if fecha in feriados_cl or db.query(models.DiaBloqueado.id).filter(
+    if horarios.cerrado_por_feriado(_config_tenant(tenant), fecha) or db.query(models.DiaBloqueado.id).filter(
         models.DiaBloqueado.tenant_id == tenant_id, models.DiaBloqueado.fecha == fecha
     ).first():
         return []
@@ -620,8 +559,6 @@ def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_i
         if inicio < primer_inicio:
             continue
         termino = calcular_fin_especializado(inicio, duracion_horas) if tipo_servicio == "especializado" else inicio + timedelta(hours=duracion_horas)
-        if _choca_con_pausa(tenant, inicio, termino):
-            continue
         candidatos.append((bloque, inicio, termino))
     if not candidatos:
         return []
@@ -655,10 +592,8 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
     if inicio.weekday() not in dias_habiles_tenant(db, tenant_id):
         return False
 
-    # REGLA: Excluir feriados en Chile
-    import holidays
-    feriados_cl = holidays.country_holidays('CL')
-    if inicio.date() in feriados_cl:
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+    if horarios.cerrado_por_feriado(_config_tenant(tenant), inicio.date()):
         return False
 
     tz_chile = pytz.timezone("America/Santiago")
@@ -680,18 +615,14 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
     dia_semana = inicio.weekday() 
     hora_str = inicio.strftime("%H:%M")
 
-    # Obtener configuración del tenant
-    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
     bloques_validos = _bloques_del_dia(tenant, dia_semana, duracion_horas)
 
     # Verificamos si la hora requerida está dentro de los bloques permitidos para ese día
     if hora_str not in bloques_validos:
         return False
 
-    # Reglas propias del negocio: anticipación mínima y pausa diaria.
+    # Regla propia del negocio: anticipación mínima.
     if inicio.replace(tzinfo=None) < _primer_inicio_permitido(tenant):
-        return False
-    if _choca_con_pausa(tenant, inicio.replace(tzinfo=None), fin.replace(tzinfo=None)):
         return False
         
     # 6. Validar traslapes en la DB
@@ -796,7 +727,7 @@ def obtener_fecha_minima_habil(db: Session, tenant_id: str):
 def api_horas(
     fecha: str,
     tipo: str = "domicilio_taller",
-    duracion: int = 2,
+    duracion: float | None = None,
     tenant_id: str = "default",
     db: Session = Depends(get_db)
 ):
@@ -804,5 +735,9 @@ def api_horas(
         fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
     except ValueError:
         return {"horas": []}
-    duracion = max(1, min(8, duracion))
+    if duracion is None:
+        # Por defecto, la duración que configuró el negocio (puede ser en minutos).
+        tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+        duracion = _duracion_config_horas(_config_tenant(tenant))
+    duracion = max(0.25, min(8, duracion))
     return {"horas": obtener_horas_disponibles(tipo, fecha_obj, duracion, db, tenant_id)}

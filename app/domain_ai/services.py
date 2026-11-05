@@ -190,6 +190,24 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
     feriados_cl = holidays.country_holidays('CL', years=year_actual)
     feriados_str = ", ".join([f"{fecha.strftime('%Y-%m-%d')} ({nombre})" for fecha, nombre in sorted(feriados_cl.items())])
 
+    # Horario real del negocio (configurado por el propio tenant).
+    from app.domain_agenda import horarios
+    config_horario = {}
+    if db is not None and tenant_id:
+        tenant_horario = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+        try:
+            config_horario = json.loads(tenant_horario.config_json or "{}") if tenant_horario else {}
+        except (TypeError, ValueError):
+            config_horario = {}
+    horario_str = "; ".join(
+        f"{horarios.DIAS_SEMANA[dia]}: {horarios.describir_horario(config_horario, dia)}" for dia in range(7)
+    )
+    regla_feriados = (
+        "El negocio SÍ atiende en feriados."
+        if horarios.atiende_feriados(config_horario)
+        else f"No agendes en feriados: {feriados_str}."
+    )
+
     # Contexto del sistema
     system_prompt = (
         "Eres el Asistente Ejecutivo e Inteligencia Operativa de Norem, un experto en organización, atención al cliente y generación de ventas. "
@@ -200,7 +218,7 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
         "3. OPERATIVIDAD B2B: Sé extremadamente eficiente, cortés y resolutivo. Respuestas cortas, ideales para leerse en WhatsApp.\n"
         "4. PROTOCOLO DE REGISTRO: Cuando tengas confirmación de fecha y motivo, incluye al final EXACTAMENTE: [AGENDAR: YYYY-MM-DD HH:MM | Motivo].\n"
         "5. PANEL DE ADMIN: Si te inyectan datos de negocio, responde como un analista experto dando recomendaciones.\n"
-        f"6. REGLA DE DISPONIBILIDAD: Solo se agenda de Lunes a Viernes. No agendes en fin de semana ni feriados: {feriados_str}.\n"
+        f"6. REGLA DE DISPONIBILIDAD: Solo agenda dentro del horario de atención del negocio ({horario_str}). {regla_feriados}\n"
         "7. FORMATO DE TEXTO ESTRICTO: ESTÁ TOTALMENTE PROHIBIDO usar Markdown. Jamás uses asteriscos (*) ni símbolos raros para negritas o cursivas. Escribe 100% en texto plano.\n"
         "8. ESTILO, CONCISIÓN Y TONO: Sé extremadamente cálido, encantador ('lindo') y directo. Resume la información de las citas en una sola oración fluida y natural. Omite cálculos robóticos innecesarios (como 'asumiendo una duración... el total es'). Ve directo al punto con amabilidad.\n"
         "Responde siempre en español, con un tono entusiasta, profesional y muy servicial."
@@ -253,9 +271,12 @@ def chat_ia(mensaje: str, db: Session = None, telefono: str = None, tenant_id: s
                 
                 # Validar doblemente en backend si es fin de semana o feriado
                 import holidays
-                if fecha_inicio.weekday() >= 5 or fecha_inicio.date() in holidays.country_holidays('CL'):
+                minutos_ia = horarios.duracion_minutos(config_horario)
+                if horarios.cerrado_por_feriado(config_horario, fecha_inicio.date()) or not horarios.cabe_en_horario(
+                    config_horario, fecha_inicio, fecha_inicio + timedelta(minutes=minutos_ia)
+                ):
                     # En lugar de guardar en BD, corregimos la respuesta de la IA
-                    respuesta_ia = "Lo siento, acabo de notar que ese día es fin de semana o feriado. Por favor, indícame otro día hábil (lunes a viernes) para agendar tu cita."
+                    respuesta_ia = f"Lo siento, ese horario está fuera de nuestra atención. Nuestro horario es: {horario_str}. ¿Qué otro día u hora te acomoda?"
                 else:
                     # Ejecutar agendamiento real en Base de Datos
                     agendar_cita_ia(db=db, tenant_id=tenant_id, telefono=telefono, fecha_inicio=fecha_inicio, marca=motivo_marca)

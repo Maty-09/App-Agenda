@@ -3,7 +3,8 @@ import json
 import os
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
+from urllib.parse import unquote
 from unittest.mock import patch
 
 _DB_FILE = os.path.join(tempfile.mkdtemp(), "agenda_test.db")
@@ -214,32 +215,67 @@ class ConfiguracionNegocioTest(unittest.TestCase):
         db.close()
         return config
 
-    def test_guarda_reglas_configurables(self):
+    def test_guarda_horario_por_dia(self):
         r = self.client.post("/admin/configuracion-negocio", data={
             "nombre_empresa": "Demo", "duracion_minutos": "45", "equipos": "Box 1, Box 2",
-            "hora_inicio": "09:00", "hora_fin": "18:00", "dias_habiles": ["0", "2"],
-            "pausa_inicio": "13:00", "pausa_fin": "14:00", "horas_minimas_anticipacion": "24",
+            "dia_0_abierto": "1", "tramo_0_inicio": ["09:00", "14:00"], "tramo_0_fin": ["13:00", "18:00"],
+            "dia_5_abierto": "1", "tramo_5_inicio": "10:00", "tramo_5_fin": "14:00",
+            # Domingo desmarcado: aunque traiga horas, queda cerrado.
+            "tramo_6_inicio": "09:00", "tramo_6_fin": "12:00",
+            "intervalo_minutos": "30", "atiende_feriados": "1", "horas_minimas_anticipacion": "24",
         }, follow_redirects=False)
         self.assertEqual(r.status_code, 303)
         self.assertIn("guardado=1", r.headers["location"])
         config = self._config()
+        reglas = config["reglas_negocio"]
         self.assertEqual(config["negocio"]["duracion_minutos"], 45)
         self.assertEqual(config["negocio"]["equipos"], ["Box 1", "Box 2"])
-        self.assertEqual(config["reglas_negocio"]["pausa"], ["13:00", "14:00"])
-        self.assertEqual(config["reglas_negocio"]["horas_minimas_anticipacion"], 24)
-        self.assertTrue(config["reglas_negocio"]["regla_propia"], "no debe borrar otras reglas")
+        self.assertEqual(reglas["horario_semanal"]["0"], [["09:00", "13:00"], ["14:00", "18:00"]])
+        self.assertEqual(reglas["horario_semanal"]["5"], [["10:00", "14:00"]])
+        self.assertEqual(reglas["horario_semanal"]["6"], [])
+        self.assertEqual(reglas["dias_habiles"], [0, 5])
+        self.assertEqual(reglas["intervalo_minutos"], 30)
+        self.assertTrue(reglas["atiende_feriados"])
+        self.assertEqual(reglas["horas_minimas_anticipacion"], 24)
+        self.assertNotIn("bloques_horarios", reglas)
+        self.assertTrue(reglas["regla_propia"], "no debe borrar otras reglas")
 
         pagina = self.client.get("/admin/configuracion-negocio")
         self.assertEqual(pagina.status_code, 200)
         self.assertIn('value="Box 1, Box 2"', pagina.text)
-        self.assertIn('value="13:00"', pagina.text)
+        self.assertIn('name="tramo_0_inicio" value="14:00"', pagina.text)
+        self.assertIn('name="tramo_5_fin" value="14:00"', pagina.text)
+        self.assertIn('name="dia_6_abierto" value="1" class="h-4 w-4 accent-blue-700" data-toggle-dia >', pagina.text)
 
-    def test_horario_invalido_no_se_guarda(self):
+    def test_tramo_invalido_no_se_guarda(self):
         r = self.client.post("/admin/configuracion-negocio", data={
-            "nombre_empresa": "Demo", "hora_inicio": "18:00", "hora_fin": "09:00",
+            "nombre_empresa": "Demo", "dia_1_abierto": "1", "tramo_1_inicio": "18:00", "tramo_1_fin": "09:00",
         }, follow_redirects=False)
-        self.assertIn("error=horario", r.headers["location"])
+        self.assertIn("error=", r.headers["location"])
+        self.assertIn("Martes", unquote(r.headers["location"]))
         self.assertNotIn("negocio", self._config())
+
+    def test_sin_dias_abiertos_no_se_guarda(self):
+        r = self.client.post("/admin/configuracion-negocio", data={"nombre_empresa": "Demo"}, follow_redirects=False)
+        self.assertIn("al menos un d", unquote(r.headers["location"]))
+
+    def test_reprogramar_respeta_horario_del_negocio(self):
+        from app.domain_crm.router_admin import verificar_disponibilidad_detalle
+        self.client.post("/admin/configuracion-negocio", data={
+            "nombre_empresa": "Demo", "duracion_minutos": "60",
+            "dia_0_abierto": "1", "tramo_0_inicio": ["09:00", "15:00"], "tramo_0_fin": ["13:00", "19:00"],
+        })
+        lunes = proximo_lunes_habil()
+        db = SessionLocal()
+        ok, _ = verificar_disponibilidad_detalle(db, "domicilio_taller", datetime.combine(lunes, time(17, 30)), 1, tenant_id="cfg-demo")
+        self.assertTrue(ok)
+        ok, msg = verificar_disponibilidad_detalle(db, "domicilio_taller", datetime.combine(lunes, time(12, 30)), 1, tenant_id="cfg-demo")
+        self.assertFalse(ok)
+        self.assertIn("09:00–13:00, 15:00–19:00", msg)
+        ok, msg = verificar_disponibilidad_detalle(db, "domicilio_taller", datetime.combine(lunes + timedelta(days=1), time(10, 0)), 1, tenant_id="cfg-demo")
+        self.assertFalse(ok)
+        self.assertIn("cerrada los martes", msg)
+        db.close()
 
     def test_links_agenda_son_del_negocio(self):
         links = self.client.get("/admin/links-agenda").json()

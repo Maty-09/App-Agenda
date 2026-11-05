@@ -1,5 +1,73 @@
 {% extends "base_admin.html" %}
 {% block title %}Conoce Norem{% endblock %}
 {% block content %}
-<div class="mx-auto max-w-5xl"><div class="rounded-3xl bg-gradient-to-br from-blue-700 to-blue-950 p-8 text-white md:p-12"><p class="text-sm font-bold uppercase tracking-[.18em] text-blue-200">Tu configuración está lista</p><h1 class="mt-3 max-w-2xl text-3xl font-extrabold md:text-4xl">Ahora conoce cómo Norem ordena {{ tenant.nombre_empresa }}.</h1><p class="mt-4 max-w-2xl text-blue-100">Te tomará menos de un minuto. Podrás volver a esta configuración y seguir iterando cuando lo necesites.</p></div><div class="mt-6 grid gap-5 md:grid-cols-2"><article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200"><span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 font-extrabold text-blue-700">1</span><h2 class="mt-5 text-xl font-extrabold">Recibe reservas</h2><p class="mt-2 text-sm leading-6 text-slate-600">Comparte tu enlace de agenda. Tus clientes verán solamente los horarios y preguntas que configuraste.</p><a target="_blank" href="/cliente/{{ tenant.id }}/agendar_web" class="mt-5 inline-block text-sm font-bold text-blue-700">Ver mi agenda →</a></article><article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200"><span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 font-extrabold text-blue-700">2</span><h2 class="mt-5 text-xl font-extrabold">Gestiona la operación</h2><p class="mt-2 text-sm leading-6 text-slate-600">Al finalizar esta guía tendrás tu dashboard para ver reservas, clientes y tareas.</p></article><article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200"><span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 font-extrabold text-blue-700">3</span><h2 class="mt-5 text-xl font-extrabold">Itera y crece</h2><p class="mt-2 text-sm leading-6 text-slate-600">Después podrás ajustar horarios y preguntas para que Norem se adapte a tu negocio.</p></article><article class="rounded-2xl border-2 border-blue-200 bg-blue-50 p-6 shadow-sm"><span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-700 font-extrabold text-white">4</span><h2 class="mt-5 text-xl font-extrabold">Integra tu agenda en tu sitio web</h2><p class="mt-2 text-sm leading-6 text-slate-600">Activa la API pública, autoriza tu dominio y agrega la agenda de Norem en cualquier página web. No necesitas construir una agenda desde cero.</p><a href="/admin/api-publica" class="mt-5 inline-block text-sm font-bold text-blue-700">Configurar integración web →</a></article></div><form method="post" action="/admin/onboarding/finalizar" class="mt-8 text-center"><button class="rounded-xl bg-blue-700 px-7 py-4 font-extrabold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800">Entendido, ir a mi dashboard →</button></form></div>
+{% set negocio = config.get('negocio', {}) %}
+{% set agenda_url = '/cliente/' ~ tenant.id ~ '/agendar_web' %}
+<div class="mx-auto max-w-5xl pb-10">
+  <div class="rounded-3xl bg-gradient-to-br from-blue-700 to-blue-950 p-8 text-white md:p-12">
+    <p class="text-sm font-bold uppercase tracking-[.18em] text-blue-200">Tu configuración inicial está lista</p>
+    <h1 class="mt-3 max-w-2xl text-3xl font-extrabold md:text-4xl">Ajustemos Norem a la forma en que trabaja {{ tenant.nombre_empresa }}.</h1>
+    <p class="mt-4 max-w-2xl text-blue-100">Norem no trae horarios ni formularios fijos: tú decides cómo funciona tu agenda. Estos son los pasos recomendados para empezar a recibir reservas. Puedes hacerlos ahora o volver a ellos desde <strong>Configuración</strong> cuando quieras.</p>
+  </div>
+
+  <section class="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-extrabold text-slate-900">Así quedó tu agenda por ahora</h2>
+        <p class="mt-1 text-sm text-slate-500">Atenciones de {% if duracion_minutos % 60 == 0 %}{{ duracion_minutos // 60 }} hora{% if duracion_minutos != 60 %}s{% endif %}{% else %}{{ duracion_minutos }} minutos{% endif %}{% if negocio.get('servicio_principal') %} · {{ negocio.get('servicio_principal') }}{% endif %}</p>
+      </div>
+      <a href="/admin/configuracion-negocio#horarios" class="text-sm font-bold text-blue-700 hover:underline">Cambiar horario →</a>
+    </div>
+    <dl class="mt-4 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+      {% for dia, horario_dia in resumen_horario %}
+      <div class="flex justify-between gap-4 border-b border-slate-100 py-1.5"><dt class="font-semibold text-slate-700">{{ dia }}</dt><dd class="{% if horario_dia == 'Cerrado' %}text-slate-400{% else %}text-slate-900{% endif %}">{{ horario_dia }}</dd></div>
+      {% endfor %}
+    </dl>
+  </section>
+
+  <h2 class="mt-8 text-xl font-extrabold text-slate-900">Primeros pasos</h2>
+  <ol class="mt-4 grid gap-4 md:grid-cols-2">
+    <li class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+      <span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 font-extrabold text-blue-700">1</span>
+      <h3 class="mt-4 text-lg font-extrabold">Define tu horario día por día</h3>
+      <p class="mt-2 text-sm leading-6 text-slate-600">Abre o cierra cada día y agrega uno o más tramos. Para la colación, divide el día en dos tramos (ej. 09:00–13:00 y 14:00–18:00). También decides si atiendes feriados.</p>
+      <a href="/admin/configuracion-negocio#horarios" class="mt-4 inline-block text-sm font-bold text-blue-700">Configurar horario →</a>
+    </li>
+    <li class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+      <span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 font-extrabold text-blue-700">2</span>
+      <h3 class="mt-4 text-lg font-extrabold">Ajusta servicio y capacidad</h3>
+      <p class="mt-2 text-sm leading-6 text-slate-600">Duración de cada atención, cuántos equipos o profesionales atienden a la vez, cada cuánto empieza un horario (ej. cada 30 min) y con cuánta anticipación se puede reservar.</p>
+      <a href="/admin/configuracion-negocio" class="mt-4 inline-block text-sm font-bold text-blue-700">Ajustar servicio →</a>
+    </li>
+    <li class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+      <span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 font-extrabold text-blue-700">3</span>
+      <h3 class="mt-4 text-lg font-extrabold">Elige qué preguntas ver al reservar</h3>
+      <p class="mt-2 text-sm leading-6 text-slate-600">Pide solo lo que necesitas. El correo siempre se incluye, porque ahí tu cliente recibe la confirmación.</p>
+      <a href="/admin/configurar-formulario?tipo=domicilio_taller&subtipo=local" class="mt-4 inline-block text-sm font-bold text-blue-700">Editar formulario →</a>
+    </li>
+    <li class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+      <span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 font-extrabold text-blue-700">4</span>
+      <h3 class="mt-4 text-lg font-extrabold">Prueba y comparte tu agenda</h3>
+      <p class="mt-2 text-sm leading-6 text-slate-600">Abre tu agenda pública, elige una fecha y revisa que aparezcan las horas que esperas. Luego comparte el enlace por WhatsApp, Instagram o Google.</p>
+      <a target="_blank" rel="noopener" href="{{ agenda_url }}" class="mt-4 inline-block text-sm font-bold text-blue-700">Ver mi agenda ↗</a>
+    </li>
+    <li class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+      <span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 font-extrabold text-blue-700">5</span>
+      <h3 class="mt-4 text-lg font-extrabold">Gestiona tu día a día</h3>
+      <p class="mt-2 text-sm leading-6 text-slate-600">En <strong>Calendario</strong> ves y reprogramas reservas y bloqueas días (vacaciones, imprevistos). En <strong>Clientes</strong> y <strong>Tareas</strong> sigues a cada persona y cada pendiente.</p>
+    </li>
+    <li class="rounded-2xl border-2 border-blue-200 bg-blue-50 p-6 shadow-sm">
+      <span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-700 font-extrabold text-white">6</span>
+      <h3 class="mt-4 text-lg font-extrabold">Integra tu agenda en tu sitio web <span class="text-sm font-semibold text-slate-500">(opcional)</span></h3>
+      <p class="mt-2 text-sm leading-6 text-slate-600">Activa la API pública, autoriza tu dominio y agrega la agenda de Norem a cualquier página web.</p>
+      <a href="/admin/api-publica" class="mt-4 inline-block text-sm font-bold text-blue-700">Configurar integración web →</a>
+    </li>
+  </ol>
+
+  <p class="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-600"><strong>Consejo:</strong> antes de compartir tu enlace, haz una reserva de prueba tú mismo y luego cancélala desde el Calendario. Tienes 14 días de prueba gratis; el estado de tu cuenta siempre está en <strong>Plan</strong>.</p>
+
+  <form method="post" action="/admin/onboarding/finalizar" class="mt-8 text-center">
+    <button class="rounded-xl bg-blue-700 px-7 py-4 font-extrabold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800">Entendido, ir a mi dashboard →</button>
+  </form>
+</div>
 {% endblock %}

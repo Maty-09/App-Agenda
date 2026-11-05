@@ -283,7 +283,8 @@ def guardar_configuracion_inicial(nombre_empresa: str = Form(...), giro: str = F
     config = _leer_config_tenant(tenant)
     config.update({"configuracion_inicial_completa": True, "onboarding_completo": False, "onboarding_requerido": False, "negocio": {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480))}, "reglas_negocio": {"dias_habiles": dias, "horario_semanal": {str(dia): ([[inicio, fin]] if dia in dias and inicio < fin else []) for dia in range(7)}}})
     tenant.nombre_empresa, tenant.config_json = nombre_empresa.strip(), json.dumps(config)
-    _campos_contacto_iniciales(db, tenant.id, campos_cliente)
+    # El correo es obligatorio: la reserva lo necesita para enviar la confirmación.
+    _campos_contacto_iniciales(db, tenant.id, campos_cliente if "correo" in campos_cliente else [*campos_cliente, "correo"])
     db.commit()
     return RedirectResponse("/admin/onboarding", status_code=303)
 
@@ -298,7 +299,11 @@ def onboarding_norem(request: Request, db: Session = Depends(get_db), cred: Curr
         return RedirectResponse("/admin/configuracion-inicial", status_code=303)
     if config.get("onboarding_completo"):
         return RedirectResponse("/admin/dashboard", status_code=303)
-    return templates.TemplateResponse("admin_product_onboarding.html", {"request": request, "current_user": cred, "tenant": tenant, "config": config})
+    resumen_horario = [(dia, horarios.describir_horario(config, numero)) for numero, dia in enumerate(horarios.DIAS_SEMANA)]
+    return templates.TemplateResponse("admin_product_onboarding.html", {
+        "request": request, "current_user": cred, "tenant": tenant, "config": config,
+        "resumen_horario": resumen_horario, "duracion_minutos": horarios.duracion_minutos(config),
+    })
 
 
 @router.post("/onboarding/finalizar")
@@ -321,8 +326,7 @@ def configuracion_negocio(request: Request, db: Session = Depends(get_db), cred:
     config_actual = _leer_config_tenant(tenant)
     if not config_actual.get("configuracion_inicial_completa", True):
         return RedirectResponse("/admin/configuracion-inicial", status_code=303)
-    if not config_actual.get("onboarding_completo", True):
-        return RedirectResponse("/admin/onboarding", status_code=303)
+    # Durante la guía de bienvenida el usuario puede entrar a configurar y volver a la guía.
     base_url = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
     return templates.TemplateResponse("admin_business_config.html", {"request": request, "current_user": cred, "tenant": tenant, "config": config_actual, "dias": _DIAS, "horario": horarios.horario_semanal_texto(config_actual), "agenda_url": f"{base_url}/cliente/{tenant.id}/agendar_web", "api_url": f"{base_url}/api/v1/public/{tenant.id}/agenda"})
 
@@ -388,7 +392,7 @@ async def guardar_configuracion_negocio(request: Request, db: Session = Depends(
     notificaciones = config.get("notificaciones", {})
     notificaciones["enviar_ubicacion_google"] = form.get("enviar_ubicacion_google") == "1"
     config["notificaciones"] = notificaciones
-    config["onboarding_completo"] = True
+    # La guía de bienvenida se cierra sólo cuando el usuario la da por terminada.
     tenant.nombre_empresa, tenant.config_json = nombre_empresa, json.dumps(config)
     db.commit()
     return RedirectResponse("/admin/configuracion-negocio?guardado=1", status_code=303)

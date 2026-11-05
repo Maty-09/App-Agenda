@@ -202,6 +202,7 @@ class ConfiguracionNegocioTest(unittest.TestCase):
 
     def setUp(self):
         db = SessionLocal()
+        db.query(models.CampoFormulario).filter(models.CampoFormulario.tenant_id == "cfg-demo").delete()
         db.query(models.Tenant).filter(models.Tenant.id == "cfg-demo").delete()
         db.add(models.Tenant(id="cfg-demo", nombre_empresa="Demo", config_json=json.dumps({
             "reglas_negocio": {"regla_propia": True},
@@ -276,6 +277,38 @@ class ConfiguracionNegocioTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("cerrada los martes", msg)
         db.close()
+
+    def test_onboarding_nuevo_negocio(self):
+        db = SessionLocal()
+        tenant = db.get(models.Tenant, "cfg-demo")
+        tenant.config_json = json.dumps({"configuracion_inicial_completa": False})
+        db.query(models.CampoFormulario).filter(models.CampoFormulario.tenant_id == "cfg-demo").delete()
+        db.commit()
+        db.close()
+        # El usuario desmarca el correo: igual se crea, porque la reserva lo necesita.
+        r = self.client.post("/admin/configuracion-inicial", data={
+            "nombre_empresa": "Demo", "giro": "Estética", "servicio_principal": "Limpieza facial",
+            "duracion_minutos": "90", "hora_inicio": "10:00", "hora_fin": "19:00",
+            "dias_habiles": ["1", "2", "3"], "campos_cliente": ["nombre"],
+        }, follow_redirects=False)
+        self.assertEqual(r.headers["location"], "/admin/onboarding")
+        db = SessionLocal()
+        campos = {c.nombre_tecnico for c in db.query(models.CampoFormulario).filter(models.CampoFormulario.tenant_id == "cfg-demo")}
+        db.close()
+        self.assertEqual(campos, {"nombre", "correo"})
+        self.assertEqual(self._config()["reglas_negocio"]["horario_semanal"]["1"], [["10:00", "19:00"]])
+
+        guia = self.client.get("/admin/onboarding")
+        self.assertEqual(guia.status_code, 200)
+        self.assertIn("Primeros pasos", guia.text)
+        self.assertIn("10:00–19:00", guia.text)
+        self.assertIn("Cerrado", guia.text)
+        self.assertIn("/admin/configuracion-negocio#horarios", guia.text)
+
+        # Desde la guía se puede abrir la configuración y volver.
+        pagina = self.client.get("/admin/configuracion-negocio", follow_redirects=False)
+        self.assertEqual(pagina.status_code, 200)
+        self.assertIn("Volver a la guía", pagina.text)
 
     def test_links_agenda_son_del_negocio(self):
         links = self.client.get("/admin/links-agenda").json()

@@ -109,7 +109,7 @@ Si otra persona toma el cupo antes de confirmar, la API responde `409` y el siti
 
 ```html
 <script>
-const API = "https://tu-norem.vercel.app/api/public/v1/TENANT_ID";
+const API = "https://agenda.norem.cl/api/public/v1/TENANT_ID";
 const KEY = "PUBLIC_KEY";
 const headers = { "X-Norem-Public-Key": KEY };
 

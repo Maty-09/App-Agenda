@@ -18,18 +18,18 @@ def seed_demo():
         tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
         if not tenant:
             print("Creando Tenant Demo...")
-            tenant = models.Tenant(id=tenant_id, nombre_empresa="Demo Noren (Lunes a Viernes)")
+            tenant = models.Tenant(id=tenant_id, nombre_empresa="Demo Norem (Lunes a Viernes)")
             db.add(tenant)
             db.commit()
 
         # 2. Usuario Demo
-        email_demo = "demo@noren.app"
+        email_demo = "demo@norem.cl"
         demo_user = db.query(models.Usuario).filter(models.Usuario.email == email_demo).first()
         if not demo_user:
             print(f"Creando usuario Demo: {email_demo}...")
             nuevo_demo = models.Usuario(
                 tenant_id=tenant_id,
-                nombre="Usuario Demo Noren",
+                nombre="Usuario Demo Norem",
                 email=email_demo,
                 password_hash=security.get_password_hash("demo123"),
                 rol="admin"
@@ -47,11 +47,11 @@ def seed_demo():
         if cant_clientes < 5:
             print("Sembrando Clientes Demo...")
             datos_clientes = [
-                {"nombre": "Camila", "apellido": "Rojas", "rut": "11.111.111-1", "telefono": "+569700009", "correo": "demo-101@demo.noren.app"},
-                {"nombre": "Diego", "apellido": "Mora", "rut": "11.111.111-2", "telefono": "+5697000011", "correo": "demo-102@demo.noren.app"},
-                {"nombre": "Elena", "apellido": "Castro", "rut": "11.111.111-3", "telefono": "+5697000113", "correo": "demo-103@demo.noren.app"},
-                {"nombre": "Gabriel", "apellido": "Paz", "rut": "11.111.111-4", "telefono": "+5697000114", "correo": "demo-104@demo.noren.app"},
-                {"nombre": "Fernanda", "apellido": "Soto", "rut": "11.111.111-5", "telefono": "+5697000115", "correo": "demo-105@demo.noren.app"},
+                {"nombre": "Camila", "apellido": "Rojas", "rut": "11.111.111-1", "telefono": "+569700009", "correo": "demo-101@demo.norem.cl"},
+                {"nombre": "Diego", "apellido": "Mora", "rut": "11.111.111-2", "telefono": "+5697000011", "correo": "demo-102@demo.norem.cl"},
+                {"nombre": "Elena", "apellido": "Castro", "rut": "11.111.111-3", "telefono": "+5697000113", "correo": "demo-103@demo.norem.cl"},
+                {"nombre": "Gabriel", "apellido": "Paz", "rut": "11.111.111-4", "telefono": "+5697000114", "correo": "demo-104@demo.norem.cl"},
+                {"nombre": "Fernanda", "apellido": "Soto", "rut": "11.111.111-5", "telefono": "+5697000115", "correo": "demo-105@demo.norem.cl"},
             ]
             for c_data in datos_clientes:
                 cli = models.Cliente(tenant_id=tenant_id, **c_data)
@@ -130,7 +130,7 @@ def seed_demo():
             db.commit()
             print("Tareas Kanban demo creadas con exito.")
 
-        print("Datos Demo de Noren preparados exitosamente!")
+        print("Datos Demo de Norem preparados exitosamente!")
         print(f"Email Demo: {email_demo} / Pass: demo123")
     except Exception as e:
         print(f"Error sembrando demo: {e}")

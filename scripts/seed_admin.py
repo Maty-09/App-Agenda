@@ -11,7 +11,7 @@ def seed_admin():
         tenant = db.query(models.Tenant).filter(models.Tenant.id == "default").first()
         if not tenant:
             print("Creando Tenant por defecto...")
-            tenant = models.Tenant(id="default", nombre_empresa="Noren Principal")
+            tenant = models.Tenant(id="default", nombre_empresa="Norem Principal")
             db.add(tenant)
             db.commit()
 
@@ -22,7 +22,7 @@ def seed_admin():
             print(f"Creando usuario Super Admin: {email_admin}...")
             nuevo_admin = models.Usuario(
                 tenant_id="default",
-                nombre="Admin Noren",
+                nombre="Admin Norem",
                 email=email_admin,
                 password_hash=security.get_password_hash("admin123"),
                 rol="superadmin"

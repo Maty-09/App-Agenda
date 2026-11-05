@@ -1,8 +1,10 @@
 import stripe
 import os
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
@@ -38,8 +40,8 @@ def create_checkout_session(tenant_id: str, plan: str, success_url: str, cancel_
             client_reference_id=tenant_id,
         )
         return session.url
-    except Exception as e:
-        print(f"Error creando Stripe Checkout: {e}")
+    except Exception:
+        logger.error("stripe_checkout_creation_failed")
         return None
 
 

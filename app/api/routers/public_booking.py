@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.core import models
 from app.core.booking_origin import ORIGEN_AGENDA_WEB, normalizar_origen_web
-from app.domain_agenda.router_cliente import Recursos, obtener_horas_disponibles
+from app.domain_agenda.router_cliente import Recursos, equipos_configurados, obtener_horas_disponibles
 
 public_router = APIRouter()
 admin_router = APIRouter()
@@ -120,9 +120,12 @@ def _save_public_config(tenant: models.Tenant, public: dict) -> None:
     tenant.config_json = json.dumps(config)
 
 
-def _get_tenant_or_404(db: Session, tenant_id: str) -> models.Tenant:
-    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
-    if not tenant:
+def _get_tenant_or_404(db: Session, tenant_id: str, *, lock: bool = False) -> models.Tenant:
+    query = db.query(models.Tenant).filter(models.Tenant.id == tenant_id)
+    if lock:
+        query = query.with_for_update()
+    tenant = query.first()
+    if not tenant or tenant.estado_suscripcion == "cancelada":
         raise HTTPException(status_code=404, detail="Empresa no encontrada")
     return tenant
 
@@ -282,8 +285,13 @@ def create_public_booking(
 ):
     tenant = _get_tenant_or_404(db, tenant_id)
     _, headers = _validate_public_access(request, tenant)
-    site_origin = normalizar_origen_web(request.headers.get("origin"))
     _enforce_booking_rate_limit(request, tenant_id)
+
+    # Serializa la verificación y creación por tenant para evitar reservas
+    # duplicadas cuando dos solicitudes intentan tomar el mismo cupo a la vez.
+    tenant = _get_tenant_or_404(db, tenant_id, lock=True)
+    _, headers = _validate_public_access(request, tenant)
+    site_origin = normalizar_origen_web(request.headers.get("origin"))
 
     if payload.tipo_servicio not in Recursos:
         raise HTTPException(status_code=422, detail="Tipo de servicio no disponible")
@@ -299,7 +307,9 @@ def create_public_booking(
     starts_at = datetime.combine(payload.fecha, payload.hora)
     ends_at = starts_at + timedelta(minutes=minutos)
     assigned_team = None
-    for team in Recursos[payload.tipo_servicio]:
+    # Los equipos deben ser los configurados por el negocio: la disponibilidad
+    # se calcula con esa misma cantidad de equipos.
+    for team in equipos_configurados(tenant):
         occupied = db.query(models.Agendamiento).filter(
             models.Agendamiento.tenant_id == tenant_id,
             models.Agendamiento.equipo == team,

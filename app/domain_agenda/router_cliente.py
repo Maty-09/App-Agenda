@@ -8,17 +8,24 @@ from app.infrastructure.email_utils import (
     enviar_confirmacion_agendamiento,
     enviar_aviso_accion_al_dueno,
     enviar_solicitud_confirmacion,
+    validar_token_confirmacion,
     enviar_aviso_recibido_cliente
 )
 from app.core.generar_utm import generar_utm 
 from app.core import models
+from app.core.models import get_now_chile
 from app.core.booking_origin import ORIGEN_AGENDA_WEB, normalizar_origen_web
+from app.core.auth_deps import CurrentUser, verificar_login_opcional
 from app.infrastructure.notifications import enviar_notificacion
 from sqlalchemy import func
+import html
+import math
 import json
 import pytz
-import traceback
+import logging
 from typing import List
+
+logger = logging.getLogger(__name__)
 
 
 # pruebas
@@ -45,6 +52,63 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
+def _booking_path(tenant_id: str) -> str:
+    return f"/cliente/{tenant_id}/agendar_web" if tenant_id != "default" else "/cliente/agendar_web"
+
+
+def _config_tenant(tenant) -> dict:
+    try:
+        return json.loads(tenant.config_json or "{}") if tenant else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _duracion_config_horas(config: dict) -> float:
+    """Duración estándar del servicio según la configuración del negocio (en horas).
+
+    Puede ser fraccionaria (p. ej. 0.5 = 30 minutos).
+    """
+    try:
+        minutos = int(config.get("negocio", {}).get("duracion_minutos", 120))
+    except (TypeError, ValueError):
+        minutos = 120
+    return max(15, min(480, minutos)) / 60
+
+
+def _formato_duracion(horas: float) -> str:
+    """Serializa la duración para el formulario sin decimales innecesarios."""
+    return str(int(horas)) if float(horas).is_integer() else f"{horas:g}"
+
+
+def _render_formulario(request: Request, tenant, tenant_id: str, status_code: int = 200, **extra):
+    """Renderiza agendar.html con el contexto mínimo que la plantilla necesita.
+
+    Las respuestas de error deben incluir los datos del negocio; si no, la
+    plantilla falla al leer `negocio` y el cliente ve un error 500.
+    """
+    config = _config_tenant(tenant)
+    reglas = config.get("reglas_negocio", {})
+    try:
+        dias_anticipacion = max(1, min(int(reglas.get("dias_anticipacion", 30)), 365))
+    except (TypeError, ValueError):
+        dias_anticipacion = 30
+    contexto = {
+        "request": request,
+        "tenant_id": tenant_id,
+        "negocio": config.get("negocio", {}),
+        "nombre_empresa": getattr(tenant, "nombre_empresa", None),
+        "dias_anticipacion": dias_anticipacion,
+        "dias_habiles_config": reglas.get("dias_habiles", [0, 1, 2, 3, 4]),
+        "booking_path": _booking_path(tenant_id),
+        "horas_disponibles": [],
+        "campos_dinamicos": [],
+        "fecha_seleccionada": None,
+        "hora_confirmada": None,
+    }
+    contexto.update(extra)
+    return templates.TemplateResponse("agendar.html", contexto, status_code=status_code)
+
+
 @router.get("/agendar_web", response_class=HTMLResponse)
 @router.get("/{tenant_id}/agendar_web", response_class=HTMLResponse)
 def agendar_web(
@@ -53,7 +117,7 @@ def agendar_web(
     subtipo: str = Query(None),
     fecha: str = Query(None),
     hora: str = Query(None),
-    duracion_horas: int = Query(None),
+    duracion_horas: float = Query(None),
     db: Session = Depends(get_db),
     tenant_id: str = "default"
 ):
@@ -73,7 +137,7 @@ def agendar_web(
     subtipo_db = "taller" if subtipo == "local" else subtipo
 
     if tipo not in ["domicilio_taller"]:
-        return RedirectResponse(url="/cliente/agendar_web?tipo=domicilio_taller", status_code=302)
+        return RedirectResponse(url=f"{_booking_path(tenant_id)}?tipo=domicilio_taller", status_code=302)
 
     # 2. OBTENER CAMPOS DINÁMICOS (Lo que configuraste en el Admin)
     # Filtramos por el subtipo para que si es Local salgan unos y si es Domicilio otros
@@ -88,9 +152,11 @@ def agendar_web(
         ).order_by(models.CampoFormulario.orden.asc()).all()
 
     # 3. LÓGICA DE CALENDARIO Y HORAS (Tu lógica actual)
-    if duracion_horas is None:
-        minutos = config_negocio.get("negocio", {}).get("duracion_minutos", 120 if tipo == "domicilio_taller" else 60)
-        duracion_horas = max(1, round(int(minutos) / 60))
+    # Sólo el modo emergencia (dueño) puede elegir otra duración; el cliente
+    # siempre agenda con la duración configurada para el negocio.
+    if duracion_horas is None or request.query_params.get("modo") != "emergencia":
+        duracion_horas = _duracion_config_horas(config_negocio)
+    duracion_horas = max(0.25, min(8, duracion_horas))
 
     horas_disponibles = []
     mensaje_error = None
@@ -100,16 +166,21 @@ def agendar_web(
     if fecha:
         try:
             fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
-            # ... (Aquí va toda tu lógica de validación de lunes a viernes, colación, etc.)
-            # Asumamos que llamas a obtener_horas_disponibles() como ya lo tenías
             horas_disponibles = obtener_horas_disponibles(tipo, fecha_obj, duracion_horas, db, tenant_id)
-            
-            # Calcular término si hay hora seleccionada
+            if not horas_disponibles:
+                mensaje_error = "No quedan horarios disponibles para esa fecha. Elige otro día."
+                fecha_seleccionada = None
+                hora = None
+            elif hora and hora not in horas_disponibles and request.query_params.get("modo") != "emergencia":
+                mensaje_error = "Ese horario ya no está disponible. Elige otro."
+                hora = None
             if hora:
                 inicio = datetime.combine(fecha_obj, datetime.strptime(hora, "%H:%M").time())
                 hora_termino = (inicio + timedelta(hours=duracion_horas)).strftime("%H:%M")
-        except Exception as e:
-            mensaje_error = "Error al procesar la fecha."
+        except ValueError:
+            mensaje_error = "La fecha u hora seleccionada no es válida. Inténtalo nuevamente."
+            fecha_seleccionada = None
+            hora = None
 
     embed_mode = request.query_params.get("norem_embed") == "1"
     embed_site = normalizar_origen_web(request.query_params.get("norem_site")) if embed_mode else None
@@ -122,7 +193,7 @@ def agendar_web(
         "subtipo": subtipo,
         "fecha_seleccionada": fecha_seleccionada,
         "hora_confirmada": hora,
-        "duracion_horas": duracion_horas,
+        "duracion_horas": _formato_duracion(duracion_horas),
         "horas_disponibles": horas_disponibles,
         "hora_termino": hora_termino,
         "mensaje_error": mensaje_error,
@@ -134,8 +205,8 @@ def agendar_web(
         "embed_mode": embed_mode,
         "embed_site": embed_site,
         "utm_source": "whatsapp",
-        "utm_campaign": f"{tipo}_{subtipo}"
-        ,"booking_path": f"/cliente/{tenant_id}/agendar_web" if tenant_id != "default" else "/cliente/agendar_web"
+        "utm_campaign": f"{tipo}_{subtipo}",
+        "booking_path": _booking_path(tenant_id),
     })
 
 import holidays
@@ -154,16 +225,21 @@ def dias_habiles_tenant(db: Session, tenant_id: str) -> set:
 
 @router.post("/agendar_web", response_class=HTMLResponse)
 @router.post("/{tenant_id}/agendar_web", response_class=HTMLResponse)
-async def recibir_formulario(request: Request, db: Session = Depends(get_db), tenant_id: str = "default"):
-    print("\n--- INICIO DE PROCESAMIENTO POST ---")
+async def recibir_formulario(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant_id: str = "default",
+    current_user: CurrentUser | None = Depends(verificar_login_opcional),
+):
     form_data = {}
     is_web_embed = False
     embed_site = None
+    tenant = None
     try:
-        if not db.query(models.Tenant.id).filter(models.Tenant.id == tenant_id).first():
-            raise HTTPException(status_code=404, detail="Tenant no encontrado")
         form_data = await request.form()
-        print(f"Datos recibidos: {dict(form_data)}")
+        tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).with_for_update().first()
+        if not tenant or tenant.estado_suscripcion == "cancelada":
+            raise HTTPException(status_code=404, detail="Tenant no encontrado")
         is_web_embed = form_data.get("norem_embed") == "1"
         embed_site = normalizar_origen_web(form_data.get("norem_site")) if is_web_embed else None
         
@@ -176,50 +252,46 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         
         # --- 1. DETECTAR MODO EMERGENCIA (DUEÑO) ---
         # Lo detectamos si viene en la URL o en un campo oculto del formulario
-        es_dueno = (request.query_params.get("modo") == "emergencia" or 
-                    form_data.get("modo_emergencia") == "true" or
-                    form_data.get("modo") == "emergencia")
-        print(f"Es dueno/admin: {es_dueno}")
+        solicita_emergencia = (
+            request.query_params.get("modo") == "emergencia"
+            or form_data.get("modo_emergencia") == "true"
+            or form_data.get("modo") == "emergencia"
+        )
+        es_dueno = bool(
+            solicita_emergencia
+            and current_user
+            and current_user.tenant_id == tenant_id
+            and current_user.rol in {"admin", "admin_empresa", "superadmin"}
+        )
 
         nota_interna = form_data.get("nota_interna", "")
 
-        # Validación de 48h hábiles (Se salta si es el dueño)
-        fecha_minima = obtener_fecha_minima_habil(db, tenant_id)
-        fecha_cliente = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
-        fecha_cliente = pytz.timezone('America/Santiago').localize(fecha_cliente)
+        try:
+            fecha_inicio = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="Selecciona una fecha y hora válidas.")
+        fecha_cliente = pytz.timezone('America/Santiago').localize(fecha_inicio)
 
         # --- 2. VALIDACIONES DE FECHA (SE SALTAN SI ES DUEÑO) ---
         if not es_dueno:
-            # Regla A: 48h hábiles
-            fecha_minima = obtener_fecha_minima_habil(db, tenant_id)
-            if fecha_cliente < fecha_minima:
-                # En entornos de pruebas podemos permitir el agendamiento aun cuando
-                # no cumpla 48h hábiles. Registramos una nota interna y continuamos.
-                print(f"Validacion 48H fallida: fecha_cliente={fecha_cliente}, fecha_minima={fecha_minima}; se permite para pruebas.")
-                # Añadir marca en la nota interna para identificar excepciones
+            # Regla A: 48h hábiles. Por ahora no bloquea la reserva: sólo deja
+            # una marca en la nota interna para que el negocio la identifique.
+            if fecha_cliente < obtener_fecha_minima_habil(db, tenant_id):
                 nota_interna = (nota_interna or "") + " | EXCEPCION_48H"
-            
+
             # Regla B: Verificar si el día está bloqueado manualmente
-            dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == tenant_id, models.DiaBloqueado.fecha == fecha).first()
+            dia_bloqueado = db.query(models.DiaBloqueado).filter(
+                models.DiaBloqueado.tenant_id == tenant_id,
+                models.DiaBloqueado.fecha == fecha_inicio.date(),
+            ).first()
             if dia_bloqueado:
-                return templates.TemplateResponse("agendar.html", {
-                    "request": request, "tenant_id": tenant_id,
-                    "mensaje_error": "Este día el local se encuentra cerrado. Por favor selecciona otra fecha.",
-                    "tipo": tipo_servicio,
-                    "subtipo": subtipo,
-                    "embed_mode": is_web_embed,
-                    "embed_site": embed_site,
-                    "booking_path": f"/cliente/{tenant_id}/agendar_web" if tenant_id != "default" else "/cliente/agendar_web",
-                })
-        duracion_horas = int(form_data.get("duracion", 2))
-        fecha_termino = fecha_cliente + timedelta(hours=duracion_horas)
+                raise HTTPException(status_code=409, detail="Este día el local se encuentra cerrado. Por favor selecciona otra fecha.")
 
         equipo_asignado = None
 
         # 3. MAPEO DE CAMPOS DINÁMICOS
         respuestas = {}
         campos_db = db.query(models.CampoFormulario).filter(models.CampoFormulario.tenant_id == tenant_id).all()
-        print("\n--- DEBUG: Mapeando datos desde el Formulario ---")
         
         # Crear mapa de mapeos de nombres técnicos a claves normalizadas
         mapeo_nombres = {
@@ -253,9 +325,6 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
                     clave_final = nombre_tecnico_normalizado
                 
                 respuestas[clave_final] = valor
-                print(f"Campo {c.nombre_tecnico} (ID {c.id}) -> {clave_final}: {valor}")
-        
-        print(f"Respuestas finales mapeadas: {respuestas}")
 
         # 2. ASIGNACIÓN DE VARIABLES (Mejorado con fallbacks)
         rut = respuestas.get("rut") or f"WEB-{tenant_id}-{int(datetime.utcnow().timestamp())}"
@@ -271,24 +340,31 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         tipo_vivienda = respuestas.get("tipo_vivienda") or form_data.get("tipo_vivienda") or "No especificado"
 
         # 3. VALIDACIÓN DE CAMPOS OBLIGATORIOS
-        print(f"\nVALIDACIÓN:")
-        print(f"  RUT: {rut}")
-        print(f"  Correo: {correo}")
-        print(f"  Nombre: {nombre}")
-        print(f"  Apellido: {apellido}")
-        
         if correo == "sin-correo@norem.local":
-            raise Exception("Agrega al menos el campo Correo electrónico en la configuración de tu formulario.")
+            raise HTTPException(
+                status_code=422,
+                detail="Necesitamos tu correo electrónico para enviarte la confirmación. Si el formulario no lo pide, contacta al negocio.",
+            )
 
         # 4. LÓGICA DE DURACIÓN
-        try:
-            duracion_form = form_data.get("duracion_horas")
-            duracion_horas = int(duracion_form) if duracion_form else 2
-        except:
-            duracion_horas = 2
+        # El cliente no puede alterar la duración desde el formulario: se usa
+        # la configurada por el negocio. Sólo el dueño (modo emergencia) la elige.
+        duracion_horas = _duracion_config_horas(_config_tenant(tenant))
+        if es_dueno:
+            try:
+                duracion_horas = float(form_data.get("duracion_horas") or duracion_horas)
+            except (TypeError, ValueError):
+                pass
 
-        fecha_inicio = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
+        if not 0.25 <= duracion_horas <= 8:
+            raise HTTPException(status_code=422, detail="La duración solicitada no es válida")
+
         fecha_termino = fecha_inicio + timedelta(hours=duracion_horas)
+
+        if not es_dueno and not verificar_disponibilidad(
+            db, tipo_servicio, fecha_inicio, duracion_horas, tenant_id
+        ):
+            raise HTTPException(status_code=409, detail="El horario seleccionado ya no está disponible. Elige otro horario.")
         # --- 5. LÓGICA DE ASIGNACIÓN AUTOMÁTICA DE EQUIPO ---
         # Definimos los equipos por tipo de servicio
         equipos_posibles = equipos_configurados(tenant)
@@ -312,15 +388,11 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         # Si no hay equipo libre pero es el DUEÑO, forzamos el primero de la lista (Sobrecupo)
         if not equipo_asignado and es_dueno:
             equipo_asignado = equipos_posibles[0]
-            print(f"Modo emergencia: sobrecupo detectado. Asignando a {equipo_asignado}")
 
         if not equipo_asignado:
-            # Fallback final: asignar equipo por defecto incluso si nada está libre
-            equipo_asignado = equipos_posibles[0]
-            print(f"Fallback: todos los equipos ocupados. Asignando {equipo_asignado}")
-            
+            raise HTTPException(status_code=409, detail="No hay un equipo disponible en ese horario. Elige otro horario.")
+
         # 6. LÓGICA CRM: CREAR O BUSCAR CLIENTE
-        import json
         cliente = db.query(models.Cliente).filter(
             models.Cliente.rut == rut,
             models.Cliente.tenant_id == tenant_id
@@ -365,7 +437,8 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
             equipo=equipo_asignado,
             fecha_inicio=fecha_inicio, 
             fecha_termino=fecha_termino, 
-            duracion_horas=duracion_horas,
+            # Columna legacy entera; las fechas guardan la duración real.
+            duracion_horas=max(1, math.ceil(duracion_horas)),
             nota_interna = nota_interna,
             utm_source_real=ORIGEN_AGENDA_WEB if is_web_embed else None,
             utm_link=embed_site,
@@ -391,58 +464,49 @@ async def recibir_formulario(request: Request, db: Session = Depends(get_db), te
         db.commit()
         db.refresh(nueva)
         
-        print("=" * 80)
-        print("GUARDADO EXITOSO EN DB")
-        print(f"   ID: {nueva.id}")
-        print(f"   Nombre: {nueva.nombre}")
-        print(f"   Tipo Servicio: {nueva.tipo_servicio}")
-        print(f"   Subtipo (DB): {nueva.subtipo}")
-        print(f"   Equipo: {nueva.equipo}")
-        print(f"   Fecha: {nueva.fecha_inicio}")
-        print(f"   Estado: {nueva.estado}")
-        print("=" * 80)
     # 7. ENVÍO DE AVISO INICIAL
         try:
         # 1. ESTO ES LO ÚNICO QUE LLEGA AL AGENDAR
             enviar_notificacion(nueva.id, "creada")
             
-            print(f"Aviso de solicitud recibida enviado a: {correo}")
+        except Exception:
+            logger.error("booking_notification_failed tenant_id=%s", tenant_id)
 
-            # ❌ NO enviar nada más aquí. 
-            # El botón verde llegará solo en 5 min gracias al Scheduler.
-        except Exception as e:
-            print(f"Error al enviar aviso inicial: {e}")
+        return _render_formulario(
+            request, tenant, tenant_id,
+            success=True,
+            correo_cliente=correo,
+            fecha_reserva=fecha_inicio.strftime("%d/%m/%Y"),
+            hora_reserva=fecha_inicio.strftime("%H:%M"),
+            tipo=tipo_servicio,
+            subtipo=subtipo,
+            embed_mode=is_web_embed,
+            embed_site=embed_site,
+        )
 
-        return templates.TemplateResponse("agendar.html", {
-            "request": request, "tenant_id": tenant_id,
-            "success": True,
-            "horas_disponibles": [],
-            "tipo": tipo_servicio,
-            "subtipo": subtipo,
-        })
-
-    except Exception as e:
+    except HTTPException as exc:
         db.rollback()
-        print(f"ERROR EN AGENDAMIENTO: {e}")
-        error_trace = traceback.format_exc()
-        print(f"ERROR CRITICO EN RENDER:\n{error_trace}")
-        print(f"ERROR DETALLE: {traceback.format_exc()}")
-        return templates.TemplateResponse("agendar.html", {
-            "request": request, "tenant_id": tenant_id,
-            "mensaje_error": str(e),
-            "tipo": form_data.get("tipo_servicio"),
-            "subtipo": form_data.get("subtipo"),
-            "fecha_seleccionada": None,
-            "embed_mode": is_web_embed,
-            "embed_site": embed_site,
-            "booking_path": f"/cliente/{tenant_id}/agendar_web" if tenant_id != "default" else "/cliente/agendar_web",
-        })
-
-def carga_equipo_en_dia(db: Session, equipo: str, fecha: date) -> int:
-    return db.query(models.Agendamiento).filter(
-        models.Agendamiento.equipo == equipo,
-        func.date(models.Agendamiento.fecha_inicio) == fecha
-    ).count()
+        return _render_formulario(
+            request, tenant, tenant_id,
+            status_code=exc.status_code,
+            mensaje_error=exc.detail,
+            tipo=form_data.get("tipo_servicio") or "domicilio_taller",
+            subtipo=form_data.get("subtipo") or "local",
+            embed_mode=is_web_embed,
+            embed_site=embed_site,
+        )
+    except Exception:
+        db.rollback()
+        logger.exception("booking_submission_failed tenant_id=%s", tenant_id)
+        return _render_formulario(
+            request, tenant, tenant_id,
+            status_code=500,
+            mensaje_error="No se pudo completar la reserva. Revisa los datos e inténtalo nuevamente.",
+            tipo=form_data.get("tipo_servicio") or "domicilio_taller",
+            subtipo=form_data.get("subtipo") or "local",
+            embed_mode=is_web_embed,
+            embed_site=embed_site,
+        )
 
 def calcular_fin_especializado(inicio: datetime, duracion: int) -> datetime:
     horas_asignadas = 0
@@ -471,23 +535,37 @@ CUPOS_TIPO = {
 }
 
 
-def obtner_cupos_disponibles(tipo_servicio, fecha, duracion, db):
-    recursos = Recursos.get(tipo_servicio, [])
-    cupos = []
+def _reglas_agenda(tenant) -> dict:
+    reglas = _config_tenant(tenant).get("reglas_negocio", {})
+    return reglas if isinstance(reglas, dict) else {}
 
-    for recurso in recursos:
-        for hora in Horarios_base:
-            existe = db.query(models.Agendamiento).filter(
-                models.Agendamiento.equipo == recurso,
-            ).first()
 
-            if not existe:
-                cupos.append({
-                    "hora": hora,
-                    "recurso": recurso
-                })
-    return cupos
+def _pausa_del_negocio(tenant):
+    """Pausa diaria configurada (p. ej. colación) como (inicio, fin) o None."""
+    pausa = _reglas_agenda(tenant).get("pausa")
+    try:
+        inicio, fin = (datetime.strptime(valor, "%H:%M").time() for valor in pausa)
+        return (inicio, fin) if inicio < fin else None
+    except (TypeError, ValueError):
+        return None
 
+
+def _choca_con_pausa(tenant, inicio: datetime, termino: datetime) -> bool:
+    pausa = _pausa_del_negocio(tenant)
+    if not pausa:
+        return False
+    pausa_inicio = datetime.combine(inicio.date(), pausa[0])
+    pausa_fin = datetime.combine(inicio.date(), pausa[1])
+    return inicio < pausa_fin and termino > pausa_inicio
+
+
+def _primer_inicio_permitido(tenant) -> datetime:
+    """Hora actual más la anticipación mínima que exige el negocio (0 por defecto)."""
+    try:
+        horas = max(0, min(int(_reglas_agenda(tenant).get("horas_minimas_anticipacion", 0)), 720))
+    except (TypeError, ValueError):
+        horas = 0
+    return get_now_chile().replace(tzinfo=None) + timedelta(hours=horas)
 
 
 def _bloques_del_dia(tenant, dia_semana, duracion_horas):
@@ -499,11 +577,22 @@ def _bloques_del_dia(tenant, dia_semana, duracion_horas):
         if len(bloques) == 2 and bloques[0] < bloques[1]:
             inicio = datetime.strptime(bloques[0], "%H:%M")
             fin = datetime.strptime(bloques[1], "%H:%M")
-            paso = max(30, duracion_horas * 60)
+            paso = timedelta(minutes=max(30, duracion_horas * 60))
+            # Con pausa configurada, la jornada se divide en dos tramos y los
+            # horarios de la tarde parten justo al terminar la pausa.
+            tramos = [(inicio, fin)]
+            pausa = _pausa_del_negocio(tenant)
+            if pausa:
+                pausa_inicio = datetime.combine(inicio.date(), pausa[0])
+                pausa_fin = datetime.combine(inicio.date(), pausa[1])
+                if inicio < pausa_fin and pausa_inicio < fin:
+                    tramos = [(inicio, min(pausa_inicio, fin)), (max(pausa_fin, inicio), fin)]
             salida = []
-            while inicio + timedelta(minutes=paso) <= fin:
-                salida.append(inicio.strftime("%H:%M"))
-                inicio += timedelta(minutes=paso)
+            for tramo_inicio, tramo_fin in tramos:
+                actual = tramo_inicio
+                while actual + paso <= tramo_fin:
+                    salida.append(actual.strftime("%H:%M"))
+                    actual += paso
             return salida
     except (TypeError, ValueError, json.JSONDecodeError):
         pass
@@ -522,12 +611,17 @@ def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_i
 
     bloques_dia = _bloques_del_dia(tenant, fecha.weekday(), duracion_horas)
     candidatos = []
+    primer_inicio = _primer_inicio_permitido(tenant)
     for bloque in bloques_dia:
         try:
             inicio = datetime.combine(fecha, datetime.strptime(bloque, "%H:%M").time())
         except ValueError:
             continue
+        if inicio < primer_inicio:
+            continue
         termino = calcular_fin_especializado(inicio, duracion_horas) if tipo_servicio == "especializado" else inicio + timedelta(hours=duracion_horas)
+        if _choca_con_pausa(tenant, inicio, termino):
+            continue
         candidatos.append((bloque, inicio, termino))
     if not candidatos:
         return []
@@ -547,17 +641,11 @@ def obtener_horas_disponibles(tipo_servicio, fecha, duracion_horas, db, tenant_i
     ]
 
 
-def carga_equipo_en_dia(db, equipo, fecha):
-    inicio = datetime.combine(fecha, time(0, 0))
-    fin = datetime.combine(fecha, time(23, 59))
-
-    return db.query(models.Agendamiento).filter(
-        models.Agendamiento.equipo == equipo,
-        models.Agendamiento.fecha_inicio >= inicio,
-        models.Agendamiento.fecha_inicio <= fin
-    ).count()
-
 def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, duracion_horas: int, tenant_id: str = "default") -> bool:
+
+    inicio_naive = inicio.replace(tzinfo=None)
+    if inicio_naive < get_now_chile().replace(tzinfo=None):
+        return False
 
     # 1. NUEVO: Chequear si el día está bloqueado por administración
     dia_bloqueado = db.query(models.DiaBloqueado).filter(models.DiaBloqueado.tenant_id == tenant_id, models.DiaBloqueado.fecha == inicio.date()).first()
@@ -599,13 +687,21 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
     # Verificamos si la hora requerida está dentro de los bloques permitidos para ese día
     if hora_str not in bloques_validos:
         return False
+
+    # Reglas propias del negocio: anticipación mínima y pausa diaria.
+    if inicio.replace(tzinfo=None) < _primer_inicio_permitido(tenant):
+        return False
+    if _choca_con_pausa(tenant, inicio.replace(tzinfo=None), fin.replace(tzinfo=None)):
+        return False
         
     # 6. Validar traslapes en la DB
     # Contamos cuántos equipos están ocupados en este bloque
+    inicio_db = inicio.replace(tzinfo=None)
+    fin_db = fin.replace(tzinfo=None)
     agendados_en_bloque = db.query(models.Agendamiento).filter(
         models.Agendamiento.tenant_id == tenant_id,
-        models.Agendamiento.fecha_inicio < fin,
-        models.Agendamiento.fecha_termino > inicio,
+        models.Agendamiento.fecha_inicio < fin_db,
+        models.Agendamiento.fecha_termino > inicio_db,
         models.Agendamiento.estado != "cancelado"
     ).count()
 
@@ -614,22 +710,46 @@ def verificar_disponibilidad(db: Session, tipo_servicio: str, inicio: datetime, 
     return agendados_en_bloque < limite_equipos
 
 
-@router.get("/confirmar/{agendamiento_id}")
-async def confirmar_cita_endpoint(agendamiento_id: int, db: Session = Depends(get_db)):
-    agendamiento = db.query(models.Agendamiento).filter(models.Agendamiento.id == agendamiento_id).first()
-    
-    if not agendamiento:
-        return HTMLResponse("ID no válido")
+def _cita_desde_token(token: str, db: Session):
+    parsed = validar_token_confirmacion(token)
+    if not parsed:
+        return None
+    booking_id, tenant_id = parsed
+    return db.query(models.Agendamiento).filter(
+        models.Agendamiento.id == booking_id,
+        models.Agendamiento.tenant_id == tenant_id,
+    ).first()
 
-    # Si ya se confirmó, no hacemos nada más
+
+@router.get("/confirmar/{token}")
+async def confirmar_cita_form(token: str, db: Session = Depends(get_db)):
+    cita = _cita_desde_token(token, db)
+    if not cita or cita.estado == "cancelado":
+        return HTMLResponse("Enlace inválido o vencido.", status_code=404)
+    if cita.estado == "confirmado":
+        return HTMLResponse("Tu cita ya está confirmada.")
+    safe_token = html.escape(token, quote=True)
+    return HTMLResponse(f"""
+        <html><body style="font-family:sans-serif;text-align:center;padding:48px 16px;color:#172033">
+        <h2>Confirma tu cita</h2><p>Presiona el botón para confirmar la reserva.</p>
+        <form method="post" action="/cliente/confirmar/{safe_token}">
+          <button type="submit" style="padding:12px 22px;background:#1557c0;color:white;border:0;border-radius:8px;font-weight:bold">Confirmar mi cita</button>
+        </form></body></html>
+    """)
+
+
+@router.post("/confirmar/{token}")
+async def confirmar_cita_endpoint(token: str, db: Session = Depends(get_db)):
+    agendamiento = _cita_desde_token(token, db)
+    if not agendamiento or agendamiento.estado == "cancelado":
+        return HTMLResponse("Enlace inválido o vencido.", status_code=404)
+
     if agendamiento.estado != "confirmado":
         agendamiento.estado = "confirmado"
         db.commit()
-        # Disparo inmediato de los correos finales
         enviar_confirmacion_agendamiento(agendamiento, "Confirmación Exitosa")
         enviar_aviso_accion_al_dueno(agendamiento, "ACEPTADA ✅")
 
-    # RESPUESTA PARA MÓVIL: Una pantalla que se cierra o avisa éxito inmediato
     return HTMLResponse("""
         <html>
             <head>
@@ -657,31 +777,32 @@ async def confirmar_cita_endpoint(agendamiento_id: int, db: Session = Depends(ge
     """)
 
 def obtener_fecha_minima_habil(db: Session, tenant_id: str):
+    """Fecha/hora a partir de la cual se cumplen 48 horas en días hábiles."""
     tz_chile = pytz.timezone('America/Santiago')
     fecha_chequeo = datetime.now(tz_chile)
+    dias_habiles = dias_habiles_tenant(db, tenant_id)  # una sola consulta
+    if not dias_habiles:
+        # Sin días hábiles configurados el bucle nunca terminaría.
+        return fecha_chequeo
     horas_contadas = 0
-    
     while horas_contadas < 48:
         fecha_chequeo += timedelta(hours=1)
-        # 0=Lunes, 4=Viernes, 5=Sábado, 6=Domingo
-        if fecha_chequeo.weekday() in dias_habiles_tenant(db, tenant_id):
+        if fecha_chequeo.weekday() in dias_habiles:
             horas_contadas += 1
     return fecha_chequeo
 
 
-
 @router.get("/api/horas-disponibles")
 def api_horas(
-    fecha: str, 
-    tipo: str = "domicilio_taller", 
-    duracion: int = 2, 
+    fecha: str,
+    tipo: str = "domicilio_taller",
+    duracion: int = 2,
+    tenant_id: str = "default",
     db: Session = Depends(get_db)
 ):
     try:
         fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
-        # Reutilizamos tu función actual que ya tiene todas las reglas
-        horas = obtener_horas_disponibles(tipo, fecha_obj, duracion, db)
-        return {"horas": horas}
-    except Exception:
+    except ValueError:
         return {"horas": []}
-
+    duracion = max(1, min(8, duracion))
+    return {"horas": obtener_horas_disponibles(tipo, fecha_obj, duracion, db, tenant_id)}

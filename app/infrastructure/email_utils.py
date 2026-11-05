@@ -3,6 +3,9 @@ import smtplib
 import vobject
 import logging
 import base64
+import hashlib
+import hmac
+import time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from email.utils import formataddr, formatdate, make_msgid, parseaddr
@@ -17,6 +20,7 @@ import re
 import html
 from app.core.database import SessionLocal 
 from app.core.models import Agendamiento, get_now_chile
+from app.core.security import SECRET_KEY
 
 load_dotenv()
 
@@ -260,9 +264,42 @@ def _detalle_cita(agendamiento) -> str:
     servicio = html.escape(_servicio_principal(agendamiento))
     return f"<p><strong>Fecha:</strong> {fecha}</p><p><strong>Hora:</strong> {hora} hrs</p><p><strong>Servicio:</strong> {servicio}</p>"
 
+
+def crear_token_confirmacion(agendamiento, vigencia_segundos: int = 7 * 24 * 60 * 60) -> str:
+    """Crea un enlace opaco, firmado y con expiración para confirmar una reserva."""
+    payload = json.dumps({
+        "id": int(agendamiento.id),
+        "tenant_id": str(agendamiento.tenant_id),
+        "exp": int(time.time()) + vigencia_segundos,
+    }, separators=(",", ":")).encode("utf-8")
+    encoded = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+    signature = hmac.new(SECRET_KEY.encode("utf-8"), encoded.encode("ascii"), hashlib.sha256).digest()
+    signed = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+    return f"{encoded}.{signed}"
+
+
+def validar_token_confirmacion(token: str) -> tuple[int, str] | None:
+    """Valida firma y vencimiento del token sin confiar en el ID enviado por URL."""
+    try:
+        encoded, supplied = token.split(".", 1)
+        expected_raw = hmac.new(SECRET_KEY.encode("utf-8"), encoded.encode("ascii"), hashlib.sha256).digest()
+        expected = base64.urlsafe_b64encode(expected_raw).decode("ascii").rstrip("=")
+        if not hmac.compare_digest(supplied, expected):
+            return None
+        payload_raw = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        payload = json.loads(payload_raw)
+        booking_id = int(payload["id"])
+        tenant_id = str(payload["tenant_id"])
+        if not tenant_id or int(payload["exp"]) < int(time.time()):
+            return None
+        return booking_id, tenant_id
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return None
+
 def enviar_solicitud_confirmacion(agendamiento):
     """Pide confirmación con información neutral para cualquier negocio."""
-    url_confirmar = f"{BASE_URL}/cliente/confirmar/{agendamiento.id}"
+    token = crear_token_confirmacion(agendamiento)
+    url_confirmar = f"{BASE_URL}/cliente/confirmar/{urllib.parse.quote(token, safe='')}"
     negocio = html.escape(_nombre_negocio(agendamiento))
     nombre = html.escape(agendamiento.nombre)
     asunto = f"Confirma tu cita · {_nombre_negocio(agendamiento)}"
@@ -366,16 +403,14 @@ def procesar_flujo_automatico():
         Agendamiento.boton_enviado == False
     ).all()
 
-    print(f"DEBUG scheduler: ahora={ahora}, corte={hace_5_min}. Encontradas para enviar botón: {len(nuevas)}")
+    logger.info("booking_confirmation_batch size=%s", len(nuevas))
 
     for cita in nuevas:
-        print(f"  → Procesando cita ID {cita.id} ({cita.nombre}, creada: {cita.creado_en})")
         if enviar_solicitud_confirmacion(cita):
             cita.boton_enviado = True
             db.commit()
-            print(f"  ✅ Botón de confirmación enviado para cita ID: {cita.id}")
         else:
-            print(f"  ❌ Falló el envío del botón para cita ID: {cita.id}")
+            logger.warning("booking_confirmation_delivery_failed tenant_id=%s", cita.tenant_id)
 
     db.close()
 

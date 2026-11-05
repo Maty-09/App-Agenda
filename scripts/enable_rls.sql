@@ -1,38 +1,30 @@
--- Habilitar Row Level Security en las tablas principales de Noren
+-- DEPRECATED: este archivo NO habilita RLS ni debe ejecutarse como mecanismo
+-- de seguridad. El antiguo borrador cubría solo cuatro tablas, no configuraba
+-- el contexto por solicitud y podía crear una falsa sensación de aislamiento.
+-- La app autentica mediante JWT propio y SQLAlchemy; todavía no integra
+-- Supabase Auth ni establece app.current_tenant en cada transacción.
+--
+-- Ejecuta esta consulta de solo lectura desde Supabase SQL Editor para revisar
+-- qué tablas con tenant_id tienen RLS y políticas. No muestra datos de clientes.
 
-ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE agendamientos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tareas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
-
--- Crear una función para obtener el tenant_id actual del contexto de la sesión
-CREATE OR REPLACE FUNCTION current_tenant_id() RETURNS text AS $$
-  SELECT current_setting('app.current_tenant', true);
-$$ LANGUAGE sql STABLE;
-
--- Políticas para Clientes
-CREATE POLICY tenant_isolation_clientes ON clientes
-    FOR ALL
-    USING (tenant_id = current_tenant_id());
-
--- Políticas para Agendamientos
-CREATE POLICY tenant_isolation_agendamientos ON agendamientos
-    FOR ALL
-    USING (tenant_id = current_tenant_id());
-
--- Políticas para Tareas
-CREATE POLICY tenant_isolation_tareas ON tareas
-    FOR ALL
-    USING (tenant_id = current_tenant_id());
-
--- Políticas para Usuarios
-CREATE POLICY tenant_isolation_usuarios ON usuarios
-    FOR ALL
-    USING (tenant_id = current_tenant_id());
-
-/*
-NOTA PARA EL BACKEND (FastAPI):
-Antes de ejecutar queries en SQLAlchemy, se debe ejecutar:
-db.execute(text(f"SET LOCAL app.current_tenant = '{user.tenant_id}'"))
-Para que Postgres sepa qué tenant está haciendo la consulta.
-*/
+SELECT
+    n.nspname AS schema_name,
+    c.relname AS table_name,
+    c.relrowsecurity AS rls_enabled,
+    c.relforcerowsecurity AS force_rls,
+    COALESCE(
+        array_agg(p.polname ORDER BY p.polname)
+            FILTER (WHERE p.polname IS NOT NULL),
+        ARRAY[]::name[]
+    ) AS policies
+FROM pg_class AS c
+JOIN pg_namespace AS n ON n.oid = c.relnamespace
+JOIN information_schema.columns AS col
+  ON col.table_schema = n.nspname
+ AND col.table_name = c.relname
+ AND col.column_name = 'tenant_id'
+LEFT JOIN pg_policy AS p ON p.polrelid = c.oid
+WHERE c.relkind IN ('r', 'p')
+  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+GROUP BY n.nspname, c.relname, c.relrowsecurity, c.relforcerowsecurity
+ORDER BY n.nspname, c.relname;

@@ -1,12 +1,9 @@
 """Recordatorios multi-tenant idempotentes."""
 import json
-import os
 from datetime import timedelta
 from html import escape
 
 from sqlalchemy.exc import IntegrityError
-from twilio.rest import Client
-
 from app.core.database import SessionLocal
 from app.core.models import Agendamiento, NotificacionAgendamiento, get_now_chile
 from app.infrastructure.email_utils import enviar_email_base
@@ -37,16 +34,11 @@ def _ya_enviada(db, cita, tipo, canal):
     ).first() is not None
 
 
-def _mensaje(cita, tipo, empresa, canal="email"):
-    """Texto por canal; el correo ya agrega saludo y tarjeta de detalles."""
-    fecha = cita.fecha_inicio.strftime("%d/%m/%Y a las %H:%M")
+def _mensaje(cita, tipo, empresa):
+    """Texto para correo; el template agrega saludo y tarjeta de detalles."""
     if tipo == "creada":
-        if canal == "whatsapp":
-            return f"Hola {cita.nombre}, tu cita fue agendada para el {fecha}. {empresa} te contactará si hay novedades."
         return f"Tu cita fue agendada. {empresa} te contactará si hay novedades."
     cuando = "mañana" if tipo == "recordatorio_24h" else "en una hora"
-    if canal == "whatsapp":
-        return f"Hola {cita.nombre}, te recordamos que tu cita es {cuando}: {fecha}. Te esperamos en {empresa}."
     return f"Te recordamos que tu cita es {cuando}. Te esperamos en {empresa}."
 
 
@@ -86,13 +78,12 @@ def enviar_notificacion(cita_id, tipo):
     try:
         cita = db.query(Agendamiento).filter(Agendamiento.id == cita_id).first()
         if not cita or cita.estado == "cancelado":
-            return {"email": False, "whatsapp": False}
+            return {"email": False}
         cfg = _config(cita)
         canales = cfg.get("notificaciones", {})
         empresa = cfg.get("nombre_publico", cita.tenant.nombre_empresa)
-        mensaje_email = _mensaje(cita, tipo, empresa, canal="email")
-        mensaje_whatsapp = _mensaje(cita, tipo, empresa, canal="whatsapp")
-        resultado = {"email": False, "whatsapp": False}
+        mensaje_email = _mensaje(cita, tipo, empresa)
+        resultado = {"email": False}
         if (canales.get("email", True) and not _ya_enviada(db, cita, tipo, "email")
                 and enviar_email_base(
                     cita.correo,
@@ -101,15 +92,6 @@ def enviar_notificacion(cita_id, tipo):
                     contenido_texto=f"Hola {cita.nombre}, {mensaje_email}",
                 )):
             resultado["email"] = _registrar(db, cita, tipo, "email")
-        sid, token, origen = os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"), os.getenv("TWILIO_WHATSAPP_NUMBER")
-        if canales.get("whatsapp", True) and sid and token and origen and not _ya_enviada(db, cita, tipo, "whatsapp"):
-            telefono = cita.telefono.strip()
-            telefono = telefono if telefono.startswith("+") else f"+56{telefono.lstrip('0')}"
-            try:
-                Client(sid, token).messages.create(body=mensaje_whatsapp, from_=origen, to=f"whatsapp:{telefono}")
-                resultado["whatsapp"] = _registrar(db, cita, tipo, "whatsapp")
-            except Exception:
-                pass
         return resultado
     finally:
         db.close()

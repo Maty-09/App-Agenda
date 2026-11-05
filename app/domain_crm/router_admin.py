@@ -37,6 +37,30 @@ router = APIRouter()
 SYSTEM_BASE_URL = os.getenv("SYSTEM_BASE_URL", "https://agenda.norem.cl").rstrip("/")
 
 
+def _cookie_secure(request: Request) -> bool:
+    """Exige cookies Secure en producción; permite HTTP en desarrollo local."""
+    return os.getenv("VERCEL") == "1" or request.url.scheme == "https"
+
+
+def _set_session_cookie(response: RedirectResponse, request: Request, token: str) -> None:
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {token}",
+        httponly=True,
+        secure=_cookie_secure(request),
+        samesite="lax",
+        path="/",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+
+def _delete_session_cookie(response: RedirectResponse, request: Request) -> None:
+    response.delete_cookie(
+        "access_token", path="/", secure=_cookie_secure(request),
+        httponly=True, samesite="lax",
+    )
+
+
 def _avisar_activacion_interna(db: Session, tenant: models.Tenant, origen: str) -> None:
     """Notifica al equipo cuando una cuenta pasa a estar activa."""
     administrador = db.query(models.Usuario).filter(
@@ -146,7 +170,7 @@ def login(
     else:
         destino = "/admin/dashboard"
     response = RedirectResponse(url=destino, status_code=status.HTTP_303_SEE_OTHER)
-    response.set_cookie(key="access_token", value=f"Bearer {access_token}", httponly=True)
+    _set_session_cookie(response, request, access_token)
     return response
 
 
@@ -208,7 +232,7 @@ def iniciar_prueba(
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     response = RedirectResponse(url="/admin/configuracion-inicial", status_code=status.HTTP_303_SEE_OTHER)
-    response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True)
+    _set_session_cookie(response, request, token)
     return response
 
 
@@ -313,8 +337,16 @@ def api_publica(request: Request, db: Session = Depends(get_db), cred: CurrentUs
     return templates.TemplateResponse("admin_public_api.html", {"request": request, "current_user": cred, "agenda_url": f"{base_url}/cliente/{cred.tenant_id}/agendar_web"})
 
 
+def _hora_valida(valor: str) -> bool:
+    try:
+        datetime.strptime(valor or "", "%H:%M")
+        return True
+    except ValueError:
+        return False
+
+
 @router.post("/configuracion-negocio")
-def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), equipos: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), dias_anticipacion: int = Form(30), dias_dashboard: int = Form(7), dashboard_widgets: List[str] = Form([]), enviar_ubicacion_google: Optional[str] = Form(None), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = Form(""), servicio_principal: str = Form(""), equipos: str = Form(""), duracion_minutos: int = Form(60), hora_inicio: str = Form("09:00"), hora_fin: str = Form("18:00"), dias_habiles: List[int] = Form([]), dias_anticipacion: int = Form(30), pausa_inicio: str = Form(""), pausa_fin: str = Form(""), horas_minimas_anticipacion: int = Form(0), dias_dashboard: int = Form(7), dashboard_widgets: List[str] = Form([]), enviar_ubicacion_google: Optional[str] = Form(None), db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     if cred.rol not in {"admin", "superadmin"}:
         raise HTTPException(status_code=403, detail="Sólo el administrador puede configurar el negocio.")
     tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
@@ -323,7 +355,15 @@ def guardar_configuracion_negocio(nombre_empresa: str = Form(...), giro: str = F
     config, dias = _leer_config_tenant(tenant), sorted({dia for dia in dias_habiles if 0 <= dia <= 6}) or [0, 1, 2, 3, 4]
     equipos_config = [equipo.strip() for equipo in equipos.split(",") if equipo.strip()] or ["Agenda principal"]
     config["negocio"] = {"giro": giro.strip(), "servicio_principal": servicio_principal.strip(), "duracion_minutos": max(15, min(duracion_minutos, 480)), "equipos": equipos_config}
-    config["reglas_negocio"] = {"dias_habiles": dias, "bloques_horarios": {str(dia): [hora_inicio, hora_fin] for dia in dias}, "dias_anticipacion": max(1, min(dias_anticipacion, 365))}
+    if not (_hora_valida(hora_inicio) and _hora_valida(hora_fin) and hora_inicio < hora_fin):
+        return RedirectResponse("/admin/configuracion-negocio?error=horario", status_code=303)
+    reglas = config.get("reglas_negocio", {}) if isinstance(config.get("reglas_negocio"), dict) else {}
+    reglas.update({"dias_habiles": dias, "bloques_horarios": {str(dia): [hora_inicio, hora_fin] for dia in dias}, "dias_anticipacion": max(1, min(dias_anticipacion, 365)), "horas_minimas_anticipacion": max(0, min(horas_minimas_anticipacion, 720))})
+    if _hora_valida(pausa_inicio) and _hora_valida(pausa_fin) and pausa_inicio < pausa_fin:
+        reglas["pausa"] = [pausa_inicio, pausa_fin]
+    else:
+        reglas.pop("pausa", None)
+    config["reglas_negocio"] = reglas
     config["dashboard"] = {"dias_disponibilidad": max(1, min(dias_dashboard, 28)), "widgets": [widget for widget in dashboard_widgets if widget in {"resumen", "disponibilidad", "tareas", "metricas", "analitica"}]}
     notificaciones = config.get("notificaciones", {})
     notificaciones["enviar_ubicacion_google"] = enviar_ubicacion_google == "1"
@@ -358,17 +398,22 @@ def iniciar_checkout_suscripcion(
 ):
     if cred.rol != "admin":
         raise HTTPException(status_code=403, detail="Solo el administrador puede contratar la suscripción.")
+    tenant_actual = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
+    if tenant_actual and tenant_actual.estado_suscripcion == "activa" and (
+        tenant_actual.mercado_pago_preapproval_id or tenant_actual.stripe_subscription_id
+    ):
+        # Evita una segunda suscripción (y un doble cobro) para un negocio que ya paga.
+        return RedirectResponse("/admin/suscripcion", status_code=status.HTTP_303_SEE_OTHER)
     if os.getenv("MERCADOPAGO_ACCESS_TOKEN"):
         try:
-            checkout_url, preapproval_id = mercadopago_utils.crear_suscripcion_mensual(
+            # El id de la suscripción se guarda recién cuando Mercado Pago la
+            # autoriza (webhook). Así un intento abandonado nunca reemplaza a la
+            # suscripción vigente ni puede cancelarla al vencer.
+            checkout_url, _ = mercadopago_utils.crear_suscripcion_mensual(
                 tenant_id=cred.tenant_id,
                 payer_email=cred.email,
                 back_url=f"{SYSTEM_BASE_URL}/admin/suscripcion?estado=pendiente",
             )
-            tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
-            if tenant:
-                tenant.mercado_pago_preapproval_id = preapproval_id
-                db.commit()
             return RedirectResponse(checkout_url, status_code=status.HTTP_303_SEE_OTHER)
         except RuntimeError as exc:
             tenant = db.query(models.Tenant).filter(models.Tenant.id == cred.tenant_id).first()
@@ -456,18 +501,21 @@ def reset_password(
     usuario.sesion_activa = False
     db.commit()
     response = RedirectResponse(url="/admin/login?password_reset=1", status_code=status.HTTP_303_SEE_OTHER)
-    response.delete_cookie("access_token")
+    _delete_session_cookie(response, request)
     return response
 
 
 @router.get("/logout")
-def logout(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
-    usuario = db.query(models.Usuario).filter(models.Usuario.id == cred.id).first()
+def logout(request: Request, db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
+    usuario = db.query(models.Usuario).filter(
+        models.Usuario.id == cred.id,
+        models.Usuario.tenant_id == cred.tenant_id,
+    ).first()
     if usuario:
         usuario.sesion_activa = False
         db.commit()
     response = RedirectResponse(url="/admin/login", status_code=status.HTTP_303_SEE_OTHER)
-    response.delete_cookie("access_token")
+    _delete_session_cookie(response, request)
     return response
 
 
@@ -499,18 +547,13 @@ def panel_agendamientos(
     except Exception:
         tenant_config = {}
 
-    print("=" * 80)
-    print(f"DEBUG PANEL: subtipo={subtipo}, tipo_servicio={tipo_servicio}, fecha={fecha}")
-
     if subtipo:
         filter_subtipo = subtipo.lower().strip()
         if filter_subtipo == "local":
             filter_subtipo = "taller"
         query = query.filter(models.Agendamiento.subtipo == filter_subtipo)
-        print(f"  -> Filtrando por subtipo: {filter_subtipo}")
     if tipo_servicio:
         query = query.filter(models.Agendamiento.tipo_servicio == tipo_servicio)
-        print(f"  -> Filtrando por tipo_servicio: {tipo_servicio}")
     if fecha:
         try:
             fecha_inicio = datetime.strptime(fecha, "%Y-%m-%d")
@@ -519,19 +562,17 @@ def panel_agendamientos(
                 models.Agendamiento.fecha_inicio >= fecha_inicio,
                 models.Agendamiento.fecha_inicio < fecha_fin
             )
-            print(f"  -> Filtrando por fecha: {fecha}")
         except ValueError:
             pass
 
     agendamientos = query.order_by(models.Agendamiento.id).all()
-    print(f"  -> RESULTADO: {len(agendamientos)} agendamientos encontrados")
-    for ag in agendamientos:
-        print(f"    - ID {ag.id}: {ag.nombre} {ag.apellido} - {ag.fecha_inicio}")
-    print("=" * 80)
-    
-    utm_registro = db.query(models.UTMRegistro).all()
+    utm_registro = db.query(models.UTMRegistro).filter(
+        models.UTMRegistro.tenant_id == cred.tenant_id
+    ).all()
 
-    dias_bloqueados = db.query(models.DiaBloqueado).all()
+    dias_bloqueados = db.query(models.DiaBloqueado).filter(
+        models.DiaBloqueado.tenant_id == cred.tenant_id
+    ).all()
 
     equipos_config = tenant_config.get("negocio", {}).get("equipos", []) or ["Agenda principal"]
     paleta = ["#2563EB", "#059669", "#7C3AED", "#EA580C", "#DB2777"]
@@ -607,10 +648,12 @@ def actualizar_nota(
     cred: CurrentUser = Depends(verificar_login)
 ):
     # Buscamos el registro en la DB usando SQLAlchemy
-    agendamiento = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
+    agendamiento = db.query(models.Agendamiento).filter(
+        models.Agendamiento.id == id,
+        models.Agendamiento.tenant_id == cred.tenant_id,
+    ).first()
     
     if not agendamiento:
-        print(f"Error: No se encontrÃ³ el agendamiento ID {id}")
         return RedirectResponse("/admin/panel", status_code=303)
 
     # Actualizamos la nota interna
@@ -618,10 +661,9 @@ def actualizar_nota(
     
     try:
         db.commit()
-        print(f"Nota del agendamiento {id} actualizada con Ã©xito.")
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"Error al guardar: {e}")
+        logger.error("appointment_note_update_failed tenant_id=%s", cred.tenant_id)
     
     return RedirectResponse("/admin/panel", status_code=303)
 # =============================
@@ -639,7 +681,9 @@ def export_utm(
     
     ws.append(["ID","Origen Link", "Canal","Creado Por","RUT","Nombre","Apellido","Direccion","Patente","Marca","Modelo","Fecha Inicio","Fecha Termino"])
 
-    agendamientos = db.query(models.Agendamiento).order_by(models.Agendamiento.fecha_inicio.desc()).all()
+    agendamientos = db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == cred.tenant_id
+    ).order_by(models.Agendamiento.fecha_inicio.desc()).all()
     
     for a in agendamientos: 
         ws.append([
@@ -676,7 +720,8 @@ def cancelar_agendamiento(
     admin=Depends(verificar_login)
 ):
     ag = db.query(models.Agendamiento).filter(
-        models.Agendamiento.id == id
+        models.Agendamiento.id == id,
+        models.Agendamiento.tenant_id == admin.tenant_id,
     ).first()
 
     if not ag:
@@ -696,34 +741,30 @@ def cancelar_agendamiento(
 
 # ENVIAR LINKS POR ADMIN
 @router.get("/links-agenda")
-def obtener_links_agenda(request: Request, admin = Depends(verificar_login)):
-    base_url = SYSTEM_BASE_URL
-
-    if admin.tenant_id == "womenlashcl":
-        links = {
-            "local" : {
-                "label": "Agendar Servicio",
-                "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local"
-            }
+def obtener_links_agenda(request: Request, db: Session = Depends(get_db), admin: CurrentUser = Depends(verificar_login)):
+    """Links de agenda del propio negocio (cada tenant tiene su URL pública)."""
+    agenda = f"{SYSTEM_BASE_URL}/cliente/{admin.tenant_id}/agendar_web"
+    links = {
+        "local": {
+            "label": "Agendar Servicio",
+            "url": f"{agenda}?tipo=domicilio_taller&subtipo=local",
         }
-    else:
-        links = {
-            "domicilio": {
-                "label": "Servicio a Domicilio",
-                "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=domicilio"
-                },
-            "local" : {
-                "label": "Servicio en Local",
-                "url": f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local"
-                },
-            "especializado" : {
-                "label": "Equipo Especializado",
-                2: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=2",
-                3: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=3",
-                4: f"{base_url}/cliente/agendar_web?tipo=especializado&duracion_horas=4",
-            } 
+    }
+    # El link a domicilio sólo se ofrece si el negocio armó ese formulario.
+    tiene_domicilio = db.query(models.CampoFormulario.id).filter(
+        models.CampoFormulario.tenant_id == admin.tenant_id,
+        models.CampoFormulario.subtipo_servicio == "domicilio",
+        models.CampoFormulario.activo == True,
+    ).first()
+    if tiene_domicilio:
+        links["domicilio"] = {
+            "label": "Servicio a Domicilio",
+            "url": f"{agenda}?tipo=domicilio_taller&subtipo=domicilio",
         }
-
+    links["especializado"] = {
+        "label": "Equipo Especializado",
+        **{horas: f"{agenda}?tipo=especializado&duracion_horas={horas}" for horas in (2, 3, 4)},
+    }
     return links
 # ==========================================
 #   GESTIÃN DE FORMULARIO DINÃMICO
@@ -864,9 +905,10 @@ async def reordenar_campos(
         db.commit()
         return {"status": "success", "message": "Orden actualizado"}
     
-    except Exception as e:
+    except Exception:
         db.rollback()
-        return {"status": "error", "message": str(e)}, 500
+        logger.error("form_fields_reorder_failed tenant_id=%s", cred.tenant_id)
+        raise HTTPException(status_code=500, detail="No se pudo guardar el orden de los campos")
 
 
 
@@ -985,7 +1027,10 @@ async def reprogramar_cita(
     db: Session = Depends(get_db),
     admin = Depends(verificar_login)
 ):
-    ag = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
+    ag = db.query(models.Agendamiento).filter(
+        models.Agendamiento.id == id,
+        models.Agendamiento.tenant_id == admin.tenant_id,
+    ).first()
     if not ag:
         return {"status": "error", "message": "Cita no encontrada"}
         
@@ -1028,6 +1073,7 @@ async def reprogramar_cita(
     current_team = ag.equipo
     if current_team in equipos_posibles:
         ocupado = db.query(models.Agendamiento).filter(
+            models.Agendamiento.tenant_id == admin.tenant_id,
             models.Agendamiento.id != ag.id,
             models.Agendamiento.equipo == current_team,
             models.Agendamiento.fecha_inicio < fin_nueva_naive,
@@ -1043,6 +1089,7 @@ async def reprogramar_cita(
             if eq == current_team:
                 continue
             ocupado = db.query(models.Agendamiento).filter(
+                models.Agendamiento.tenant_id == admin.tenant_id,
                 models.Agendamiento.id != ag.id,
                 models.Agendamiento.equipo == eq,
                 models.Agendamiento.fecha_inicio < fin_nueva_naive,
@@ -1070,7 +1117,8 @@ async def reprogramar_cita(
         return {"status": "ok"}
     except Exception as e:
         db.rollback()
-        return {"status": "error", "message": f"Error al guardar en base de datos: {str(e)}"}
+        logger.exception("booking_reschedule_failed", extra={"booking_id": id, "tenant_id": admin.tenant_id})
+        return {"status": "error", "message": "No se pudo guardar la reprogramación. Intenta nuevamente."}
 
 
 @router.post("/reubicar-emergencia/{id}")
@@ -1081,7 +1129,10 @@ async def reubicar_emergencia(
     admin = Depends(verificar_login)
 ):
     nueva_direccion = payload.get("nueva_direccion")
-    ag = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
+    ag = db.query(models.Agendamiento).filter(
+        models.Agendamiento.id == id,
+        models.Agendamiento.tenant_id == admin.tenant_id,
+    ).first()
     
     if not ag:
         return {"status": "error", "message": "No encontrado"}
@@ -1200,7 +1251,10 @@ async def editar_cita_admin(
     db: Session = Depends(get_db),
     admin = Depends(verificar_login)
 ):
-    cita = db.query(models.Agendamiento).filter(models.Agendamiento.id == id).first()
+    cita = db.query(models.Agendamiento).filter(
+        models.Agendamiento.id == id,
+        models.Agendamiento.tenant_id == admin.tenant_id,
+    ).first()
     
     if not cita:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
@@ -1214,11 +1268,10 @@ async def editar_cita_admin(
         cita.duracion_horas = duracion_horas
         
         db.commit()
-        print(f"â Cita ID {id} modificada con Ã©xito: {nueva_fecha_inicio} ({duracion_horas} hrs)")
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"â Error al editar cita: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("appointment_reschedule_failed tenant_id=%s", admin.tenant_id)
+        raise HTTPException(status_code=500, detail="No se pudo actualizar la cita")
         
     return RedirectResponse(url="/admin/panel", status_code=303)
 
@@ -1245,7 +1298,9 @@ def obtener_bloqueos_json(db: Session = Depends(get_db), cred: CurrentUser = Dep
 @router.get("/api/debug/agendamientos")
 def debug_agendamientos(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     """Endpoint de debugging para ver todos los agendamientos"""
-    agendamientos = db.query(models.Agendamiento).all()
+    agendamientos = db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == cred.tenant_id
+    ).all()
     
     resultado = []
     for ag in agendamientos:
@@ -1265,7 +1320,9 @@ def debug_agendamientos(db: Session = Depends(get_db), cred: CurrentUser = Depen
 @router.get("/api/debug/ultimo-agendamiento")
 def debug_ultimo_agendamiento(db: Session = Depends(get_db), cred: CurrentUser = Depends(verificar_login)):
     """Endpoint de debugging para ver el Ãºltimo agendamiento guardado"""
-    ultimo = db.query(models.Agendamiento).order_by(models.Agendamiento.id.desc()).first()
+    ultimo = db.query(models.Agendamiento).filter(
+        models.Agendamiento.tenant_id == cred.tenant_id
+    ).order_by(models.Agendamiento.id.desc()).first()
     
     if not ultimo:
         return {"error": "No hay agendamientos"}
@@ -1282,18 +1339,9 @@ def debug_ultimo_agendamiento(db: Session = Depends(get_db), cred: CurrentUser =
     }
 
 @router.get("/agendar-emergencia-total")
-async def agendar_emergencia(request: Request):
-    """
-    Ruta para el modo sobrecupo. 
-    Redirige al agendamiento web ignorando restricciones (si el formulario lo permite).
-    """
-    base_url = SYSTEM_BASE_URL
-    
-    # Redirigimos al agendamiento de local, pero puedes cambiar el 'tipo' 
-    # o aÃ±adirle un parÃ¡metro 'emergencia=true' para tu lÃ³gica interna.
-    target_url = f"{base_url}/cliente/agendar_web?tipo=domicilio_taller&subtipo=local&modo=emergencia"
-    
-    print(f"DEBUG: Accediendo a Modo Emergencia -> {target_url}")
+async def agendar_emergencia(request: Request, cred: CurrentUser = Depends(verificar_login)):
+    """Modo sobrecupo: abre la agenda del propio negocio en modo dueño."""
+    target_url = f"/cliente/{cred.tenant_id}/agendar_web?tipo=domicilio_taller&subtipo=local&modo=emergencia"
     return RedirectResponse(url=target_url)
 
 

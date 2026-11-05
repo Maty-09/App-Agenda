@@ -25,10 +25,6 @@ from app.domain_team import router_team as admin_team
 # IMPORTANTE: Cambiamos el import para usar la función que está en email_utils
 from app.infrastructure.email_utils import procesar_flujo_automatico 
 
-# Importaciones del Bot de WhatsApp
-from app.infrastructure.webhook import router as webhook_router
-from app.infrastructure.confirmation import router as confirmation_router
-
 # Autenticación JWT API
 from app.api.routers import auth, tareas, dashboard, suscripcion, notificaciones, public_agenda, public_booking, support
 
@@ -96,7 +92,13 @@ async def bloquear_prueba_vencida(request: Request, call_next):
                     db = SessionLocal()
                     try:
                         tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
-                        if tenant and tenant.estado_suscripcion == "prueba" and tenant.trial_fin and tenant.trial_fin < models.get_now_chile():
+                        prueba_vencida = bool(
+                            tenant and tenant.estado_suscripcion == "prueba"
+                            and tenant.trial_fin and tenant.trial_fin < models.get_now_chile()
+                        )
+                        # Una cuenta con pago fallido o suscripción terminada puede
+                        # entrar, pero sólo para volver a pagar.
+                        if prueba_vencida or (tenant and tenant.estado_suscripcion == "impaga"):
                             return RedirectResponse(url="/admin/suscripcion", status_code=303)
                     finally:
                         db.close()
@@ -232,10 +234,6 @@ app.include_router(admin.router, prefix="/admin", tags=["Administrador"])
 app.include_router(admin_crm.router, tags=["CRM"])
 app.include_router(admin_team.router, tags=["Team"])
 app.include_router(cliente.router, prefix="/cliente", tags=["Cliente"])
-
-# Registro de rutas del Bot de WhatsApp
-app.include_router(webhook_router, prefix="/api", tags=["Webhook Twilio"])
-app.include_router(confirmation_router, prefix="/api", tags=["Confirmación Web"])
 
 # Autenticación API REST (Nuevo Frontend)
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])

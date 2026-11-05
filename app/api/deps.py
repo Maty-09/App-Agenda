@@ -30,16 +30,30 @@ def get_current_user(
             token, security.SECRET_KEY, algorithms=[security.ALGORITHM]
         )
         user_id: str = payload.get("sub")
-        if user_id is None:
+        tenant_id: str = payload.get("tenant_id")
+        if user_id is None or tenant_id is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token no válido")
+        try:
+            user_id = int(user_id)
+        except (TypeError, ValueError):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token no válido")
     except (jwt.PyJWTError, ValidationError):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No se pudieron validar las credenciales",
         )
-    user = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
+    user = db.query(models.Usuario).filter(
+        models.Usuario.id == user_id,
+        models.Usuario.tenant_id == tenant_id,
+        models.Usuario.sesion_activa.is_(True),
+    ).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión finalizada")
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Cuenta no disponible")
+    if tenant.estado_suscripcion == "cancelada":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Esta cuenta está desactivada")
     return user
 
 def get_current_active_user(

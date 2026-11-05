@@ -14,9 +14,14 @@ def login_access_token(
     """
     OAuth2 compatible token login, get an access token for future requests.
     """
-    user = db.query(models.Usuario).filter(models.Usuario.email == form_data.username).first()
+    email = form_data.username.strip().lower()
+    user = db.query(models.Usuario).filter(models.Usuario.email == email).first()
     if not user or not security.verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=400, detail="Correo o contraseña incorrectos")
+
+    tenant = db.query(models.Tenant).filter(models.Tenant.id == user.tenant_id).first()
+    if not tenant or tenant.estado_suscripcion == "cancelada":
+        raise HTTPException(status_code=403, detail="Esta cuenta está desactivada")
     
     user.ultima_conexion = models.get_now_chile()
     user.sesion_activa = True

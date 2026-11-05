@@ -74,7 +74,7 @@ def procesar_agendamientos_manana():
                 hora_str, 
             )
             if exito:
-                print(f"✅ Recordatorio enviado a {cita.correo} para la cita de las {hora_str}")
+                print(f"Recordatorio enviado para la cita de las {hora_str}")
 
     finally:
         db.close()

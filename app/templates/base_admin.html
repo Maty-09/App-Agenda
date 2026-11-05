@@ -8,7 +8,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script>
-        if (localStorage.getItem('noren_theme') === 'dark' || (!('noren_theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        // Migra la preferencia guardada con la clave antigua ('noren_theme').
+        if (!('norem_theme' in localStorage) && 'noren_theme' in localStorage) {
+            localStorage.setItem('norem_theme', localStorage.getItem('noren_theme'));
+            localStorage.removeItem('noren_theme');
+        }
+        if (localStorage.getItem('norem_theme') === 'dark' || (!('norem_theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             document.documentElement.classList.add('dark');
         } else {
             document.documentElement.classList.remove('dark');
@@ -23,7 +28,7 @@
         }
         function toggleDarkMode() {
             const isDark = document.documentElement.classList.toggle('dark');
-            localStorage.setItem('noren_theme', isDark ? 'dark' : 'light');
+            localStorage.setItem('norem_theme', isDark ? 'dark' : 'light');
             updateThemeToggleIcons();
         }
         function updateThemeToggleIcons() {
